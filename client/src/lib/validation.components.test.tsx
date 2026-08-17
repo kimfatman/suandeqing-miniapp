@@ -15,9 +15,9 @@ describe("OnboardingFlow industry initialization", () => {
     const onComplete = vi.fn();
     render(<OnboardingFlow initialName="" onComplete={onComplete} />);
     fireEvent.click(screen.getByRole("button", { name: /社区零售/ }));
-    fireEvent.click(screen.getByRole("button", { name: /按这个行业准备成本账/ }));
+    fireEvent.click(screen.getByRole("button", { name: /下一步/ }));
     fireEvent.change(screen.getByPlaceholderText("例如：巷口奶茶铺"), { target: { value: "社区便利店" } });
-    fireEvent.click(screen.getByRole("button", { name: /开始算第一笔账/ }));
+    fireEvent.click(screen.getByRole("button", { name: /开始建账/ }));
     expect(onComplete).toHaveBeenCalledWith({ storeName: "社区便利店", industry: "retail" });
   });
 });
@@ -38,13 +38,13 @@ describe("CategorySheet interactions", () => {
   it("rejects an empty or duplicate category and accepts a custom cost item", () => {
     const onSave = vi.fn();
     render(<CategorySheet initialName={null} existing={["食材采购"]} onClose={vi.fn()} onSave={onSave} />);
-    fireEvent.click(screen.getByRole("button", { name: /添加成本项目/ }));
+    fireEvent.click(screen.getByRole("button", { name: /添加项目/ }));
     expect(screen.getByRole("alert").textContent).toContain("请填写成本项目名称");
     fireEvent.change(screen.getByPlaceholderText("例如：平台佣金、工具折旧"), { target: { value: "食材采购" } });
-    fireEvent.click(screen.getByRole("button", { name: /添加成本项目/ }));
+    fireEvent.click(screen.getByRole("button", { name: /添加项目/ }));
     expect(screen.getByRole("alert").textContent).toContain("这个成本项目已经存在");
     fireEvent.change(screen.getByPlaceholderText("例如：平台佣金、工具折旧"), { target: { value: "设备折旧" } });
-    fireEvent.click(screen.getByRole("button", { name: /添加成本项目/ }));
+    fireEvent.click(screen.getByRole("button", { name: /添加项目/ }));
     expect(onSave).toHaveBeenCalledWith("设备折旧");
   });
 });
@@ -68,7 +68,7 @@ describe("MaterialSheet interactions", () => {
     const material = seedLedger().materials[0];
     render(<MaterialSheet editingMaterial={material} onClose={vi.fn()} onSave={onSave} />);
     fireEvent.change(screen.getByDisplayValue(material.name), { target: { value: "改名后的材料" } });
-    fireEvent.click(screen.getByRole("button", { name: /保存材料修改/ }));
+    fireEvent.click(screen.getByRole("button", { name: /保存修改/ }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: material.id, name: "改名后的材料" }));
     expect(onSave.mock.calls[0][0].unitCost).toBeGreaterThan(0);
   });
@@ -78,7 +78,7 @@ describe("MaterialSheet interactions", () => {
     render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
     const quantityInput = screen.getAllByRole("spinbutton")[1];
     fireEvent.change(quantityInput, { target: { value: "0" } });
-    fireEvent.click(screen.getByRole("button", { name: /保存原材料/ }));
+    fireEvent.click(screen.getByRole("button", { name: /保存材料/ }));
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("采购金额、采购数量和换算系数都必须大于0");
   });
@@ -88,7 +88,7 @@ describe("MaterialSheet interactions", () => {
     render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
     const recordPurchase = screen.getByRole("checkbox") as HTMLInputElement;
     expect(recordPurchase.checked).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: /保存原材料/ }));
+    fireEvent.click(screen.getByRole("button", { name: /保存材料/ }));
     expect(onSave).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ recordPurchase: true }));
   });
 });
@@ -99,9 +99,9 @@ describe("QuickRecordSheet interactions", () => {
     render(<QuickRecordSheet categories={["货品采购", "物流配送"]} onClose={vi.fn()} onSave={onSave} />);
     const amount = screen.getByRole("spinbutton") as HTMLInputElement;
     expect(amount.value).toBe("");
-    expect((screen.getByRole("button", { name: /保存这笔账/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("经营支出")).toBeTruthy();
-    expect(screen.getByText("借款与还款")).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^保存$/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("经营")).toBeTruthy();
+    expect(screen.getByText("借款")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "本金还款" }));
     expect(screen.getByText("本金还款会减少手上现金，但不计入经营成本。")).toBeTruthy();
   });
@@ -143,7 +143,7 @@ describe("BomEditorSheet interactions", () => {
     ledger.materials[0].unitCost = 9;
     const onSave = vi.fn();
     render(<BomEditorSheet product={{ ...ledger.products[0], bomVersions: [version] }} materials={ledger.materials} onClose={vi.fn()} onSave={onSave} />);
-    fireEvent.click(screen.getByText("成本如何变化？"));
+    fireEvent.click(screen.getByText("版本记录"));
     fireEvent.click(screen.getByRole("button", { name: /恢复/ }));
     fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
     expect(onSave).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ costSnapshot: expect.objectContaining({ directCost: version.directCost, materialUnitCosts: version.materialUnitCosts, packaging: version.packaging, directLabor: version.directLabor }) }));

@@ -50,22 +50,21 @@ export function QuickCostSheet({ product, template, onClose, onOpenAdvanced, onS
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="pricing-sheet quick-cost-sheet" role="dialog" aria-modal="true" aria-label="录入商品成本" onMouseDown={(event) => event.stopPropagation()}>
       <div className="sheet-grabber" />
-      <header className="sheet-header"><div><span className="eyebrow">快速成本 · 约 30 秒</span><h2>{product.name} · 先填两项</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭"><X size={19} /></button></header>
-      <p className="quick-cost-intro">先算清每件至少花多少钱；材料、损耗和批量制作可以稍后补充。</p>
+      <header className="sheet-header"><div><span className="eyebrow">快速成本</span><h2>{product.name}</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭"><X size={19} /></button></header>
       <section className="quick-cost-card primary">
-        <div className="quick-cost-card-head"><span>必填 · 主要成本</span><b>{template.quickPrimaryLabel}</b></div>
-        <label className="field-block"><span>这件商品的{template.quickPrimaryLabel}是多少？</span><div className="money-input"><i>¥</i><input aria-label="主成本金额" autoFocus type="number" min="0.01" step="0.01" inputMode="decimal" value={primaryCost} placeholder="例如 6.50" onChange={(event) => { setPrimaryCost(event.target.value); setSubmitted(false); }} /><b>/ {template.quickUnit}</b></div></label>
+        <div className="quick-cost-card-head"><span>必填</span><b>{template.quickPrimaryLabel}</b></div>
+        <label className="field-block"><span>主成本</span><div className="money-input"><i>¥</i><input aria-label="主成本金额" autoFocus type="number" min="0.01" step="0.01" inputMode="decimal" value={primaryCost} placeholder="例如 6.50" onChange={(event) => { setPrimaryCost(event.target.value); setSubmitted(false); }} /><b>/ {template.quickUnit}</b></div></label>
         {submitted && !hasValidPrimary && <small className="quick-cost-error" role="alert">主成本必须大于 0。</small>}
       </section>
       <section className="quick-cost-card">
-        <div className="quick-cost-card-head"><span>选填 · 单件附加成本</span><b>不填按 ¥0 计入</b></div>
+        <div className="quick-cost-card-head"><span>选填</span><b>附加成本</b></div>
         <div className="quick-cost-options" aria-label="附加成本类型">{template.quickSecondaryOptions.map((option) => <button type="button" className={secondaryLabel === option ? "selected" : ""} onClick={() => setSecondaryLabel(option)} key={option}>{option}</button>)}</div>
-        <label className="field-block"><span>每卖一件多花多少？</span><div className="money-input"><i>¥</i><input aria-label="附加成本金额" type="number" min="0.01" step="0.01" inputMode="decimal" value={secondaryCost} placeholder="选填" onChange={(event) => { setSecondaryCost(event.target.value); setSubmitted(false); }} /><b>/ {template.quickUnit}</b></div></label>
+        <label className="field-block"><span>金额</span><div className="money-input"><i>¥</i><input aria-label="附加成本金额" type="number" min="0.01" step="0.01" inputMode="decimal" value={secondaryCost} placeholder="选填" onChange={(event) => { setSecondaryCost(event.target.value); setSubmitted(false); }} /><b>/ {template.quickUnit}</b></div></label>
         {submitted && !hasValidSecondary && <small className="quick-cost-error" role="alert">附加成本留空或填写大于 0 的金额。</small>}
       </section>
-      <section className="quick-cost-preview"><span>当前直接成本预览</span><strong>{formatCurrency(directCost)} / {template.quickUnit}</strong><p>只包含这两项单件成本；房租、利息等期间成本仍在经营账中分摊。</p></section>
-      {hasAdvancedDetails && <div className="quick-cost-boundary"><Info size={15} /><span>保存会生成新的快速成本版本；当前材料明细会保留在历史版本中。</span></div>}
-      <button type="button" className="quick-cost-advanced" onClick={onOpenAdvanced}><ClipboardList size={16} /> 我有材料、损耗或批量制作，要录进阶明细 <ArrowRight size={15} /></button>
+      <section className="quick-cost-preview"><span>直接成本</span><strong>{formatCurrency(directCost)} / {template.quickUnit}</strong><p>不含房租、利息等期间成本。</p></section>
+      {hasAdvancedDetails && <div className="quick-cost-boundary"><Info size={15} /><span>已保留进阶版本。</span></div>}
+      <button type="button" className="quick-cost-advanced" onClick={onOpenAdvanced}><ClipboardList size={16} /> 进阶明细 <ArrowRight size={15} /></button>
       <button className="primary-action sheet-action" onClick={save}><Check size={18} /> 保存并生成成本版本</button>
     </section>
   </div>;

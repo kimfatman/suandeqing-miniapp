@@ -178,6 +178,9 @@ h2 { font-size: 18px; letter-spacing: -.045em; font-weight: 800; line-height: 1.
 @keyframes sheet-up { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toast-up { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
+/* 表单打开时不让后台提示遮挡字段、进阶入口或保存按钮。 */
+.app-shell:has(.sheet-backdrop) .app-toast { opacity: 0 !important; pointer-events: none; }
+
 /* 数据联动：收入/成本双序列趋势图 */
 .bar-chart .bar-pair { flex: 1; max-width: 28px; height: 100%; display: flex; align-items: end; justify-content: center; gap: 3px; }
 .bar-chart .bar-pair > span { display: block; flex: 0 0 8px; max-width: 8px; min-height: 0; border-radius: 5px 5px 2px 2px; }
