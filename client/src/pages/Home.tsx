@@ -30,7 +30,7 @@ import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
-import { INDUSTRY_TEMPLATES, IndustryKey, LedgerProduct, loadLedger, makeId, Material, persistLedger, recalculateProduct } from "@/lib/ledgerStore";
+import { INDUSTRY_TEMPLATES, IndustryKey, LedgerProduct, loadLedger, makeId, Material, persistLedger, recalculateProduct, summarizeLedger } from "@/lib/ledgerStore";
 
 type Tab = "home" | "products" | "business" | "profile";
 
@@ -58,8 +58,9 @@ export default function Home() {
   const [showQuickRecord, setShowQuickRecord] = useState(false);
   const [showBomEditor, setShowBomEditor] = useState(false);
   const [costEditor, setCostEditor] = useState<"hidden" | "funding" | null>(null);
-  const [currentCosts, setCurrentCosts] = useState<CostInputs>(initialCostInputs);
+  const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
   const [toast, setToast] = useState<string | null>(null);
+  const summary = summarizeLedger(ledger);
   const selectedProduct = ledger.products.find((product) => product.id === activeProductId) ?? ledger.products[0];
   const operatingCost = selectedProduct.operating;
   const fullCost = operatingCost + currentCosts.fundingCost;
@@ -125,6 +126,7 @@ export default function Home() {
         {activeTab === "home" && (
           <HomeView
             product={selectedProduct}
+            summary={summary}
             operatingCost={operatingCost}
             fullCost={fullCost}
             onPricing={() => setShowPricing(true)}
@@ -150,7 +152,7 @@ export default function Home() {
             }}
           />
         )}
-        {activeTab === "business" && <BusinessView onPricing={() => setShowPricing(true)} />}
+        {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} onPricing={() => setShowPricing(true)} />}
         {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
       </main>
 
@@ -167,7 +169,7 @@ export default function Home() {
       {showMaterialPanel && <MaterialSheet onClose={() => setShowMaterialPanel(false)} onSave={(material) => { setLedger((current) => { const next = { ...current, materials: [...current.materials, material] }; persistLedger(next); return next; }); setShowMaterialPanel(false); notify("已保存原材料，后续核算会使用新成本"); }} />}
       {showQuickRecord && <QuickRecordSheet categories={ledger.categories} onClose={() => setShowQuickRecord(false)} onSave={(record) => { setLedger((current) => { const next = { ...current, records: [{ id: makeId(), ...record, date: new Date().toISOString().slice(0, 10) }, ...current.records] }; persistLedger(next); return next; }); setShowQuickRecord(false); notify(record.type === "income" ? "已记入收入，经营账已更新" : "已记入支出，成本账已更新"); }} />}
       {showBomEditor && <BomEditorSheet product={selectedProduct} materials={ledger.materials} onClose={() => setShowBomEditor(false)} onSave={(items) => { setLedger((current) => { const products = current.products.map((item) => item.id === selectedProduct.id ? recalculateProduct({ ...item, bom: items }, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost) : item); const next = { ...current, products }; persistLedger(next); return next; }); setShowBomEditor(false); notify("已保存配方，并生成新的成本口径"); }} />}
-      {costEditor && <CostSettingsSheet type={costEditor} value={costEditor === "hidden" ? currentCosts.hiddenCost : currentCosts.fundingCost} onClose={() => setCostEditor(null)} onSave={(value) => { const nextCosts = { ...currentCosts, [costEditor === "hidden" ? "hiddenCost" : "fundingCost"]: value }; setCurrentCosts(nextCosts); if (costEditor === "hidden") setLedger((current) => { const next = { ...current, products: current.products.map((product) => recalculateProduct(product, current.materials, nextCosts.hiddenCost, nextCosts.fixedCost)) }; persistLedger(next); return next; }); setCostEditor(null); notify(costEditor === "hidden" ? "已更新隐形成本，经营成本已重新计算" : "已更新资金成本，完整成本已重新计算"); }} />}
+      {costEditor && <CostSettingsSheet type={costEditor} value={costEditor === "hidden" ? currentCosts.hiddenCost : currentCosts.fundingCost} onClose={() => setCostEditor(null)} onSave={(value) => { const nextCosts = { ...currentCosts, [costEditor === "hidden" ? "hiddenCost" : "fundingCost"]: value }; setCurrentCosts(nextCosts); setLedger((current) => { const next = { ...current, costs: nextCosts, products: costEditor === "hidden" ? current.products.map((product) => recalculateProduct(product, current.materials, nextCosts.hiddenCost, nextCosts.fixedCost)) : current.products }; persistLedger(next); return next; }); setCostEditor(null); notify(costEditor === "hidden" ? "已更新隐形成本，经营成本已重新计算" : "已更新资金成本，完整成本已重新计算"); }} />}
       {toast && <div className="app-toast"><CheckBadge />{toast}</div>}
     </div>
   );
@@ -175,6 +177,7 @@ export default function Home() {
 
 function HomeView({
   product,
+  summary,
   operatingCost,
   fullCost,
   onPricing,
@@ -184,6 +187,7 @@ function HomeView({
   onBusiness,
 }: {
   product: LedgerProduct;
+  summary: ReturnType<typeof summarizeLedger>;
   operatingCost: number;
   fullCost: number;
   onPricing: () => void;
@@ -202,15 +206,15 @@ function HomeView({
       <section className="hero-ledger-card">
         <div className="hero-card-top"><span className="ledger-tab">08 月 · 经营结余</span><span className="ledger-stamp">已核算</span></div>
         <div className="ledger-card-heading"><span>本月经营利润估算</span><BookOpenCheck size={18} /></div>
-        <strong>{formatCurrency(4680.5)}</strong>
-        <p>已计入材料、包装、人工与隐形成本</p>
-        <div className="hero-calculation-trail"><span>收入 <b>¥16,880</b></span><i>−</i><span>经营成本 <b>¥11,770</b></span><i>=</i><span className="trail-result">结余 <b>¥4,680</b></span></div>
-        <div className="ledger-card-foot"><span>较上月 <b>+12.5%</b></span><button onClick={onBusiness}>翻开经营账 <ArrowRight size={16} /></button></div>
+        <strong>{formatCurrency(summary.result)}</strong>
+        <p>根据本地账本已记录的收入与支出实时计算</p>
+        <div className="hero-calculation-trail"><span>收入 <b>{formatCurrency(summary.income)}</b></span><i>−</i><span>经营成本 <b>{formatCurrency(summary.expenses)}</b></span><i>=</i><span className="trail-result">结余 <b>{formatCurrency(summary.result)}</b></span></div>
+        <div className="ledger-card-foot"><span>已记录 <b>{summary.incomeCount + summary.expenseCount}</b> 笔</span><button onClick={onBusiness}>翻开经营账 <ArrowRight size={16} /></button></div>
       </section>
 
       <section className="metric-grid">
-        <MetricCard label="本月收入" value={formatCurrency(16880)} note="共记录 1268 笔" tone="light" delta="8.4%" />
-        <MetricCard label="经营成本" value={formatCurrency(11770.2)} note="已含隐形成本" tone="navy" delta="成本增 3.1%" positive={false} />
+        <MetricCard label="本月收入" value={formatCurrency(summary.income)} note={`共记录 ${summary.incomeCount} 笔`} tone="light" delta={summary.incomeCount ? "已入账" : "待记录"} />
+        <MetricCard label="经营成本" value={formatCurrency(summary.expenses)} note="来自实际支出记录" tone="navy" delta={summary.expenseCount ? `${summary.expenseCount} 笔支出` : "待记录"} positive={false} />
       </section>
 
       <section className="quick-actions">
@@ -264,20 +268,23 @@ function ProductsView({ products, activeProductId, onSelect, onPricing, onBom, o
   );
 }
 
-function BusinessView({ onPricing }: { onPricing: () => void }) {
+function BusinessView({ summary, costs, onPricing }: { summary: ReturnType<typeof summarizeLedger>; costs: CostInputs; onPricing: () => void }) {
+  const maxValue = Math.max(...summary.dailySeries.flatMap((item) => [item.income, item.expenses]), 1);
+  const materialTotal = Object.entries(summary.categoryTotals).filter(([category]) => /采购|进货|材料|货品/.test(category)).reduce((total, [, value]) => total + value, 0);
+  const hiddenTotal = Math.max(summary.expenses - materialTotal, 0);
   return (
     <div className="page-content business-content">
       <section className="period-row"><div><span className="eyebrow">经营账</span><h1>收入进来后，真正还剩多少？</h1></div><button className="range-chip">本月 <ChevronRight size={16} /></button></section>
       <section className="cash-flow-card">
-        <div><span>现金流压力</span><h2>{formatCurrency(1630)}</h2><p>含本金还款 ¥1,000 与利息 ¥230</p></div><div className="cash-orbit"><CircleDollarSign size={32} /><span>本期</span></div>
+        <div><span>现金流压力</span><h2>{formatCurrency(summary.cashOutflow)}</h2><p>本金还款 {formatCurrency(summary.principalRepayment)} · 利息与融资费 {formatCurrency(summary.financingCosts)}</p></div><div className="cash-orbit"><CircleDollarSign size={32} /><span>本期</span></div>
       </section>
-      <section className="chart-card"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>收入与经营成本</h2></div><span className="legend"><i />收入 <i className="green" />成本</span></div><div className="bar-chart"><span style={{ height: "44%" }} /><span style={{ height: "61%" }} /><span style={{ height: "52%" }} /><span style={{ height: "78%" }} /><span style={{ height: "90%" }} /><span className="accent" style={{ height: "68%" }} /></div><div className="chart-labels"><span>12日</span><span>13日</span><span>14日</span><span>15日</span><span>16日</span><span>17日</span></div></section>
+      <section className="chart-card"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>收入与经营成本</h2></div><span className="legend"><i />收入 <i className="green" />成本</span></div><div className="bar-chart">{summary.dailySeries.map((item) => <div className="bar-pair" key={item.label}><span className="income-bar" title={`收入 ${formatCurrency(item.income)}`} style={{ height: `${Math.max((item.income / maxValue) * 100, item.income ? 8 : 0)}%` }} /><span className="expense-bar" title={`成本 ${formatCurrency(item.expenses)}`} style={{ height: `${Math.max((item.expenses / maxValue) * 100, item.expenses ? 8 : 0)}%` }} /></div>)}</div><div className="chart-labels">{summary.dailySeries.map((item) => <span key={item.label}>{item.label}</span>)}</div></section>
       <section className="section-heading compact"><div><span className="eyebrow">本月成本构成</span><h2>不只看材料钱</h2></div></section>
       <section className="ledger-lines">
-        <LineItem icon={<Coins size={18} />} label="材料与包装" value="¥8,226.00" width="72%" color="blue" />
-        <LineItem icon={<ClipboardList size={18} />} label="隐形成本" value="¥1,742.00" width="42%" color="green" />
-        <LineItem icon={<Banknote size={18} />} label="固定费用分摊" value="¥1,802.20" width="47%" color="navy" />
-        <LineItem icon={<WalletCards size={18} />} label="资金成本" value="¥230.00" width="14%" color="amber" />
+        <LineItem icon={<Coins size={18} />} label="已记录支出" value={formatCurrency(summary.expenses)} width={`${summary.expenses ? Math.min(summary.expenses / Math.max(summary.income, summary.expenses) * 100, 100) : 0}%`} color="blue" />
+        <LineItem icon={<ClipboardList size={18} />} label="非采购支出" value={formatCurrency(hiddenTotal)} width={`${summary.expenses ? Math.min(hiddenTotal / summary.expenses * 100, 100) : 0}%`} color="green" />
+        <LineItem icon={<Banknote size={18} />} label="固定费用分摊" value={formatCurrency(costs.fixedCost)} width={`${Math.min(costs.fixedCost / Math.max(summary.expenses, 1) * 100, 100)}%`} color="navy" />
+        <LineItem icon={<WalletCards size={18} />} label="资金成本" value={formatCurrency(summary.financingCosts)} width={`${Math.min(summary.financingCosts / Math.max(summary.expenses, 1) * 100, 100)}%`} color="amber" />
       </section>
       <button className="secondary-action" onClick={onPricing}><Sparkles size={18} /> 看看商品是否需要调价</button>
     </div>

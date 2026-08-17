@@ -45,6 +45,13 @@ export type LedgerRecord = {
   date: string;
 };
 
+export type LedgerCosts = {
+  fixedCost: number;
+  hiddenCost: number;
+  fundingCost: number;
+  feeRate: number;
+};
+
 export type LedgerData = {
   profile: {
     storeName: string;
@@ -52,10 +59,24 @@ export type LedgerData = {
     onboarded: boolean;
     monthlyBudget: number;
   };
+  costs: LedgerCosts;
   categories: string[];
   materials: Material[];
   products: LedgerProduct[];
   records: LedgerRecord[];
+};
+
+export type LedgerSummary = {
+  income: number;
+  expenses: number;
+  cashOutflow: number;
+  financingCosts: number;
+  principalRepayment: number;
+  result: number;
+  incomeCount: number;
+  expenseCount: number;
+  categoryTotals: Record<string, number>;
+  dailySeries: Array<{ label: string; income: number; expenses: number }>;
 };
 
 export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
@@ -71,6 +92,7 @@ const money = (value: number) => Math.round(value * 100) / 100;
 
 export const seedLedger = (): LedgerData => ({
   profile: { storeName: "巷口奶茶铺", industry: "catering", onboarded: false, monthlyBudget: 18000 },
+  costs: { fixedCost: 0.92, hiddenCost: 1.3, fundingCost: 0.28, feeRate: 3 },
   categories: INDUSTRY_TEMPLATES[0].categories,
   materials: [
     { id: "mat-tea", name: "茉莉茶底", unit: "克", unitCost: 0.036, source: "茶叶供应商" },
@@ -90,13 +112,26 @@ export const seedLedger = (): LedgerData => ({
 });
 
 export const loadLedger = (): LedgerData => {
+  const fallback = seedLedger();
   try {
     const data = window.localStorage.getItem(STORAGE_KEY);
-    if (data) return JSON.parse(data) as LedgerData;
+    if (data) {
+      const saved = JSON.parse(data) as Partial<LedgerData>;
+      return {
+        ...fallback,
+        ...saved,
+        profile: { ...fallback.profile, ...(saved.profile ?? {}) },
+        costs: { ...fallback.costs, ...(saved.costs ?? {}) },
+        categories: saved.categories?.length ? saved.categories : fallback.categories,
+        materials: saved.materials ?? fallback.materials,
+        products: saved.products ?? fallback.products,
+        records: saved.records ?? fallback.records,
+      };
+    }
   } catch {
     // 浏览器存储不可用时退回可演示的初始账本。
   }
-  return seedLedger();
+  return fallback;
 };
 
 export const persistLedger = (ledger: LedgerData) => {
@@ -116,4 +151,56 @@ export const calculateDirectCost = (product: LedgerProduct, materials: Material[
 export const recalculateProduct = (product: LedgerProduct, materials: Material[], hiddenCost: number, fixedCost: number) => {
   const direct = calculateDirectCost(product, materials);
   return { ...product, direct, operating: money(direct + hiddenCost + fixedCost) };
+};
+
+export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
+  const categoryTotals: Record<string, number> = {};
+  const byDate: Record<string, { income: number; expenses: number }> = {};
+  let income = 0;
+  let expenses = 0;
+  let cashOutflow = 0;
+  let financingCosts = 0;
+  let principalRepayment = 0;
+
+  ledger.records.forEach((record) => {
+    const amount = Number.isFinite(record.amount) ? record.amount : 0;
+    const bucket = byDate[record.date] ?? { income: 0, expenses: 0 };
+    if (record.type === "income") {
+      income += amount;
+      bucket.income += amount;
+    } else {
+      cashOutflow += amount;
+      if (record.category !== "本金还款") bucket.expenses += amount;
+      categoryTotals[record.category] = (categoryTotals[record.category] ?? 0) + amount;
+      if (record.category === "本金还款") {
+        principalRepayment += amount;
+      } else {
+        expenses += amount;
+      }
+      if (record.category === "借款利息" || record.category === "融资服务费") {
+        financingCosts += amount;
+      }
+    }
+    byDate[record.date] = bucket;
+  });
+
+  const dates = Object.keys(byDate).sort().slice(-6);
+  const dailySeries = (dates.length ? dates : ["—"]).map((date) => ({
+    label: date === "—" ? "—" : `${date.slice(5, 7)}/${date.slice(8, 10)}`,
+    income: byDate[date]?.income ?? 0,
+    expenses: byDate[date]?.expenses ?? 0,
+  }));
+
+  return {
+    income: money(income),
+    expenses: money(expenses),
+    cashOutflow: money(cashOutflow),
+    financingCosts: money(financingCosts),
+    principalRepayment: money(principalRepayment),
+    result: money(income - expenses),
+    incomeCount: ledger.records.filter((record) => record.type === "income").length,
+    expenseCount: ledger.records.filter((record) => record.type === "expense").length,
+    categoryTotals,
+    dailySeries,
+  };
 };
