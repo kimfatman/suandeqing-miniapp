@@ -104,6 +104,30 @@ describe("BomEditorSheet interactions", () => {
     expect(onSave).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ costCategory: "设备折旧" }));
   });
 
+  it("adds and saves a custom cost detail with its own name and unit", () => {
+    const ledger = seedLedger();
+    const onSave = vi.fn();
+    render(<BomEditorSheet product={{ ...ledger.products[0], bom: [] }} materials={ledger.materials} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "新增成本明细类型" }), { target: { value: "custom" } });
+    fireEvent.click(screen.getByRole("button", { name: /新增自定义项目/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "自定义成本名称" }), { target: { value: "平台服务费" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "自定义成本单位" }), { target: { value: "单" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "自定义成本单价" }), { target: { value: "1.5" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
+    expect(onSave).toHaveBeenCalledWith([expect.objectContaining({ customName: "平台服务费", customUnit: "单", customUnitCost: 1.5, quantity: 1 })], expect.any(Object));
+  });
+
+  it("blocks saving a custom cost detail without a name", () => {
+    const ledger = seedLedger();
+    const onSave = vi.fn();
+    render(<BomEditorSheet product={{ ...ledger.products[0], bom: [] }} materials={ledger.materials} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "新增成本明细类型" }), { target: { value: "custom" } });
+    fireEvent.click(screen.getByRole("button", { name: /新增自定义项目/ }));
+    fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("自定义成本项目需要填写名称");
+  });
+
   it("shows an error and does not call onSave for zero BOM quantity", () => {
     const ledger = seedLedger();
     const onSave = vi.fn();

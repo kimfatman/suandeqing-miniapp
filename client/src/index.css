@@ -379,3 +379,21 @@ body { font-family: "Inter", "MiSans", "Noto Sans SC", "PingFang SC", "Microsoft
   .hero-ledger-card { margin-top: 13px; }
   .metric-card { min-height: 88px; padding: 12px; }
 }
+
+/* 自定义成本明细：保持材料行的账簿节奏，同时清晰区分可编辑字段 */
+.custom-bom-row { grid-template-columns: 9px 1fr 56px 28px; align-items: start; }
+.bom-dot.custom { background: #f2a93b; box-shadow: 0 0 0 4px #fff5dc; margin-top: 18px; }
+.custom-cost-fields { min-width: 0; }
+.custom-cost-fields label, .custom-quantity { display: grid; gap: 4px; color: #84919e; font-size: 9px; }
+.custom-cost-fields input, .custom-quantity input { width: 100%; min-width: 0; height: 31px; padding: 0 7px; color: #0b1836; border: 1px solid #d7e0ea; border-radius: 8px; outline: 0; background: #fafcff; font-size: 11px; }
+.custom-cost-fields input:focus, .custom-quantity input:focus { border-color: #1677ff; box-shadow: 0 0 0 2px rgb(22 119 255 / .12); }
+.custom-cost-inline { display: grid; grid-template-columns: 68px 1fr; gap: 6px; margin-top: 6px; }
+.custom-bom-row > button { margin-top: 17px; }
+.bom-add { display: grid; grid-template-columns: 112px 1fr auto; gap: 6px; align-items: center; }
+.bom-add select { min-width: 0; height: 36px; padding: 0 8px; color: #526174; border: 1px solid #d7e0ea; border-radius: 9px; background: #fff; font-size: 10px; }
+@media (max-width: 520px) {
+  .custom-bom-row { grid-template-columns: 8px 1fr 48px 24px; gap: 6px; padding-inline: 8px; }
+  .custom-cost-inline { grid-template-columns: 58px 1fr; }
+  .bom-add { grid-template-columns: 1fr 1fr; }
+  .bom-add button { grid-column: 1 / -1; }
+}

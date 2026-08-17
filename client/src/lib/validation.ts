@@ -31,11 +31,17 @@ export const validateMaterialDraft = (draft: MaterialDraft) => {
 };
 
 export const validateBomItems = (items: BomItem[], materials: Material[]) => {
-  if (items.some((item) => !Number.isFinite(item.quantity) || item.quantity <= 0)) {
+  if (items.some((item) => item.customName === undefined && (!Number.isFinite(item.quantity) || item.quantity <= 0))) {
     return "每项材料用量必须大于0，请检查后再保存。";
   }
-  if (items.some((item) => !materials.some((material) => material.id === item.materialId))) {
-    return "配方中有已停用或不存在的材料，请重新选择。";
+  if (items.some((item) => item.customName !== undefined && (!Number.isFinite(item.quantity) || item.quantity <= 0))) {
+    return "每项自定义成本数量必须大于0，请检查后再保存。";
+  }
+  if (items.some((item) => item.customName !== undefined && (!item.customName.trim() || !item.customUnit?.trim() || !Number.isFinite(item.customUnitCost) || (item.customUnitCost ?? 0) <= 0))) {
+    return "自定义成本项目需要填写名称、单位和大于0的单价。";
+  }
+  if (items.some((item) => item.customName === undefined && !materials.some((material) => material.id === item.materialId))) {
+    return "成本明细中有已停用或不存在的材料，请重新选择。";
   }
   return null;
 };

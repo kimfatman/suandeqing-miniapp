@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, calculateDirectCost, calculateUnitCost, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, calculateBomVersionDirectCost, calculateDirectCost, calculateUnitCost, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 
 describe("summarizeLedger", () => {
   it("aggregates income, expenses, result, counts and categories from ledger records", () => {
@@ -65,6 +65,15 @@ describe("unit cost and BOM normalization", () => {
     const ledger = seedLedger();
     const product = { ...ledger.products[0], lossRate: 10, batchYield: 2 };
     expect(calculateDirectCost(product, ledger.materials)).toBe(2.99);
+  });
+
+  it("includes custom cost details in product cost and historical snapshots", () => {
+    const ledger = seedLedger();
+    const product = { ...ledger.products[0], bom: [{ id: "custom-1", materialId: "", quantity: 2, customName: "平台服务费", customUnit: "单", customUnitCost: 1.5 }] };
+    expect(calculateDirectCost(product, ledger.materials)).toBe(4.08);
+    const version = makeBomVersionSnapshot(product, ledger.materials, { lossRate: 0, batchYield: 1 }, "2026-08-18");
+    ledger.materials[0].unitCost = 99;
+    expect(calculateBomVersionDirectCost(version)).toBe(4.08);
   });
 });
 

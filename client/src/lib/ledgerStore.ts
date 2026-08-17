@@ -28,8 +28,12 @@ export type Material = {
 
 export type BomItem = {
   id: string;
+  /** 材料行使用 materialId；自定义成本行留空并填写 customName/unitCost。 */
   materialId: string;
   quantity: number;
+  customName?: string;
+  customUnit?: string;
+  customUnitCost?: number;
 };
 
 export type LedgerProduct = {
@@ -312,6 +316,7 @@ export const makeId = uid;
 
 export const calculateDirectCost = (product: LedgerProduct, materials: Material[]) => {
   const bomCost = product.bom.reduce((sum, item) => {
+    if (item.customName !== undefined) return sum + Math.max(item.customUnitCost ?? 0, 0) * item.quantity;
     const material = materials.find((entry) => entry.id === item.materialId);
     return sum + (material ? (product.materialUnitCosts?.[material.id] ?? material.unitCost) * item.quantity : 0);
   }, 0);
@@ -336,7 +341,7 @@ export const makeBomVersionSnapshot = (product: LedgerProduct, materials: Materi
 };
 
 export const calculateBomVersionDirectCost = (version: BomVersion) => {
-  const materialsCost = version.items.reduce((sum, item) => sum + (version.materialUnitCosts[item.materialId] ?? 0) * item.quantity, 0);
+  const materialsCost = version.items.reduce((sum, item) => item.customName !== undefined ? sum + Math.max(item.customUnitCost ?? 0, 0) * item.quantity : sum + (version.materialUnitCosts[item.materialId] ?? 0) * item.quantity, 0);
   return money((materialsCost * (1 + Math.max(version.lossRate, 0) / 100)) / Math.max(version.batchYield, 0.0001) + version.packaging + version.directLabor);
 };
 
