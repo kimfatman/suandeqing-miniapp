@@ -213,10 +213,9 @@ function HomeView({
         <div className="ledger-card-foot"><span>已记录 <b>{summary.incomeCount + summary.expenseCount}</b> 笔</span><button onClick={onBusiness}>翻开经营账 <ArrowRight size={16} /></button></div>
       </section>
 
-      <section className="summary-strip" aria-label="本月关键指标">
-        <div><span>收入</span><strong>{formatCurrency(summary.income)}</strong><small>{summary.incomeCount ? `已入账 ${summary.incomeCount} 笔` : "还没有收入记录"}</small></div>
-        <div><span>经营支出</span><strong>{formatCurrency(summary.expenses)}</strong><small>{summary.expenseCount ? `不含本金 ${summary.expenseCount} 笔` : "还没有支出记录"}</small></div>
-        <div className="is-result"><span>经营结果估算</span><strong>{formatCurrency(summary.operatingResult)}</strong><small>未按销量结转商品成本</small></div>
+      <section className="overview-chart-card" aria-label="本月收入与支出概览">
+        <div className="chart-heading"><div><span className="eyebrow">本月走势</span><h2>收入与支出怎么走？</h2></div><span className="chart-summary-value">{formatCurrency(summary.cashBalance)} <small>结余</small></span></div>
+        <MiniTrendChart series={summary.dailySeries} />
       </section>
 
       <section className="quick-actions" aria-label="常用操作">
@@ -231,14 +230,37 @@ function HomeView({
         <article className="attention-item blue"><div className="attention-icon"><WalletCards size={19} /></div><div><strong>还有一笔隐形成本未分摊</strong><p>本月配送与交通费 ¥286.00</p></div><button onClick={onBusiness}>查看</button></article>
       </section>
 
-      <section className="section-heading compact"><div><span className="eyebrow">商品成本</span><h2>{product.name}的三层成本</h2></div><span className="section-stamp">账已分层</span></section>
-      <section className="cost-layer-card">
-        <div className="cost-layer-row"><span>{product.name} · 直接成本</span><div><b>{formatCurrency(product.direct)}</b><small>材料 · 包装 · 直接人工</small></div></div>
-        <div className="cost-layer-row active"><span>经营成本</span><div><b>{formatCurrency(operatingCost)}</b><small>已加固定费用与隐形成本</small></div></div>
-        <div className="cost-layer-row"><span>完整成本</span><div><b>{formatCurrency(fullCost)}</b><small>已加利息与融资费用</small></div></div>
+      <section className="section-heading compact"><div><span className="eyebrow">商品成本</span><h2>{product.name}成本构成</h2></div><span className="section-stamp">三层口径</span></section>
+      <section className="cost-composition-card" aria-label="商品成本构成图">
+        <CostCompositionChart product={product} operatingCost={operatingCost} fullCost={fullCost} />
       </section>
     </div>
   );
+}
+
+function MiniTrendChart({ series }: { series: ReturnType<typeof summarizeLedger>["dailySeries"] }) {
+  const values = series.flatMap((item) => [item.income, item.expenses]);
+  const max = Math.max(...values, 1);
+  const points = (key: "income" | "expenses") => series.map((item, index) => `${(index / Math.max(series.length - 1, 1)) * 100},${92 - (item[key] / max) * 76}`).join(" ");
+  const hasData = series.some((item) => item.income > 0 || item.expenses > 0);
+  if (!hasData) return <div className="mini-chart-empty"><BarChart3 size={20} /><span>记入收入或支出后，趋势图会自动出现</span></div>;
+  return <div className="mini-trend-wrap"><svg className="mini-trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="本月收入与支出趋势"><line x1="0" y1="92" x2="100" y2="92" /><polyline className="trend-income" points={points("income")} /><polyline className="trend-expense" points={points("expenses")} />{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; return <g key={item.label}><circle className="trend-income-dot" cx={x} cy={92 - (item.income / max) * 76} r="1.8" /><circle className="trend-expense-dot" cx={x} cy={92 - (item.expenses / max) * 76} r="1.8" /></g>; })}</svg><div className="mini-chart-labels"><span>{series[0]?.label ?? ""}</span><span>{series.at(-1)?.label ?? ""}</span></div><div className="mini-chart-legend"><span><i className="income-dot" />收入</span><span><i className="expense-dot" />支出</span></div></div>;
+}
+
+function CostCompositionChart({ product, operatingCost, fullCost }: { product: LedgerProduct; operatingCost: number; fullCost: number }) {
+  const direct = Math.max(product.direct, 0);
+  const operatingAdd = Math.max(operatingCost - direct, 0);
+  const fundingAdd = Math.max(fullCost - operatingCost, 0);
+  const total = Math.max(fullCost, direct, 0);
+  if (total <= 0) return <div className="cost-composition-empty"><BarChart3 size={20} /><strong>还没有可视化成本</strong><span>先补充材料或配方，三层成本会在这里展开。</span></div>;
+  return <div className="cost-composition-chart"><div className="composition-tip"><Info size={13} />横条从左到右表示直接成本、经营分摊和资金成本。</div><div className="composition-track" role="img" aria-label={`直接成本${formatCurrency(direct)}，经营分摊${formatCurrency(operatingAdd)}，资金成本${formatCurrency(fundingAdd)}`}><span className="composition-direct" style={{ width: `${direct / total * 100}%` }} /><span className="composition-operating" style={{ width: `${operatingAdd / total * 100}%` }} /><span className="composition-funding" style={{ width: `${fundingAdd / total * 100}%` }} /></div><div className="composition-legend"><span><i className="composition-direct-dot" />直接成本 <b>{formatCurrency(direct)}</b></span><span><i className="composition-operating-dot" />经营分摊 <b>{formatCurrency(operatingAdd)}</b></span><span><i className="composition-funding-dot" />资金成本 <b>{formatCurrency(fundingAdd)}</b></span></div></div>;
+}
+
+function CashFlowChart({ series, onRecord }: { series: ReturnType<typeof summarizeLedger>["dailySeries"]; onRecord: () => void }) {
+  const max = Math.max(...series.flatMap((item) => [item.income, item.expenses]), 1);
+  const hasData = series.some((item) => item.income > 0 || item.expenses > 0);
+  if (!hasData) return <section className="cash-flow-chart chart-card"><div className="chart-heading"><div><span className="eyebrow">现金流走势</span><h2>本期还没有现金流</h2></div></div><div className="chart-empty" role="status"><BarChart3 size={22} /><span>记一笔收入或支出后，这里会显示每日现金流。</span><button type="button" onClick={onRecord}>去记一笔 <ArrowRight size={14} /></button></div></section>;
+  return <section className="cash-flow-chart chart-card" aria-label="现金流走势"><div className="chart-heading"><div><span className="eyebrow">现金流走势</span><h2>每天进出的钱</h2></div><span className="legend"><i />收入 <i className="green" />流出</span></div><div className="cash-flow-bars">{series.map((item) => <div className="cash-flow-day" key={item.label}><div className="cash-flow-columns"><span className="cash-income-bar" style={{ height: `${Math.max(item.income / max * 100, item.income ? 7 : 0)}%` }} title={`收入 ${formatCurrency(item.income)}`} /><span className="cash-expense-bar" style={{ height: `${Math.max(item.expenses / max * 100, item.expenses ? 7 : 0)}%` }} title={`流出 ${formatCurrency(item.expenses)}`} /></div><small>{item.label}</small></div>)}</div></section>;
 }
 
 function ProductsView({ products, activeProductId, onSelect, onPricing, onBom, onAdd }: { products: LedgerProduct[]; activeProductId: number; onSelect: (id: number) => void; onPricing: () => void; onBom: () => void; onAdd: () => void }) {
@@ -260,9 +282,8 @@ function ProductsView({ products, activeProductId, onSelect, onPricing, onBom, o
       </section>
       <section className="product-detail-card">
         <div className="detail-card-title"><div><span className="eyebrow">当前商品</span><h2>{selected.name}</h2></div><span className="status-pill">已核算</span></div>
-        <div className="product-numbers"><div><span>每份经营成本</span><b>{formatCurrency(selected.operating)}</b></div><div><span>当前售价</span><b>{selected.price ? formatCurrency(selected.price) : "—"}</b></div><div><span>预计利润率</span><b>{selected.price ? `${margin.toFixed(1)}%` : "—"}</b></div></div>
-        <div className="detail-divider" />
-        <div className="cost-rail"><span>材料 <b>{formatCurrency(selected.direct)}</b></span><i /><span>隐形成本 <b>{formatCurrency(Math.max(selected.operating - selected.direct - 0.92, 0))}</b></span><i /><span>固定分摊 <b>{formatCurrency(0.92)}</b></span></div>
+        <div className="product-chart-summary"><span>经营成本 <b>{formatCurrency(selected.operating)}</b></span><span>预计利润率 <b>{selected.price ? `${margin.toFixed(1)}%` : "—"}</b></span></div>
+        <CostCompositionChart product={selected} operatingCost={selected.operating} fullCost={selected.operating + 0.28} />
         <div className="product-action-pair"><button className="secondary-card-action" onClick={onBom}><ClipboardList size={17} /> 编辑配方</button><button className="primary-action" onClick={onPricing}><Sparkles size={18} /> 定价建议</button></div>
       </section>
     </div>
@@ -293,6 +314,7 @@ function BusinessView({ summary, costs, onPricing, onRecord, onSale }: { summary
       <section className={`cash-flow-card ${isRefreshing ? "is-refreshing" : ""}`}>
         <div className="cash-flow-copy"><span>现金流压力 <button className="micro-info" aria-label="查看现金流压力说明" aria-expanded={showCashDetails} onClick={() => setShowCashDetails((current) => !current)}><Info size={13} /></button></span><h2>{formatCurrency(summary.cashOutflow)}</h2>{summary.cashOutflow > 0 ? <p>本金还款 {formatCurrency(summary.principalRepayment)} · 利息与融资费 {formatCurrency(summary.financingCosts)}</p> : <p className="cash-flow-empty">先记一笔支出或还款，这里会显示现金流压力。</p>}{showCashDetails && <div className="cash-flow-detail" role="status">现金流压力包含本期全部实际流出；本金影响现金，不计入经营利润；利息和融资费用计入资金成本。</div>}</div><div className="cash-orbit" aria-hidden="true"><CircleDollarSign size={32} /><span>{isRefreshing ? "更新中" : "本期"}</span></div>
       </section>
+      <CashFlowChart series={summary.dailySeries} onRecord={onRecord} />
       {summary.salesCount > 0 && <section className="sales-result-card"><div><span className="eyebrow">销售结转</span><h2>{summary.salesCount} 笔销售 · {summary.salesQuantity} 份</h2></div><div className="sales-result-grid"><span>销售收入 <b>{formatCurrency(summary.salesRevenue)}</b></span><span>销货成本 <b>{formatCurrency(summary.costOfSales)}</b></span><span>商品毛利 <b>{formatCurrency(summary.grossProfit)}</b></span><span>经营结果 <b>{formatCurrency(summary.operatingResult)}</b></span></div></section>}
       <section className={`chart-card ${isRefreshing ? "is-refreshing" : ""}`} aria-label="经营趋势图表"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>收入与经营成本</h2></div><span className="legend"><i />收入 <i className="green" />成本</span></div>{isRefreshing && <div className="chart-loading" role="status" aria-live="polite"><span className="loading-sweep" />正在更新经营趋势</div>}{hasTrendData ? <><div className="bar-chart" role="list" aria-label="按日期查看收入和经营成本">{summary.dailySeries.map((item) => <button type="button" className={`bar-pair ${activeItem?.label === item.label ? "is-active" : ""}`} key={item.label} onMouseEnter={() => setActiveLabel(item.label)} onFocus={() => setActiveLabel(item.label)} onClick={() => setActiveLabel(item.label)} aria-label={`${item.label}，收入${formatCurrency(item.income)}，经营成本${formatCurrency(item.expenses)}`} role="listitem"><span className="income-bar" aria-hidden="true" style={{ height: `${Math.max((item.income / maxValue) * 100, item.income ? 8 : 0)}%` }} /><span className="expense-bar" aria-hidden="true" style={{ height: `${Math.max((item.expenses / maxValue) * 100, item.expenses ? 8 : 0)}%` }} /></button>)}</div><div className="chart-labels">{summary.dailySeries.map((item) => <button type="button" className={activeItem?.label === item.label ? "is-active" : ""} onClick={() => setActiveLabel(item.label)} key={item.label}>{item.label}</button>)}</div>{activeItem && <div className="chart-tooltip" role="status"><b>{activeItem.label}</b><span><i className="income-dot" />收入 {formatCurrency(activeItem.income)}</span><span><i className="expense-dot" />成本 {formatCurrency(activeItem.expenses)}</span></div>}</> : <div className="chart-empty" role="status"><BarChart3 size={22} /><strong>还没有经营趋势</strong><span>先记一笔收入或支出，趋势会出现在这里。</span><button type="button" onClick={onRecord}>去记一笔 <ArrowRight size={14} /></button></div>}</section>
       <section className="section-heading compact"><div><span className="eyebrow">成本构成</span><h2>不只看材料钱</h2></div><span className="section-stamp">本月</span></section>
