@@ -13,7 +13,7 @@ describe("OnboardingFlow industry initialization", () => {
     const onComplete = vi.fn();
     render(<OnboardingFlow initialName="" onComplete={onComplete} />);
     fireEvent.click(screen.getByRole("button", { name: /社区零售/ }));
-    fireEvent.click(screen.getByRole("button", { name: /按这个行业建账/ }));
+    fireEvent.click(screen.getByRole("button", { name: /按这个行业准备成本账/ }));
     fireEvent.change(screen.getByPlaceholderText("例如：巷口奶茶铺"), { target: { value: "社区便利店" } });
     fireEvent.click(screen.getByRole("button", { name: /开始算第一笔账/ }));
     expect(onComplete).toHaveBeenCalledWith({ storeName: "社区便利店", industry: "retail" });
