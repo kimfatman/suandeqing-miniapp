@@ -31,7 +31,7 @@ import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
 import { calculateDirectCost, calculateUnitCost, INDUSTRY_TEMPLATES, IndustryKey, LedgerProduct, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
-import { validateMaterialDraft } from "@/lib/validation";
+import { validateMaterialDraft, validateProductName } from "@/lib/validation";
 
 type Tab = "home" | "products" | "business" | "profile";
 
@@ -59,6 +59,7 @@ export default function Home() {
   const [showQuickRecord, setShowQuickRecord] = useState(false);
   const [showSaleRecord, setShowSaleRecord] = useState(false);
   const [showBomEditor, setShowBomEditor] = useState(false);
+  const [showProductNameSheet, setShowProductNameSheet] = useState(false);
   const [costEditor, setCostEditor] = useState<"hidden" | "funding" | null>(null);
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
   const [toast, setToast] = useState<string | null>(null);
@@ -144,13 +145,7 @@ export default function Home() {
             onSelect={(id) => setActiveProductId(id)}
             onPricing={() => setShowPricing(true)}
             onBom={() => setShowBomEditor(true)}
-            onAdd={() => {
-              const nextId = Math.max(...ledger.products.map((item) => item.id)) + 1;
-              const nextProduct: LedgerProduct = { id: nextId, name: "新建商品", category: "待完善配方", price: 0, direct: 0, operating: 0, change: "先补充成本", packaging: 0, directLabor: 0, bom: [] };
-              setLedger((current) => { const next = { ...current, products: [...current.products, nextProduct] }; persistLedger(next); return next; });
-              setActiveProductId(nextId);
-              notify("已新建商品，请继续补充成本和售价");
-            }}
+            onAdd={() => setShowProductNameSheet(true)}
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} />}
@@ -167,6 +162,14 @@ export default function Home() {
       </nav>
 
       {showPricing && <PricingPanel costs={pricingCosts} onClose={() => setShowPricing(false)} onSave={saveSuggestedPrice} />}
+      {showProductNameSheet && <ProductNameSheet onClose={() => setShowProductNameSheet(false)} onSave={(name) => {
+        const nextId = Math.max(...ledger.products.map((item) => item.id)) + 1;
+        const nextProduct: LedgerProduct = { id: nextId, name, category: "待完善配方", price: 0, direct: 0, operating: 0, change: "先补充成本", packaging: 0, directLabor: 0, bom: [] };
+        setLedger((current) => { const next = { ...current, products: [...current.products, nextProduct] }; persistLedger(next); return next; });
+        setActiveProductId(nextId);
+        setShowProductNameSheet(false);
+        notify(`已新建“${name}”，请继续补充成本和售价`);
+      }} />}
       {showMaterialPanel && <MaterialSheet onClose={() => setShowMaterialPanel(false)} onSave={(material) => { setLedger((current) => { const next = { ...current, materials: [...current.materials, material] }; persistLedger(next); return next; }); setShowMaterialPanel(false); notify("已保存原材料，后续核算会使用新成本"); }} />}
       {showQuickRecord && <QuickRecordSheet categories={ledger.categories} onClose={() => setShowQuickRecord(false)} onSave={(record) => { setLedger((current) => { const next = { ...current, records: [{ id: makeId(), ...record, date: new Date().toISOString().slice(0, 10) }, ...current.records] }; persistLedger(next); return next; }); setShowQuickRecord(false); notify(record.type === "income" ? "已记入收入，经营账已更新" : "已记入支出，成本账已更新"); }} />}
       {showSaleRecord && <SalesRecordSheet products={ledger.products} onClose={() => setShowSaleRecord(false)} onSave={(sale) => { setLedger((current) => { const product = current.products.find((entry) => entry.id === sale.productId); const amount = sale.quantity * sale.unitPrice; const salePeriod = current.costs.allocationPeriod ?? sale.date.slice(0, 7); const hiddenSnapshot = current.costs.hiddenCostSource === "ledger" ? current.records.filter((record) => record.type === "expense" && record.date.startsWith(salePeriod) && record.category === (current.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0) : current.costs.hiddenCost; const enrichedSale: SalesRecord = { ...sale, costVersionId: product?.bomVersions?.at(-1)?.id ?? `current-${sale.date}`, unitDirectCostSnapshot: product ? calculateDirectCost(product, current.materials) : 0, fixedCostSnapshot: current.costs.fixedCost, hiddenCostSnapshot: hiddenSnapshot, fundingCostSnapshot: current.costs.fundingCost, fundingSourceSnapshot: current.costs.fundingSource ?? "manual", costPeriod: salePeriod }; const next = { ...current, sales: [enrichedSale, ...(current.sales ?? [])], records: [{ id: makeId(), type: "income" as const, amount, category: "销售收入", note: `${product?.name ?? "商品"}销售`, date: sale.date }, ...current.records] }; persistLedger(next); return next; }); setShowSaleRecord(false); notify("已记录销售，商品成本已结转"); }} />}
@@ -339,6 +342,18 @@ function ProfileView({ storeName, industry, onHiddenCost, onDebt }: { storeName:
       <section className="setting-group"><span className="group-label">数据与账户</span><SettingItem icon={<BookOpenCheck size={19} />} label="成本口径说明" note="直接、经营与完整成本" onClick={() => undefined} /><SettingItem icon={<Settings2 size={19} />} label="数据管理" note="导出与隐私设置" onClick={() => undefined} /></section>
     </div>
   );
+}
+
+export function ProductNameSheet({ onClose, onSave }: { onClose: () => void; onSave: (name: string) => void }) {
+  const [name, setName] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const save = () => {
+    const trimmed = name.trim();
+    const error = validateProductName(trimmed);
+    if (error) { setValidationError(error); return; }
+    onSave(trimmed);
+  };
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet product-name-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">新增商品</span><h2>先给商品起个名字</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭">×</button></header><label className="field-block"><span>商品名称</span><div className="money-input"><input autoFocus value={name} maxLength={40} placeholder="例如：招牌冰咖啡" onChange={(event) => { setName(event.target.value); setValidationError(null); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /><b>{name.length}/40</b></div></label>{validationError && <p className="field-error" role="alert">{validationError}</p>}<p className="sheet-hint">名称保存后还可以继续补充配方、售价和成本。</p><button className="primary-action sheet-save-button" onClick={save}>创建商品 <ArrowRight size={16} /></button></section></div>;
 }
 
 export function MaterialSheet({ onClose, onSave }: { onClose: () => void; onSave: (material: Material) => void }) {

@@ -4,8 +4,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => cleanup());
 import { BomEditorSheet } from "@/components/BomEditorSheet";
-import { MaterialSheet } from "@/pages/Home";
+import { MaterialSheet, ProductNameSheet } from "@/pages/Home";
 import { makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
+
+describe("ProductNameSheet interactions", () => {
+  it("rejects an empty name and accepts a custom name", () => {
+    const onSave = vi.fn();
+    render(<ProductNameSheet onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.click(screen.getByRole("button", { name: /创建商品/ }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("请填写商品名称");
+    fireEvent.change(screen.getByPlaceholderText("例如：招牌冰咖啡"), { target: { value: "冰柠檬茶" } });
+    fireEvent.click(screen.getByRole("button", { name: /创建商品/ }));
+    expect(onSave).toHaveBeenCalledWith("冰柠檬茶");
+  });
+});
 
 describe("MaterialSheet interactions", () => {
   it("shows an error and does not call onSave for zero purchase quantity", () => {

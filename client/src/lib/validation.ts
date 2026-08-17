@@ -7,6 +7,12 @@ export type MaterialDraft = {
   conversionFactor: number;
 };
 
+export const validateProductName = (name: string) => {
+  if (!name.trim()) return "请填写商品名称。";
+  if (name.trim().length > 40) return "商品名称不能超过40个字。";
+  return null;
+};
+
 export const validateMaterialDraft = (draft: MaterialDraft) => {
   if (!draft.name.trim()) return "请填写材料名称。";
   if (![draft.amount, draft.quantity, draft.conversionFactor].every(Number.isFinite)
