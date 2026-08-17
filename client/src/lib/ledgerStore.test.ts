@@ -101,6 +101,14 @@ describe("summarizeSales", () => {
 });
 
 describe("industry templates", () => {
+  it("uses industry-specific product cost language", () => {
+    expect(INDUSTRY_TEMPLATES.find((item) => item.key === "catering")?.productCostAction).toBe("编辑配方");
+    expect(INDUSTRY_TEMPLATES.find((item) => item.key === "retail")?.productCostAction).toBe("编辑进货明细");
+    expect(INDUSTRY_TEMPLATES.find((item) => item.key === "stall")?.productCostAction).toBe("编辑货品成本");
+    expect(INDUSTRY_TEMPLATES.find((item) => item.key === "handmade")?.productCostAction).toBe("编辑制作成本");
+    expect(INDUSTRY_TEMPLATES.some((item) => item.productCostAction.includes("BOM"))).toBe(false);
+  });
+
   it("provides products and materials for every industry", () => {
     (["catering", "retail", "stall", "handmade"] as const).forEach((industry) => {
       const sample = getIndustrySampleData(industry);
