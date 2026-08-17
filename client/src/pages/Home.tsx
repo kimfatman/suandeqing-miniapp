@@ -30,7 +30,8 @@ import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
-import { INDUSTRY_TEMPLATES, IndustryKey, LedgerProduct, loadLedger, makeId, Material, persistLedger, recalculateProduct, summarizeLedger } from "@/lib/ledgerStore";
+import { calculateUnitCost, INDUSTRY_TEMPLATES, IndustryKey, LedgerProduct, loadLedger, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, summarizeLedger } from "@/lib/ledgerStore";
+import { validateMaterialDraft } from "@/lib/validation";
 
 type Tab = "home" | "products" | "business" | "profile";
 
@@ -52,7 +53,7 @@ const navItems = [
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [showPricing, setShowPricing] = useState(false);
-  const [ledger, setLedger] = useState(loadLedger);
+  const [ledger, setLedger] = useState(() => normalizeLedger(loadLedger()));
   const [activeProductId, setActiveProductId] = useState(1);
   const [showMaterialPanel, setShowMaterialPanel] = useState(false);
   const [showQuickRecord, setShowQuickRecord] = useState(false);
@@ -201,18 +202,18 @@ function HomeView({
       </section>
 
       <section className="hero-ledger-card">
-        <div className="hero-card-top"><span className="ledger-tab">08 月 · 经营结余</span><span className="ledger-stamp">已核算</span></div>
-        <div className="ledger-card-heading"><span>本月经营利润估算</span><BookOpenCheck size={18} /></div>
-        <strong>{formatCurrency(summary.result)}</strong>
-        <p>根据本地账本已记录的收入与支出实时计算</p>
-        <div className="hero-calculation-trail"><span>收入 <b>{formatCurrency(summary.income)}</b></span><i>−</i><span>经营成本 <b>{formatCurrency(summary.expenses)}</b></span><i>=</i><span className="trail-result">结余 <b>{formatCurrency(summary.result)}</b></span></div>
+        <div className="hero-card-top"><span className="ledger-tab">08 月 · 现金结余</span><span className="ledger-stamp">已核算</span></div>
+        <div className="ledger-card-heading"><span>本月经营现金结余</span><BookOpenCheck size={18} /></div>
+        <strong>{formatCurrency(summary.cashBalance)}</strong>
+        <p>按实际收入与全部现金流出计算；商品成本尚未按销量结转</p>
+        <div className="hero-calculation-trail"><span>收入 <b>{formatCurrency(summary.income)}</b></span><i>−</i><span>现金流出 <b>{formatCurrency(summary.cashOutflow)}</b></span><i>=</i><span className="trail-result">现金结余 <b>{formatCurrency(summary.cashBalance)}</b></span></div>
         <div className="ledger-card-foot"><span>已记录 <b>{summary.incomeCount + summary.expenseCount}</b> 笔</span><button onClick={onBusiness}>翻开经营账 <ArrowRight size={16} /></button></div>
       </section>
 
       <section className="summary-strip" aria-label="本月关键指标">
         <div><span>收入</span><strong>{formatCurrency(summary.income)}</strong><small>{summary.incomeCount ? `已入账 ${summary.incomeCount} 笔` : "还没有收入记录"}</small></div>
-        <div><span>经营成本</span><strong>{formatCurrency(summary.expenses)}</strong><small>{summary.expenseCount ? `实际支出 ${summary.expenseCount} 笔` : "还没有支出记录"}</small></div>
-        <div className="is-result"><span>结余</span><strong>{formatCurrency(summary.result)}</strong><small>{summary.result >= 0 ? "当前为正" : "需要关注"}</small></div>
+        <div><span>经营支出</span><strong>{formatCurrency(summary.expenses)}</strong><small>{summary.expenseCount ? `不含本金 ${summary.expenseCount} 笔` : "还没有支出记录"}</small></div>
+        <div className="is-result"><span>经营结果估算</span><strong>{formatCurrency(summary.operatingResult)}</strong><small>未按销量结转商品成本</small></div>
       </section>
 
       <section className="quick-actions" aria-label="常用操作">
@@ -221,7 +222,7 @@ function HomeView({
         <button className="quick-action" onClick={onAddMaterial}><PackagePlus size={20} /><span><b>加原材料</b><small>更新商品成本</small></span></button>
       </section>
 
-      <section className="section-heading"><div><span className="eyebrow">下一步</span><h2>先处理这两项，利润才算准</h2></div><button onClick={onBusiness}>查看经营 <ChevronRight size={16} /></button></section>
+      <section className="section-heading"><div><span className="eyebrow">下一步</span><h2>先补齐成本与销售，利润才算准</h2></div><button onClick={onBusiness}>查看经营 <ChevronRight size={16} /></button></section>
       <section className="attention-list">
         <article className="attention-item amber"><div className="attention-icon"><TrendingUp size={19} /></div><div><strong>茶底采购价上涨 8%</strong><p>“招牌奶茶”每份成本增加 0.28 元</p></div><button onClick={onPricing}>去核算</button></article>
         <article className="attention-item blue"><div className="attention-icon"><WalletCards size={19} /></div><div><strong>还有一笔隐形成本未分摊</strong><p>本月配送与交通费 ¥286.00</p></div><button onClick={onBusiness}>查看</button></article>
@@ -314,12 +315,25 @@ function ProfileView({ storeName, industry, onHiddenCost, onDebt }: { storeName:
   );
 }
 
-function MaterialSheet({ onClose, onSave }: { onClose: () => void; onSave: (material: Material) => void }) {
+export function MaterialSheet({ onClose, onSave }: { onClose: () => void; onSave: (material: Material) => void }) {
   const [name, setName] = useState("鲜牛奶");
   const [amount, setAmount] = useState("36");
   const [quantity, setQuantity] = useState("24");
-  const unitCost = Number(amount || 0) / Math.max(Number(quantity || 0), 1);
-  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">新增原材料</span><h2>先记一笔进货价</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>材料名称</span><div className="money-input"><input value={name} onChange={(event) => setName(event.target.value)} /><b>名称</b></div></label><div className="two-fields"><label className="field-block"><span>采购金额</span><div className="money-input"><input type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /><b>元</b></div></label><label className="field-block"><span>采购数量</span><div className="money-input"><input type="number" value={quantity} onChange={(event) => setQuantity(event.target.value)} /><b>盒</b></div></label></div><div className="material-preview"><span>当前估算单位成本</span><strong>{formatCurrency(unitCost)}</strong><p>后续商品核算会自动使用该价格，可随时更新。</p></div><button className="primary-action sheet-action" onClick={() => onSave({ id: makeId(), name: name.trim() || "未命名材料", unit: "盒", unitCost, source: "手工录入采购价" })}><CheckBadge /> 保存原材料</button></section></div>;
+  const [purchaseUnit, setPurchaseUnit] = useState("盒");
+  const [usageUnit, setUsageUnit] = useState("个");
+  const [conversionFactor, setConversionFactor] = useState("1");
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const purchaseAmount = Number(amount);
+  const purchaseQuantity = Number(quantity);
+  const factor = Number(conversionFactor);
+  const validNumbers = Number.isFinite(purchaseAmount) && purchaseAmount > 0 && Number.isFinite(purchaseQuantity) && purchaseQuantity > 0 && Number.isFinite(factor) && factor > 0;
+  const unitCost = validNumbers ? calculateUnitCost(purchaseAmount, purchaseQuantity, factor) : 0;
+  const save = () => {
+    const error = validateMaterialDraft({ name, amount: purchaseAmount, quantity: purchaseQuantity, conversionFactor: factor });
+    if (error) { setValidationError(error); return; }
+    onSave({ id: makeId(), name: name.trim(), unit: usageUnit, unitCost, source: `采购${purchaseQuantity}${purchaseUnit}，每${purchaseUnit}折算${factor}${usageUnit}`, purchaseUnit, conversionFactor: factor });
+  };
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">新增原材料</span><h2>先记一笔进货价</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>材料名称</span><div className="money-input"><input value={name} onChange={(event) => { setName(event.target.value); setValidationError(null); }} /><b>名称</b></div></label><div className="two-fields"><label className="field-block"><span>采购金额</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => { setAmount(event.target.value); setValidationError(null); }} /><b>元</b></div></label><label className="field-block"><span>采购数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setValidationError(null); }} /><b>{purchaseUnit}</b></div></label></div><div className="two-fields"><label className="field-block"><span>采购单位</span><select value={purchaseUnit} onChange={(event) => setPurchaseUnit(event.target.value)}><option value="盒">盒</option><option value="箱">箱</option><option value="袋">袋</option><option value="瓶">瓶</option></select></label><label className="field-block"><span>使用单位</span><select value={usageUnit} onChange={(event) => setUsageUnit(event.target.value)}><option value="个">个</option><option value="克">克</option><option value="毫升">毫升</option><option value="套">套</option></select></label></div><label className="field-block"><span>每{purchaseUnit}折算多少{usageUnit}</span><div className="money-input"><input type="number" min="0.0001" step="0.0001" value={conversionFactor} onChange={(event) => { setConversionFactor(event.target.value); setValidationError(null); }} /><b>{usageUnit}</b></div></label><div className="material-preview"><span>当前估算使用单位成本</span><strong>{formatCurrency(unitCost)} / {usageUnit}</strong><p>公式：采购金额 ÷（采购数量 × 换算系数）；商品配方会按使用单位核算。</p></div>{validationError && <p className="form-error" role="alert">{validationError}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> 保存原材料</button></section></div>;
 }
 
 function CostSettingsSheet({ type, value, onClose, onSave }: { type: "hidden" | "funding"; value: number; onClose: () => void; onSave: (value: number) => void }) {

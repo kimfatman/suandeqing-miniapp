@@ -12,9 +12,12 @@ export type IndustryTemplate = {
 export type Material = {
   id: string;
   name: string;
+  /** 使用单位，例如克、毫升、个；unitCost 始终按使用单位计价。 */
   unit: string;
   unitCost: number;
   source: string;
+  purchaseUnit?: string;
+  conversionFactor?: number;
 };
 
 export type BomItem = {
@@ -69,7 +72,11 @@ export type LedgerData = {
 export type LedgerSummary = {
   income: number;
   expenses: number;
+  /** 实际收付款口径，包含本金还款。 */
   cashOutflow: number;
+  cashBalance: number;
+  /** 当前仍是流水层估算，尚未按销售数量结转商品成本。 */
+  operatingResult: number;
   financingCosts: number;
   principalRepayment: number;
   result: number;
@@ -89,6 +96,11 @@ export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
 const STORAGE_KEY = "suandeqing-ledger-v1";
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const money = (value: number) => Math.round(value * 100) / 100;
+
+export const calculateUnitCost = (purchaseAmount: number, purchaseQuantity: number, conversionFactor = 1) => {
+  if (![purchaseAmount, purchaseQuantity, conversionFactor].every(Number.isFinite) || purchaseAmount <= 0 || purchaseQuantity <= 0 || conversionFactor <= 0) return NaN;
+  return money(purchaseAmount / (purchaseQuantity * conversionFactor));
+};
 
 export const seedLedger = (): LedgerData => ({
   profile: { storeName: "巷口奶茶铺", industry: "catering", onboarded: false, monthlyBudget: 18000 },
@@ -133,6 +145,14 @@ export const loadLedger = (): LedgerData => {
   }
   return fallback;
 };
+
+/** 对已有本地账本做轻量迁移：带BOM的商品始终以当前BOM重算，避免种子值与配方不一致。 */
+export const normalizeLedger = (ledger: LedgerData): LedgerData => ({
+  ...ledger,
+  products: ledger.products.map((product) => product.bom.length
+    ? recalculateProduct(product, ledger.materials, ledger.costs.hiddenCost, ledger.costs.fixedCost)
+    : product),
+});
 
 export const persistLedger = (ledger: LedgerData) => {
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger)); } catch { /* 演示模式不阻断操作 */ }
@@ -191,13 +211,18 @@ export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
     expenses: byDate[date]?.expenses ?? 0,
   }));
 
+  const normalizedIncome = money(income);
+  const normalizedExpenses = money(expenses);
+  const normalizedCashOutflow = money(cashOutflow);
   return {
-    income: money(income),
-    expenses: money(expenses),
-    cashOutflow: money(cashOutflow),
+    income: normalizedIncome,
+    expenses: normalizedExpenses,
+    cashOutflow: normalizedCashOutflow,
+    cashBalance: money(normalizedIncome - normalizedCashOutflow),
+    operatingResult: money(normalizedIncome - normalizedExpenses),
     financingCosts: money(financingCosts),
     principalRepayment: money(principalRepayment),
-    result: money(income - expenses),
+    result: money(normalizedIncome - normalizedExpenses),
     incomeCount: ledger.records.filter((record) => record.type === "income").length,
     expenseCount: ledger.records.filter((record) => record.type === "expense").length,
     categoryTotals,

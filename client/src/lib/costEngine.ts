@@ -43,6 +43,9 @@ export const calculatePricing = ({
   const cost = getScopeCost(inputs, scope);
   const rate = inputs.feeRate / 100;
   const margin = mode === "margin" ? target / 100 : 0;
+  const hasValidInputs = [inputs.directCost, inputs.fixedCost, inputs.hiddenCost, inputs.fundingCost, inputs.feeRate, target, fixedFee].every(Number.isFinite)
+    && inputs.directCost >= 0 && inputs.fixedCost >= 0 && inputs.hiddenCost >= 0 && inputs.fundingCost >= 0
+    && inputs.feeRate >= 0 && inputs.feeRate < 100 && target >= 0 && (mode === "profit" || target < 100) && fixedFee >= 0;
   const denominator = 1 - rate - margin;
   const rawPrice = mode === "margin"
     ? denominator > 0
@@ -63,6 +66,6 @@ export const calculatePricing = ({
     breakEvenPrice,
     actualProfit,
     actualMargin,
-    isValid: Number.isFinite(rawPrice) && rawPrice > 0,
+    isValid: hasValidInputs && Number.isFinite(rawPrice) && rawPrice > 0,
   };
 };
