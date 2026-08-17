@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => cleanup());
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { MaterialSheet } from "@/pages/Home";
-import { seedLedger } from "./ledgerStore";
+import { makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("MaterialSheet interactions", () => {
   it("shows an error and does not call onSave for zero purchase quantity", () => {
@@ -20,6 +20,18 @@ describe("MaterialSheet interactions", () => {
 });
 
 describe("BomEditorSheet interactions", () => {
+  it("restores a historical cost snapshot after material price changes", () => {
+    const ledger = seedLedger();
+    const version = makeBomVersionSnapshot(ledger.products[0], ledger.materials, { lossRate: 10, batchYield: 2 }, "2026-08-17");
+    ledger.materials[0].unitCost = 9;
+    const onSave = vi.fn();
+    render(<BomEditorSheet product={{ ...ledger.products[0], bomVersions: [version] }} materials={ledger.materials} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.click(screen.getByText("成本如何变化？"));
+    fireEvent.click(screen.getByRole("button", { name: /恢复/ }));
+    fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ costSnapshot: expect.objectContaining({ directCost: version.directCost, materialUnitCosts: version.materialUnitCosts, packaging: version.packaging, directLabor: version.directLabor }) }));
+  });
+
   it("shows an error and does not call onSave for zero BOM quantity", () => {
     const ledger = seedLedger();
     const onSave = vi.fn();

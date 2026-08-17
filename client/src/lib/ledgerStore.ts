@@ -37,6 +37,10 @@ export type LedgerProduct = {
   packaging: number;
   directLabor: number;
   bom: BomItem[];
+  lossRate?: number;
+  batchYield?: number;
+  bomVersions?: BomVersion[];
+  materialUnitCosts?: Record<string, number>;
 };
 
 export type LedgerRecord = {
@@ -48,10 +52,44 @@ export type LedgerRecord = {
   date: string;
 };
 
+export type SalesRecord = {
+  id: string;
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  date: string;
+  note: string;
+  costVersionId?: string;
+  unitDirectCostSnapshot?: number;
+  fixedCostSnapshot?: number;
+  hiddenCostSnapshot?: number;
+  fundingCostSnapshot?: number;
+  fundingSourceSnapshot?: "manual" | "ledger";
+  costPeriod?: string;
+};
+
+export type BomVersion = {
+  id: string;
+  effectiveFrom: string;
+  items: BomItem[];
+  lossRate: number;
+  batchYield: number;
+  materialUnitCosts: Record<string, number>;
+  packaging: number;
+  directLabor: number;
+  directCost: number;
+  operatingCost: number;
+};
+
 export type LedgerCosts = {
   fixedCost: number;
   hiddenCost: number;
+  hiddenCostBasis?: "perUnit" | "perSale";
+  hiddenCostSource?: "manual" | "ledger";
+  hiddenCostCategory?: string;
+  allocationPeriod?: string;
   fundingCost: number;
+  fundingSource?: "manual" | "ledger";
   feeRate: number;
 };
 
@@ -67,6 +105,7 @@ export type LedgerData = {
   materials: Material[];
   products: LedgerProduct[];
   records: LedgerRecord[];
+  sales: SalesRecord[];
 };
 
 export type LedgerSummary = {
@@ -75,8 +114,14 @@ export type LedgerSummary = {
   /** 实际收付款口径，包含本金还款。 */
   cashOutflow: number;
   cashBalance: number;
-  /** 当前仍是流水层估算，尚未按销售数量结转商品成本。 */
+  /** 没有销售记录时为流水层估算；有销售记录时由销售和成本版本计算。 */
   operatingResult: number;
+  salesRevenue: number;
+  salesQuantity: number;
+  salesCount: number;
+  costOfSales: number;
+  grossProfit: number;
+  allocatedIndirectCosts: number;
   financingCosts: number;
   principalRepayment: number;
   result: number;
@@ -104,7 +149,7 @@ export const calculateUnitCost = (purchaseAmount: number, purchaseQuantity: numb
 
 export const seedLedger = (): LedgerData => ({
   profile: { storeName: "巷口奶茶铺", industry: "catering", onboarded: false, monthlyBudget: 18000 },
-  costs: { fixedCost: 0.92, hiddenCost: 1.3, fundingCost: 0.28, feeRate: 3 },
+  costs: { fixedCost: 0.92, hiddenCost: 1.3, hiddenCostBasis: "perUnit", hiddenCostSource: "manual", hiddenCostCategory: "交通配送", allocationPeriod: "2026-08", fundingCost: 0.28, fundingSource: "manual", feeRate: 3 },
   categories: INDUSTRY_TEMPLATES[0].categories,
   materials: [
     { id: "mat-tea", name: "茉莉茶底", unit: "克", unitCost: 0.036, source: "茶叶供应商" },
@@ -117,10 +162,11 @@ export const seedLedger = (): LedgerData => ({
     { id: 2, name: "芝士热狗", category: "小食 · 单份", price: 10, direct: 4.2, operating: 5.51, change: "利润稳定", packaging: 0.32, directLabor: 0.45, bom: [] },
     { id: 3, name: "手冲柠檬茶", category: "饮品 · 650ml", price: 13, direct: 4.9, operating: 6.18, change: "本周销量 +16%", packaging: 0.5, directLabor: 0.5, bom: [] },
   ],
-  records: [
+    records: [
     { id: "rec-1", type: "expense", amount: 286, category: "交通配送", note: "本月配送与取货", date: "2026-08-17" },
     { id: "rec-2", type: "income", amount: 860, category: "销售收入", note: "今日小程序汇总", date: "2026-08-17" },
   ],
+  sales: [],
 });
 
 export const loadLedger = (): LedgerData => {
@@ -138,6 +184,7 @@ export const loadLedger = (): LedgerData => {
         materials: saved.materials ?? fallback.materials,
         products: saved.products ?? fallback.products,
         records: saved.records ?? fallback.records,
+        sales: saved.sales ?? fallback.sales,
       };
     }
   } catch {
@@ -163,15 +210,75 @@ export const makeId = uid;
 export const calculateDirectCost = (product: LedgerProduct, materials: Material[]) => {
   const bomCost = product.bom.reduce((sum, item) => {
     const material = materials.find((entry) => entry.id === item.materialId);
-    return sum + (material ? material.unitCost * item.quantity : 0);
+    return sum + (material ? (product.materialUnitCosts?.[material.id] ?? material.unitCost) * item.quantity : 0);
   }, 0);
-  return money(bomCost + product.packaging + product.directLabor);
+  const lossRate = Math.max(product.lossRate ?? 0, 0) / 100;
+  const batchYield = Math.max(product.batchYield ?? 1, 0.0001);
+  return money((bomCost * (1 + lossRate)) / batchYield + product.packaging + product.directLabor);
 };
 
 export const recalculateProduct = (product: LedgerProduct, materials: Material[], hiddenCost: number, fixedCost: number) => {
   const direct = calculateDirectCost(product, materials);
   return { ...product, direct, operating: money(direct + hiddenCost + fixedCost) };
 };
+
+export const makeBomVersionSnapshot = (product: LedgerProduct, materials: Material[], settings: { lossRate: number; batchYield: number }, effectiveFrom: string): BomVersion => {
+  const snapshotProduct = { ...product, lossRate: settings.lossRate, batchYield: settings.batchYield };
+  const recalculated = recalculateProduct(snapshotProduct, materials, 0, 0);
+  return {
+    id: uid(), effectiveFrom, items: product.bom, lossRate: settings.lossRate, batchYield: settings.batchYield,
+    materialUnitCosts: product.materialUnitCosts ?? Object.fromEntries(materials.map((material) => [material.id, material.unitCost])),
+    packaging: product.packaging, directLabor: product.directLabor, directCost: recalculated.direct, operatingCost: recalculated.operating,
+  };
+};
+
+export const calculateBomVersionDirectCost = (version: BomVersion) => {
+  const materialsCost = version.items.reduce((sum, item) => sum + (version.materialUnitCosts[item.materialId] ?? 0) * item.quantity, 0);
+  return money((materialsCost * (1 + Math.max(version.lossRate, 0) / 100)) / Math.max(version.batchYield, 0.0001) + version.packaging + version.directLabor);
+};
+
+export const summarizeSales = (ledger: LedgerData) => {
+  const period = ledger.costs.allocationPeriod;
+  const ledgerHiddenCost = ledger.records.filter((record) => (!period || record.date.startsWith(period)) && record.type === "expense" && record.category === (ledger.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0);
+  const configuredHiddenCost = ledger.costs.hiddenCostSource === "ledger" ? ledgerHiddenCost : Math.max(ledger.costs.hiddenCost, 0);
+  const salesForPeriod = (ledger.sales ?? []).filter((sale) => !period || sale.date.startsWith(period));
+  let salesRevenue = 0;
+  let salesQuantity = 0;
+  let costOfSales = 0;
+  let allocatedIndirectCosts = 0;
+  salesForPeriod.forEach((sale) => {
+    const product = ledger.products.find((entry) => entry.id === sale.productId);
+    const quantity = Number.isFinite(sale.quantity) && sale.quantity > 0 ? sale.quantity : 0;
+    const unitPrice = Number.isFinite(sale.unitPrice) && sale.unitPrice >= 0 ? sale.unitPrice : 0;
+    if (!product || quantity <= 0) return;
+    const direct = sale.unitDirectCostSnapshot ?? calculateDirectCost(product, ledger.materials);
+    const fixedCost = sale.fixedCostSnapshot ?? ledger.costs.fixedCost;
+    const hiddenCost = sale.hiddenCostSnapshot ?? configuredHiddenCost;
+    salesRevenue += quantity * unitPrice;
+    salesQuantity += quantity;
+    costOfSales += direct * quantity;
+    const hiddenAllocation = (sale.hiddenCostSnapshot !== undefined || ledger.costs.hiddenCostBasis !== "perSale") ? hiddenCost * quantity : hiddenCost;
+    allocatedIndirectCosts += fixedCost * quantity + hiddenAllocation;
+  });
+  const ledgerFinancingCosts = summarizeLedgerRecords(ledger.records, period).financingCosts;
+  const snapshotFunding = salesForPeriod.reduce((sum, sale) => sum + (sale.fundingCostSnapshot ?? 0) * (Number.isFinite(sale.quantity) && sale.quantity > 0 ? sale.quantity : 0), 0);
+  const fundingPerSale = ledger.costs.fundingSource === "ledger" ? 0 : Math.max(ledger.costs.fundingCost, 0);
+  const financingCosts = salesForPeriod.some((sale) => sale.fundingCostSnapshot !== undefined) ? ledgerFinancingCosts + snapshotFunding : ledgerFinancingCosts + fundingPerSale * salesQuantity;
+  return {
+    salesRevenue: money(salesRevenue),
+    salesQuantity: money(salesQuantity),
+    salesCount: salesForPeriod.length,
+    costOfSales: money(costOfSales),
+    allocatedIndirectCosts: money(allocatedIndirectCosts),
+    grossProfit: money(salesRevenue - costOfSales),
+    operatingResult: money(salesRevenue - costOfSales - allocatedIndirectCosts - financingCosts),
+  };
+};
+
+const summarizeLedgerRecords = (records: LedgerRecord[], period?: string) => records.reduce((result, record) => {
+  if ((!period || record.date.startsWith(period)) && record.type === "expense" && (record.category === "借款利息" || record.category === "融资服务费")) result.financingCosts += Number.isFinite(record.amount) ? record.amount : 0;
+  return result;
+}, { financingCosts: 0 });
 
 export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
   const categoryTotals: Record<string, number> = {};
@@ -214,15 +321,24 @@ export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
   const normalizedIncome = money(income);
   const normalizedExpenses = money(expenses);
   const normalizedCashOutflow = money(cashOutflow);
+  const sales = summarizeSales(ledger);
+  const hasSales = sales.salesCount > 0;
+  const operatingResult = hasSales ? sales.operatingResult : money(normalizedIncome - normalizedExpenses);
   return {
     income: normalizedIncome,
     expenses: normalizedExpenses,
     cashOutflow: normalizedCashOutflow,
     cashBalance: money(normalizedIncome - normalizedCashOutflow),
-    operatingResult: money(normalizedIncome - normalizedExpenses),
+    operatingResult,
+    salesRevenue: sales.salesRevenue,
+    salesQuantity: sales.salesQuantity,
+    salesCount: sales.salesCount,
+    costOfSales: sales.costOfSales,
+    grossProfit: sales.grossProfit,
+    allocatedIndirectCosts: sales.allocatedIndirectCosts,
     financingCosts: money(financingCosts),
     principalRepayment: money(principalRepayment),
-    result: money(normalizedIncome - normalizedExpenses),
+    result: operatingResult,
     incomeCount: ledger.records.filter((record) => record.type === "income").length,
     expenseCount: ledger.records.filter((record) => record.type === "expense").length,
     categoryTotals,

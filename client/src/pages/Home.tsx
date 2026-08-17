@@ -30,7 +30,7 @@ import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
-import { calculateUnitCost, INDUSTRY_TEMPLATES, IndustryKey, LedgerProduct, loadLedger, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, summarizeLedger } from "@/lib/ledgerStore";
+import { calculateDirectCost, calculateUnitCost, INDUSTRY_TEMPLATES, IndustryKey, LedgerProduct, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateMaterialDraft } from "@/lib/validation";
 
 type Tab = "home" | "products" | "business" | "profile";
@@ -57,6 +57,7 @@ export default function Home() {
   const [activeProductId, setActiveProductId] = useState(1);
   const [showMaterialPanel, setShowMaterialPanel] = useState(false);
   const [showQuickRecord, setShowQuickRecord] = useState(false);
+  const [showSaleRecord, setShowSaleRecord] = useState(false);
   const [showBomEditor, setShowBomEditor] = useState(false);
   const [costEditor, setCostEditor] = useState<"hidden" | "funding" | null>(null);
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
@@ -152,7 +153,7 @@ export default function Home() {
             }}
           />
         )}
-        {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} />}
+        {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} />}
         {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
       </main>
 
@@ -168,7 +169,9 @@ export default function Home() {
       {showPricing && <PricingPanel costs={pricingCosts} onClose={() => setShowPricing(false)} onSave={saveSuggestedPrice} />}
       {showMaterialPanel && <MaterialSheet onClose={() => setShowMaterialPanel(false)} onSave={(material) => { setLedger((current) => { const next = { ...current, materials: [...current.materials, material] }; persistLedger(next); return next; }); setShowMaterialPanel(false); notify("已保存原材料，后续核算会使用新成本"); }} />}
       {showQuickRecord && <QuickRecordSheet categories={ledger.categories} onClose={() => setShowQuickRecord(false)} onSave={(record) => { setLedger((current) => { const next = { ...current, records: [{ id: makeId(), ...record, date: new Date().toISOString().slice(0, 10) }, ...current.records] }; persistLedger(next); return next; }); setShowQuickRecord(false); notify(record.type === "income" ? "已记入收入，经营账已更新" : "已记入支出，成本账已更新"); }} />}
-      {showBomEditor && <BomEditorSheet product={selectedProduct} materials={ledger.materials} onClose={() => setShowBomEditor(false)} onSave={(items) => { setLedger((current) => { const products = current.products.map((item) => item.id === selectedProduct.id ? recalculateProduct({ ...item, bom: items }, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost) : item); const next = { ...current, products }; persistLedger(next); return next; }); setShowBomEditor(false); notify("已保存配方，并生成新的成本口径"); }} />}
+      {showSaleRecord && <SalesRecordSheet products={ledger.products} onClose={() => setShowSaleRecord(false)} onSave={(sale) => { setLedger((current) => { const product = current.products.find((entry) => entry.id === sale.productId); const amount = sale.quantity * sale.unitPrice; const salePeriod = current.costs.allocationPeriod ?? sale.date.slice(0, 7); const hiddenSnapshot = current.costs.hiddenCostSource === "ledger" ? current.records.filter((record) => record.type === "expense" && record.date.startsWith(salePeriod) && record.category === (current.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0) : current.costs.hiddenCost; const enrichedSale: SalesRecord = { ...sale, costVersionId: product?.bomVersions?.at(-1)?.id ?? `current-${sale.date}`, unitDirectCostSnapshot: product ? calculateDirectCost(product, current.materials) : 0, fixedCostSnapshot: current.costs.fixedCost, hiddenCostSnapshot: hiddenSnapshot, fundingCostSnapshot: current.costs.fundingCost, fundingSourceSnapshot: current.costs.fundingSource ?? "manual", costPeriod: salePeriod }; const next = { ...current, sales: [enrichedSale, ...(current.sales ?? [])], records: [{ id: makeId(), type: "income" as const, amount, category: "销售收入", note: `${product?.name ?? "商品"}销售`, date: sale.date }, ...current.records] }; persistLedger(next); return next; }); setShowSaleRecord(false); notify("已记录销售，商品成本已结转"); }} />}
+
+      {showBomEditor && <BomEditorSheet product={selectedProduct} materials={ledger.materials} onClose={() => setShowBomEditor(false)} onSave={(items, settings) => { setLedger((current) => { const products = current.products.map((item) => { if (item.id !== selectedProduct.id) return item; const draftProduct = { ...item, bom: items, lossRate: settings.lossRate, batchYield: settings.batchYield, materialUnitCosts: settings.costSnapshot?.materialUnitCosts, packaging: settings.costSnapshot?.packaging ?? item.packaging, directLabor: settings.costSnapshot?.directLabor ?? item.directLabor }; const recalculated = recalculateProduct(draftProduct, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost); const nextVersion = makeBomVersionSnapshot(draftProduct, current.materials, settings, new Date().toISOString().slice(0, 10)); return { ...recalculated, bomVersions: [...(item.bomVersions ?? []), nextVersion] }; }); const next = { ...current, products }; persistLedger(next); return next; }); setShowBomEditor(false); notify("已保存配方，并生成新的成本版本"); }} />}
       {costEditor && <CostSettingsSheet type={costEditor} value={costEditor === "hidden" ? currentCosts.hiddenCost : currentCosts.fundingCost} onClose={() => setCostEditor(null)} onSave={(value) => { const nextCosts = { ...currentCosts, [costEditor === "hidden" ? "hiddenCost" : "fundingCost"]: value }; setCurrentCosts(nextCosts); setLedger((current) => { const next = { ...current, costs: nextCosts, products: costEditor === "hidden" ? current.products.map((product) => recalculateProduct(product, current.materials, nextCosts.hiddenCost, nextCosts.fixedCost)) : current.products }; persistLedger(next); return next; }); setCostEditor(null); notify(costEditor === "hidden" ? "已更新隐形成本，经营成本已重新计算" : "已更新资金成本，完整成本已重新计算"); }} />}
       {toast && <div className="app-toast"><CheckBadge />{toast}</div>}
     </div>
@@ -266,7 +269,7 @@ function ProductsView({ products, activeProductId, onSelect, onPricing, onBom, o
   );
 }
 
-function BusinessView({ summary, costs, onPricing, onRecord }: { summary: ReturnType<typeof summarizeLedger>; costs: CostInputs; onPricing: () => void; onRecord: () => void }) {
+function BusinessView({ summary, costs, onPricing, onRecord, onSale }: { summary: ReturnType<typeof summarizeLedger>; costs: CostInputs; onPricing: () => void; onRecord: () => void; onSale: () => void }) {
   const [activeLabel, setActiveLabel] = useState(summary.dailySeries.at(-1)?.label ?? "");
   const [showCashDetails, setShowCashDetails] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -290,6 +293,7 @@ function BusinessView({ summary, costs, onPricing, onRecord }: { summary: Return
       <section className={`cash-flow-card ${isRefreshing ? "is-refreshing" : ""}`}>
         <div className="cash-flow-copy"><span>现金流压力 <button className="micro-info" aria-label="查看现金流压力说明" aria-expanded={showCashDetails} onClick={() => setShowCashDetails((current) => !current)}><Info size={13} /></button></span><h2>{formatCurrency(summary.cashOutflow)}</h2>{summary.cashOutflow > 0 ? <p>本金还款 {formatCurrency(summary.principalRepayment)} · 利息与融资费 {formatCurrency(summary.financingCosts)}</p> : <p className="cash-flow-empty">先记一笔支出或还款，这里会显示现金流压力。</p>}{showCashDetails && <div className="cash-flow-detail" role="status">现金流压力包含本期全部实际流出；本金影响现金，不计入经营利润；利息和融资费用计入资金成本。</div>}</div><div className="cash-orbit" aria-hidden="true"><CircleDollarSign size={32} /><span>{isRefreshing ? "更新中" : "本期"}</span></div>
       </section>
+      {summary.salesCount > 0 && <section className="sales-result-card"><div><span className="eyebrow">销售结转</span><h2>{summary.salesCount} 笔销售 · {summary.salesQuantity} 份</h2></div><div className="sales-result-grid"><span>销售收入 <b>{formatCurrency(summary.salesRevenue)}</b></span><span>销货成本 <b>{formatCurrency(summary.costOfSales)}</b></span><span>商品毛利 <b>{formatCurrency(summary.grossProfit)}</b></span><span>经营结果 <b>{formatCurrency(summary.operatingResult)}</b></span></div></section>}
       <section className={`chart-card ${isRefreshing ? "is-refreshing" : ""}`} aria-label="经营趋势图表"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>收入与经营成本</h2></div><span className="legend"><i />收入 <i className="green" />成本</span></div>{isRefreshing && <div className="chart-loading" role="status" aria-live="polite"><span className="loading-sweep" />正在更新经营趋势</div>}{hasTrendData ? <><div className="bar-chart" role="list" aria-label="按日期查看收入和经营成本">{summary.dailySeries.map((item) => <button type="button" className={`bar-pair ${activeItem?.label === item.label ? "is-active" : ""}`} key={item.label} onMouseEnter={() => setActiveLabel(item.label)} onFocus={() => setActiveLabel(item.label)} onClick={() => setActiveLabel(item.label)} aria-label={`${item.label}，收入${formatCurrency(item.income)}，经营成本${formatCurrency(item.expenses)}`} role="listitem"><span className="income-bar" aria-hidden="true" style={{ height: `${Math.max((item.income / maxValue) * 100, item.income ? 8 : 0)}%` }} /><span className="expense-bar" aria-hidden="true" style={{ height: `${Math.max((item.expenses / maxValue) * 100, item.expenses ? 8 : 0)}%` }} /></button>)}</div><div className="chart-labels">{summary.dailySeries.map((item) => <button type="button" className={activeItem?.label === item.label ? "is-active" : ""} onClick={() => setActiveLabel(item.label)} key={item.label}>{item.label}</button>)}</div>{activeItem && <div className="chart-tooltip" role="status"><b>{activeItem.label}</b><span><i className="income-dot" />收入 {formatCurrency(activeItem.income)}</span><span><i className="expense-dot" />成本 {formatCurrency(activeItem.expenses)}</span></div>}</> : <div className="chart-empty" role="status"><BarChart3 size={22} /><strong>还没有经营趋势</strong><span>先记一笔收入或支出，趋势会出现在这里。</span><button type="button" onClick={onRecord}>去记一笔 <ArrowRight size={14} /></button></div>}</section>
       <section className="section-heading compact"><div><span className="eyebrow">成本构成</span><h2>不只看材料钱</h2></div><span className="section-stamp">本月</span></section>
       <section className="ledger-lines">
@@ -298,7 +302,7 @@ function BusinessView({ summary, costs, onPricing, onRecord }: { summary: Return
         <LineItem icon={<Banknote size={18} />} label="固定费用分摊" value={formatCurrency(costs.fixedCost)} width={`${Math.min(costs.fixedCost / Math.max(summary.expenses, 1) * 100, 100)}%`} color="navy" />
         <LineItem icon={<WalletCards size={18} />} label="资金成本" value={formatCurrency(summary.financingCosts)} width={`${Math.min(summary.financingCosts / Math.max(summary.expenses, 1) * 100, 100)}%`} color="amber" />
       </section>
-      <button className="secondary-action" onClick={onPricing}><Sparkles size={18} /> 看看商品是否需要调价</button>
+      <div className="business-actions"><button className="secondary-action" onClick={onSale}><ReceiptText size={18} /> 记销售并结转成本</button><button className="secondary-action" onClick={onPricing}><Sparkles size={18} /> 看看商品是否需要调价</button></div>
     </div>
   );
 }
@@ -334,6 +338,24 @@ export function MaterialSheet({ onClose, onSave }: { onClose: () => void; onSave
     onSave({ id: makeId(), name: name.trim(), unit: usageUnit, unitCost, source: `采购${purchaseQuantity}${purchaseUnit}，每${purchaseUnit}折算${factor}${usageUnit}`, purchaseUnit, conversionFactor: factor });
   };
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">新增原材料</span><h2>先记一笔进货价</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>材料名称</span><div className="money-input"><input value={name} onChange={(event) => { setName(event.target.value); setValidationError(null); }} /><b>名称</b></div></label><div className="two-fields"><label className="field-block"><span>采购金额</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => { setAmount(event.target.value); setValidationError(null); }} /><b>元</b></div></label><label className="field-block"><span>采购数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setValidationError(null); }} /><b>{purchaseUnit}</b></div></label></div><div className="two-fields"><label className="field-block"><span>采购单位</span><select value={purchaseUnit} onChange={(event) => setPurchaseUnit(event.target.value)}><option value="盒">盒</option><option value="箱">箱</option><option value="袋">袋</option><option value="瓶">瓶</option></select></label><label className="field-block"><span>使用单位</span><select value={usageUnit} onChange={(event) => setUsageUnit(event.target.value)}><option value="个">个</option><option value="克">克</option><option value="毫升">毫升</option><option value="套">套</option></select></label></div><label className="field-block"><span>每{purchaseUnit}折算多少{usageUnit}</span><div className="money-input"><input type="number" min="0.0001" step="0.0001" value={conversionFactor} onChange={(event) => { setConversionFactor(event.target.value); setValidationError(null); }} /><b>{usageUnit}</b></div></label><div className="material-preview"><span>当前估算使用单位成本</span><strong>{formatCurrency(unitCost)} / {usageUnit}</strong><p>公式：采购金额 ÷（采购数量 × 换算系数）；商品配方会按使用单位核算。</p></div>{validationError && <p className="form-error" role="alert">{validationError}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> 保存原材料</button></section></div>;
+}
+
+function SalesRecordSheet({ products, onClose, onSave }: { products: LedgerProduct[]; onClose: () => void; onSave: (sale: SalesRecord) => void }) {
+  const [productId, setProductId] = useState(products[0]?.id ?? 0);
+  const selected = products.find((product) => product.id === productId) ?? products[0];
+  const [quantity, setQuantity] = useState("1");
+  const [unitPrice, setUnitPrice] = useState(String(selected?.price ?? 0));
+  const [error, setError] = useState<string | null>(null);
+  const save = () => {
+    const parsedQuantity = Number(quantity);
+    const parsedPrice = Number(unitPrice);
+    if (!selected || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0 || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      setError("销售数量必须大于0，成交价不能为负数。");
+      return;
+    }
+    onSave({ id: makeId(), productId: selected.id, quantity: parsedQuantity, unitPrice: parsedPrice, date: new Date().toISOString().slice(0, 10), note: "" });
+  };
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">销售结转</span><h2>记一笔商品销售</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>销售商品</span><select value={productId} onChange={(event) => { const nextId = Number(event.target.value); setProductId(nextId); const next = products.find((product) => product.id === nextId); setUnitPrice(String(next?.price ?? 0)); setError(null); }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label><div className="two-fields"><label className="field-block"><span>销售数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(null); }} /><b>份</b></div></label><label className="field-block"><span>成交单价</span><div className="money-input"><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => { setUnitPrice(event.target.value); setError(null); }} /><b>元</b></div></label></div><div className="material-preview"><span>本次销售收入</span><strong>{formatCurrency((Number(quantity) || 0) * (Number(unitPrice) || 0))}</strong><p>保存后会同时写入销售记录、收入流水，并按当前商品成本结转销货成本。</p></div>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> 保存销售并结转</button></section></div>;
 }
 
 function CostSettingsSheet({ type, value, onClose, onSave }: { type: "hidden" | "funding"; value: number; onClose: () => void; onSave: (value: number) => void }) {
