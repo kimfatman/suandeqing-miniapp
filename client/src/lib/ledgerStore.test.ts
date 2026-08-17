@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, calculateDirectCost, calculateUnitCost, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, calculateDirectCost, calculateUnitCost, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 
 describe("summarizeLedger", () => {
   it("aggregates income, expenses, result, counts and categories from ledger records", () => {
@@ -110,10 +110,15 @@ describe("industry templates", () => {
     });
   });
 
-  it("uses retail samples only during first onboarding", () => {
+  it("keeps sample data in preview and starts formal onboarding empty", () => {
+    const preview = getIndustrySampleData("retail");
+    expect(preview.materials.map((material) => material.name)).toContain("瓶装饮用水");
+    expect(preview.products.map((product) => product.name)).toContain("矿泉水");
     const firstLedger = initializeIndustryLedger(seedLedger(), "社区便利店", "retail");
-    expect(firstLedger.materials.map((material) => material.name)).toContain("瓶装饮用水");
-    expect(firstLedger.products.map((product) => product.name)).toContain("矿泉水");
+    expect(firstLedger.materials).toEqual([]);
+    expect(firstLedger.products).toEqual([]);
+    expect(firstLedger.records).toEqual([]);
+    expect(firstLedger.sales).toEqual([]);
 
     const base = seedLedger();
     const existing = { ...base, profile: { ...base.profile, onboarded: true }, materials: [{ id: "custom-mat", name: "我的材料", unit: "个", unitCost: 2, source: "我的供应商" }], products: [{ ...base.products[0], name: "我的商品" }], records: [{ id: "custom-record", type: "expense" as const, amount: 88, category: "我的分类", note: "我的流水", date: "2026-08-17" }] };
@@ -128,6 +133,31 @@ describe("industry templates", () => {
     expect(next.profile).toMatchObject({ storeName: "社区便利店", industry: "retail", onboarded: true });
     expect(next.categories[0]).toBe("货品采购");
     expect(next.costs.hiddenCostCategory).toBe("物流配送");
+  });
+
+  it("keeps custom category status while switching industries and excludes disabled categories from new entry choices", () => {
+    const ledger = seedLedger();
+    ledger.categories = [...ledger.categories, "设备折旧"];
+    ledger.categoryStatus = { ...ledger.categoryStatus, "设备折旧": false };
+    const next = applyIndustryTemplate(ledger, "retail");
+    expect(next.categories).toContain("设备折旧");
+    expect(next.categoryStatus?.["设备折旧"]).toBe(false);
+    expect(getActiveCategories(next)).not.toContain("设备折旧");
+    next.records = [{ id: "history", type: "expense", amount: 50, category: "设备折旧", note: "历史折旧", date: "2026-08-17" }];
+    expect(summarizeLedger(next).categoryTotals["设备折旧"]).toBe(50);
+  });
+
+  it("renames custom categories without losing historical linkage", () => {
+    const ledger = seedLedger();
+    ledger.categories = [...ledger.categories, "设备折旧"];
+    ledger.categoryStatus = { ...ledger.categoryStatus, "设备折旧": false };
+    ledger.costs.hiddenCostCategory = "设备折旧";
+    ledger.records = [{ id: "history", type: "expense", amount: 50, category: "设备折旧", note: "历史折旧", date: "2026-08-17" }];
+    const renamed = renameLedgerCategory(ledger, "设备折旧", "设备折旧与维护");
+    expect(renamed.categories).toContain("设备折旧与维护");
+    expect(renamed.categoryStatus?.["设备折旧与维护"]).toBe(false);
+    expect(renamed.records[0].category).toBe("设备折旧与维护");
+    expect(renamed.costs.hiddenCostCategory).toBe("设备折旧与维护");
   });
 
   it("switches categories without deleting existing business records", () => {

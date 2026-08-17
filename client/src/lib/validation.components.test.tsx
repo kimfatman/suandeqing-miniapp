@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => cleanup());
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
-import { MaterialSheet, ProductNameSheet, ProfileView } from "@/pages/Home";
+import { CategorySheet, MaterialSheet, ProductNameSheet, ProfileView } from "@/pages/Home";
 import { makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -23,9 +23,27 @@ describe("OnboardingFlow industry initialization", () => {
 describe("ProfileView industry template interactions", () => {
   it("selects a different industry template", () => {
     const onIndustryChange = vi.fn();
-    render(<ProfileView storeName="测试小店" industry="catering" onIndustryChange={onIndustryChange} onHiddenCost={vi.fn()} onDebt={vi.fn()} />);
+    const onToggleCategory = vi.fn();
+    render(<ProfileView storeName="测试小店" industry="catering" categories={["食材采购"]} categoryStatus={{ "食材采购": true }} onIndustryChange={onIndustryChange} onAddCategory={vi.fn()} onEditCategory={vi.fn()} onToggleCategory={onToggleCategory} onHiddenCost={vi.fn()} onDebt={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /社区零售/ }));
     expect(onIndustryChange).toHaveBeenCalledWith("retail");
+    fireEvent.click(screen.getByRole("button", { name: /停用食材采购/ }));
+    expect(onToggleCategory).toHaveBeenCalledWith("食材采购");
+  });
+});
+
+describe("CategorySheet interactions", () => {
+  it("rejects an empty or duplicate category and accepts a custom cost item", () => {
+    const onSave = vi.fn();
+    render(<CategorySheet initialName={null} existing={["食材采购"]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.click(screen.getByRole("button", { name: /添加成本项目/ }));
+    expect(screen.getByRole("alert").textContent).toContain("请填写成本项目名称");
+    fireEvent.change(screen.getByPlaceholderText("例如：平台佣金、工具折旧"), { target: { value: "食材采购" } });
+    fireEvent.click(screen.getByRole("button", { name: /添加成本项目/ }));
+    expect(screen.getByRole("alert").textContent).toContain("这个成本项目已经存在");
+    fireEvent.change(screen.getByPlaceholderText("例如：平台佣金、工具折旧"), { target: { value: "设备折旧" } });
+    fireEvent.click(screen.getByRole("button", { name: /添加成本项目/ }));
+    expect(onSave).toHaveBeenCalledWith("设备折旧");
   });
 });
 
@@ -75,6 +93,15 @@ describe("BomEditorSheet interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: /恢复/ }));
     fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
     expect(onSave).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ costSnapshot: expect.objectContaining({ directCost: version.directCost, materialUnitCosts: version.materialUnitCosts, packaging: version.packaging, directLabor: version.directLabor }) }));
+  });
+
+  it("saves the selected active custom cost category with the product cost", () => {
+    const ledger = seedLedger();
+    const onSave = vi.fn();
+    render(<BomEditorSheet product={ledger.products[0]} materials={ledger.materials} categories={["食材采购", "设备折旧"]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "设备折旧" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ costCategory: "设备折旧" }));
   });
 
   it("shows an error and does not call onSave for zero BOM quantity", () => {

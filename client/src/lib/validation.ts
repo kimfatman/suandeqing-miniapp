@@ -7,6 +7,14 @@ export type MaterialDraft = {
   conversionFactor: number;
 };
 
+export const validateCategoryName = (name: string, existing: string[] = []) => {
+  const trimmed = name.trim();
+  if (!trimmed) return "请填写成本项目名称。";
+  if (trimmed.length > 20) return "成本项目名称不能超过20个字。";
+  if (existing.includes(trimmed)) return "这个成本项目已经存在。";
+  return null;
+};
+
 export const validateProductName = (name: string) => {
   if (!name.trim()) return "请填写商品名称。";
   if (name.trim().length > 40) return "商品名称不能超过40个字。";
