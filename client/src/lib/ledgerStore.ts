@@ -141,6 +141,60 @@ export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
   { key: "handmade", label: "手作生产", shortLabel: "手作", description: "材料、工时、工具与试做", hiddenCostCategory: "手工工时", hiddenCostDescription: "手工工时、设备折旧、试做报废和包材", fundingCostDescription: "材料备货借款、设备分期利息和融资费用", categories: ["材料采购", "包材耗材", "手工工时", "设备工具", "试做报废"] },
 ];
 
+export type IndustrySampleData = { materials: Material[]; products: LedgerProduct[] };
+
+export const INDUSTRY_SAMPLE_DATA: Record<IndustryKey, IndustrySampleData> = {
+  catering: {
+    materials: [
+      { id: "catering-milk", name: "鲜牛奶", unit: "毫升", unitCost: 0.009, source: "社区批发" },
+      { id: "catering-tea", name: "茉莉茶底", unit: "克", unitCost: 0.036, source: "茶叶供应商" },
+      { id: "catering-cup", name: "500ml杯和杯盖", unit: "套", unitCost: 0.48, source: "包装耗材" },
+    ],
+    products: [
+      { id: 1, name: "招牌奶茶", category: "饮品", price: 12, direct: 0, operating: 0, change: "新建示例", packaging: 0.48, directLabor: 0.6, bom: [{ id: "catering-bom-1", materialId: "catering-milk", quantity: 280 }, { id: "catering-bom-2", materialId: "catering-tea", quantity: 18 }] },
+      { id: 2, name: "芝士热狗", category: "小食", price: 10, direct: 0, operating: 0, change: "新建示例", packaging: 0.32, directLabor: 0.45, bom: [] },
+    ],
+  },
+  retail: {
+    materials: [
+      { id: "retail-water", name: "瓶装饮用水", unit: "瓶", unitCost: 1.2, source: "批发市场" },
+      { id: "retail-snack", name: "袋装零食", unit: "袋", unitCost: 2.8, source: "食品批发商" },
+      { id: "retail-bag", name: "购物袋", unit: "个", unitCost: 0.12, source: "包装耗材" },
+    ],
+    products: [
+      { id: 1, name: "矿泉水", category: "饮料", price: 2.5, direct: 0, operating: 0, change: "新建示例", packaging: 0.12, directLabor: 0.05, bom: [{ id: "retail-bom-1", materialId: "retail-water", quantity: 1 }] },
+      { id: 2, name: "休闲零食组合", category: "零食", price: 8.9, direct: 0, operating: 0, change: "新建示例", packaging: 0.12, directLabor: 0.1, bom: [{ id: "retail-bom-2", materialId: "retail-snack", quantity: 1 }] },
+    ],
+  },
+  stall: {
+    materials: [
+      { id: "stall-tshirt", name: "基础T恤", unit: "件", unitCost: 18, source: "服装批发城" },
+      { id: "stall-sock", name: "棉袜", unit: "双", unitCost: 3.5, source: "日用百货批发" },
+      { id: "stall-bag", name: "打包袋", unit: "个", unitCost: 0.18, source: "包装耗材" },
+    ],
+    products: [
+      { id: 1, name: "基础T恤", category: "服装", price: 39, direct: 0, operating: 0, change: "新建示例", packaging: 0.18, directLabor: 0.35, bom: [{ id: "stall-bom-1", materialId: "stall-tshirt", quantity: 1 }] },
+      { id: 2, name: "棉袜两双装", category: "日用百货", price: 12, direct: 0, operating: 0, change: "新建示例", packaging: 0.18, directLabor: 0.2, bom: [{ id: "stall-bom-2", materialId: "stall-sock", quantity: 2 }] },
+    ],
+  },
+  handmade: {
+    materials: [
+      { id: "handmade-clay", name: "手作黏土", unit: "克", unitCost: 0.032, source: "手作材料店" },
+      { id: "handmade-beads", name: "装饰珠", unit: "颗", unitCost: 0.18, source: "饰品材料商" },
+      { id: "handmade-box", name: "礼盒包装", unit: "个", unitCost: 1.8, source: "包装耗材" },
+    ],
+    products: [
+      { id: 1, name: "黏土小摆件", category: "家居手作", price: 39, direct: 0, operating: 0, change: "新建示例", packaging: 1.8, directLabor: 8, bom: [{ id: "handmade-bom-1", materialId: "handmade-clay", quantity: 80 }, { id: "handmade-bom-2", materialId: "handmade-beads", quantity: 4 }] },
+      { id: 2, name: "手作挂饰", category: "饰品", price: 29, direct: 0, operating: 0, change: "新建示例", packaging: 1.2, directLabor: 5, bom: [{ id: "handmade-bom-3", materialId: "handmade-beads", quantity: 6 }] },
+    ],
+  },
+};
+
+export const getIndustrySampleData = (industry: IndustryKey): IndustrySampleData => {
+  const source = INDUSTRY_SAMPLE_DATA[industry] ?? INDUSTRY_SAMPLE_DATA.catering;
+  return { materials: source.materials.map((material) => ({ ...material })), products: source.products.map((product) => ({ ...product, bom: product.bom.map((item) => ({ ...item })) })) };
+};
+
 const STORAGE_KEY = "suandeqing-ledger-v1";
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const money = (value: number) => Math.round(value * 100) / 100;
@@ -204,7 +258,17 @@ export const normalizeLedger = (ledger: LedgerData): LedgerData => ({
     : product),
 });
 
-export const initializeIndustryLedger = (ledger: LedgerData, storeName: string, industry: IndustryKey): LedgerData => applyIndustryTemplate({ ...ledger, profile: { ...ledger.profile, storeName, onboarded: true } }, industry);
+export const initializeIndustryLedger = (ledger: LedgerData, storeName: string, industry: IndustryKey): LedgerData => {
+  const next = applyIndustryTemplate({ ...ledger, profile: { ...ledger.profile, storeName, onboarded: true } }, industry);
+  if (ledger.profile.onboarded) return next;
+  const sample = getIndustrySampleData(industry);
+  return {
+    ...next,
+    materials: sample.materials,
+    products: sample.products.map((product) => recalculateProduct(product, sample.materials, next.costs.hiddenCost, next.costs.fixedCost)),
+    sales: [],
+  };
+};
 
 export const applyIndustryTemplate = (ledger: LedgerData, industry: IndustryKey): LedgerData => {
   const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];

@@ -43,9 +43,19 @@ describe("ProductNameSheet interactions", () => {
 });
 
 describe("MaterialSheet interactions", () => {
+  it("edits an existing material while preserving its id", () => {
+    const onSave = vi.fn();
+    const material = seedLedger().materials[0];
+    render(<MaterialSheet editingMaterial={material} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByDisplayValue(material.name), { target: { value: "改名后的材料" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存材料修改/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ id: material.id, name: "改名后的材料" }));
+    expect(onSave.mock.calls[0][0].unitCost).toBeGreaterThan(0);
+  });
+
   it("shows an error and does not call onSave for zero purchase quantity", () => {
     const onSave = vi.fn();
-    render(<MaterialSheet onClose={vi.fn()} onSave={onSave} />);
+    render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
     const quantityInput = screen.getAllByRole("spinbutton")[1];
     fireEvent.change(quantityInput, { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: /保存原材料/ }));

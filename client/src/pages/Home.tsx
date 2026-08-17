@@ -56,6 +56,7 @@ export default function Home() {
   const [ledger, setLedger] = useState(() => normalizeLedger(loadLedger()));
   const [activeProductId, setActiveProductId] = useState(1);
   const [showMaterialPanel, setShowMaterialPanel] = useState(false);
+  const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
   const [showQuickRecord, setShowQuickRecord] = useState(false);
   const [showSaleRecord, setShowSaleRecord] = useState(false);
   const [showBomEditor, setShowBomEditor] = useState(false);
@@ -129,11 +130,13 @@ export default function Home() {
         {activeTab === "home" && (
           <HomeView
             product={selectedProduct}
+            materials={ledger.materials}
             summary={summary}
             operatingCost={operatingCost}
             fullCost={fullCost}
             onPricing={() => setShowPricing(true)}
-            onAddMaterial={() => setShowMaterialPanel(true)}
+            onAddMaterial={() => { setEditingMaterialId(null); setShowMaterialPanel(true); }}
+            onEditMaterial={(material) => { setEditingMaterialId(material.id); setShowMaterialPanel(true); }}
             onRecord={() => setShowQuickRecord(true)}
             onBusiness={() => navigate("business")}
           />
@@ -170,7 +173,7 @@ export default function Home() {
         setShowProductNameSheet(false);
         notify(`已新建“${name}”，请继续补充成本和售价`);
       }} />}
-      {showMaterialPanel && <MaterialSheet onClose={() => setShowMaterialPanel(false)} onSave={(material) => { setLedger((current) => { const next = { ...current, materials: [...current.materials, material] }; persistLedger(next); return next; }); setShowMaterialPanel(false); notify("已保存原材料，后续核算会使用新成本"); }} />}
+      {showMaterialPanel && <MaterialSheet suggestion={ledger.materials[0]} editingMaterial={editingMaterialId ? ledger.materials.find((material) => material.id === editingMaterialId) : undefined} onClose={() => { setShowMaterialPanel(false); setEditingMaterialId(null); }} onSave={(material) => { setLedger((current) => { const materials = editingMaterialId ? current.materials.map((item) => item.id === editingMaterialId ? material : item) : [...current.materials, material]; const next = { ...current, materials }; persistLedger(next); return next; }); setShowMaterialPanel(false); setEditingMaterialId(null); notify(editingMaterialId ? "已更新原材料，商品成本会重新核算" : "已保存原材料，后续核算会使用新成本"); }} />}
       {showQuickRecord && <QuickRecordSheet categories={ledger.categories} onClose={() => setShowQuickRecord(false)} onSave={(record) => { setLedger((current) => { const next = { ...current, records: [{ id: makeId(), ...record, date: new Date().toISOString().slice(0, 10) }, ...current.records] }; persistLedger(next); return next; }); setShowQuickRecord(false); notify(record.type === "income" ? "已记入收入，经营账已更新" : "已记入支出，成本账已更新"); }} />}
       {showSaleRecord && <SalesRecordSheet products={ledger.products} onClose={() => setShowSaleRecord(false)} onSave={(sale) => { setLedger((current) => { const product = current.products.find((entry) => entry.id === sale.productId); const amount = sale.quantity * sale.unitPrice; const salePeriod = current.costs.allocationPeriod ?? sale.date.slice(0, 7); const hiddenSnapshot = current.costs.hiddenCostSource === "ledger" ? current.records.filter((record) => record.type === "expense" && record.date.startsWith(salePeriod) && record.category === (current.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0) : current.costs.hiddenCost; const enrichedSale: SalesRecord = { ...sale, costVersionId: product?.bomVersions?.at(-1)?.id ?? `current-${sale.date}`, unitDirectCostSnapshot: product ? calculateDirectCost(product, current.materials) : 0, fixedCostSnapshot: current.costs.fixedCost, hiddenCostSnapshot: hiddenSnapshot, fundingCostSnapshot: current.costs.fundingCost, fundingSourceSnapshot: current.costs.fundingSource ?? "manual", costPeriod: salePeriod }; const next = { ...current, sales: [enrichedSale, ...(current.sales ?? [])], records: [{ id: makeId(), type: "income" as const, amount, category: "销售收入", note: `${product?.name ?? "商品"}销售`, date: sale.date }, ...current.records] }; persistLedger(next); return next; }); setShowSaleRecord(false); notify("已记录销售，商品成本已结转"); }} />}
 
@@ -183,20 +186,24 @@ export default function Home() {
 
 function HomeView({
   product,
+  materials,
   summary,
   operatingCost,
   fullCost,
   onPricing,
   onAddMaterial,
+  onEditMaterial,
   onRecord,
   onBusiness,
 }: {
   product: LedgerProduct;
+  materials: Material[];
   summary: ReturnType<typeof summarizeLedger>;
   operatingCost: number;
   fullCost: number;
   onPricing: () => void;
   onAddMaterial: () => void;
+  onEditMaterial: (material: Material) => void;
   onRecord: () => void;
   onBusiness: () => void;
 }) {
@@ -236,6 +243,10 @@ function HomeView({
       <section className="section-heading compact"><div><span className="eyebrow">商品成本</span><h2>{product.name}成本构成</h2></div><span className="section-stamp">三层口径</span></section>
       <section className="cost-composition-card" aria-label="商品成本构成图">
         <CostCompositionChart product={product} operatingCost={operatingCost} fullCost={fullCost} />
+      </section>
+      <section className="sample-materials-card" aria-label="行业示例材料">
+        <div className="section-heading compact"><div><span className="eyebrow">行业示例材料</span><h2>先用这些材料开始核算</h2></div><button onClick={onAddMaterial}>新增 <Plus size={14} /></button></div>
+        <div className="sample-material-list">{materials.slice(0, 4).map((material) => <button key={material.id} className="sample-material-row" onClick={() => onEditMaterial(material)}><span><strong>{material.name}</strong><small>{material.source} · {material.unit}</small></span><b>{formatCurrency(material.unitCost)} / {material.unit}</b><ChevronRight size={15} /></button>)}</div>
       </section>
     </div>
   );
@@ -358,13 +369,13 @@ export function ProductNameSheet({ onClose, onSave }: { onClose: () => void; onS
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet product-name-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">新增商品</span><h2>先给商品起个名字</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭">×</button></header><label className="field-block"><span>商品名称</span><div className="money-input"><input autoFocus value={name} maxLength={40} placeholder="例如：招牌冰咖啡" onChange={(event) => { setName(event.target.value); setValidationError(null); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /><b>{name.length}/40</b></div></label>{validationError && <p className="field-error" role="alert">{validationError}</p>}<p className="sheet-hint">名称保存后还可以继续补充配方、售价和成本。</p><button className="primary-action sheet-save-button" onClick={save}>创建商品 <ArrowRight size={16} /></button></section></div>;
 }
 
-export function MaterialSheet({ onClose, onSave }: { onClose: () => void; onSave: (material: Material) => void }) {
-  const [name, setName] = useState("鲜牛奶");
-  const [amount, setAmount] = useState("36");
+export function MaterialSheet({ suggestion, editingMaterial, onClose, onSave }: { suggestion?: Material; editingMaterial?: Material; onClose: () => void; onSave: (material: Material) => void }) {
+  const [name, setName] = useState(editingMaterial?.name ?? suggestion?.name ?? "示例材料");
+  const [amount, setAmount] = useState(String(Math.max((editingMaterial?.unitCost ?? 1) * 24, 0.01)));
   const [quantity, setQuantity] = useState("24");
-  const [purchaseUnit, setPurchaseUnit] = useState("盒");
-  const [usageUnit, setUsageUnit] = useState("个");
-  const [conversionFactor, setConversionFactor] = useState("1");
+  const [purchaseUnit, setPurchaseUnit] = useState(editingMaterial?.purchaseUnit ?? "盒");
+  const [usageUnit, setUsageUnit] = useState(editingMaterial?.unit ?? "个");
+  const [conversionFactor, setConversionFactor] = useState(String(editingMaterial?.conversionFactor ?? 1));
   const [validationError, setValidationError] = useState<string | null>(null);
   const purchaseAmount = Number(amount);
   const purchaseQuantity = Number(quantity);
@@ -374,9 +385,9 @@ export function MaterialSheet({ onClose, onSave }: { onClose: () => void; onSave
   const save = () => {
     const error = validateMaterialDraft({ name, amount: purchaseAmount, quantity: purchaseQuantity, conversionFactor: factor });
     if (error) { setValidationError(error); return; }
-    onSave({ id: makeId(), name: name.trim(), unit: usageUnit, unitCost, source: `采购${purchaseQuantity}${purchaseUnit}，每${purchaseUnit}折算${factor}${usageUnit}`, purchaseUnit, conversionFactor: factor });
+    onSave({ id: editingMaterial?.id ?? makeId(), name: name.trim(), unit: usageUnit, unitCost, source: `采购${purchaseQuantity}${purchaseUnit}，每${purchaseUnit}折算${factor}${usageUnit}`, purchaseUnit, conversionFactor: factor });
   };
-  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">新增原材料</span><h2>先记一笔进货价</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>材料名称</span><div className="money-input"><input value={name} onChange={(event) => { setName(event.target.value); setValidationError(null); }} /><b>名称</b></div></label><div className="two-fields"><label className="field-block"><span>采购金额</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => { setAmount(event.target.value); setValidationError(null); }} /><b>元</b></div></label><label className="field-block"><span>采购数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setValidationError(null); }} /><b>{purchaseUnit}</b></div></label></div><div className="two-fields"><label className="field-block"><span>采购单位</span><select value={purchaseUnit} onChange={(event) => setPurchaseUnit(event.target.value)}><option value="盒">盒</option><option value="箱">箱</option><option value="袋">袋</option><option value="瓶">瓶</option></select></label><label className="field-block"><span>使用单位</span><select value={usageUnit} onChange={(event) => setUsageUnit(event.target.value)}><option value="个">个</option><option value="克">克</option><option value="毫升">毫升</option><option value="套">套</option></select></label></div><label className="field-block"><span>每{purchaseUnit}折算多少{usageUnit}</span><div className="money-input"><input type="number" min="0.0001" step="0.0001" value={conversionFactor} onChange={(event) => { setConversionFactor(event.target.value); setValidationError(null); }} /><b>{usageUnit}</b></div></label><div className="material-preview"><span>当前估算使用单位成本</span><strong>{formatCurrency(unitCost)} / {usageUnit}</strong><p>公式：采购金额 ÷（采购数量 × 换算系数）；商品配方会按使用单位核算。</p></div>{validationError && <p className="form-error" role="alert">{validationError}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> 保存原材料</button></section></div>;
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">{editingMaterial ? "编辑原材料" : "新增原材料"}</span><h2>{editingMaterial ? "把这项成本改准确" : "先记一笔进货价"}</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>材料名称</span><div className="money-input"><input value={name} placeholder={suggestion ? `例如：${suggestion.name}` : "例如：瓶装饮用水"} onChange={(event) => { setName(event.target.value); setValidationError(null); }} /><b>名称</b></div></label><div className="two-fields"><label className="field-block"><span>采购金额</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => { setAmount(event.target.value); setValidationError(null); }} /><b>元</b></div></label><label className="field-block"><span>采购数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setValidationError(null); }} /><b>{purchaseUnit}</b></div></label></div><div className="two-fields"><label className="field-block"><span>采购单位</span><select value={purchaseUnit} onChange={(event) => setPurchaseUnit(event.target.value)}><option value="盒">盒</option><option value="箱">箱</option><option value="袋">袋</option><option value="瓶">瓶</option></select></label><label className="field-block"><span>使用单位</span><select value={usageUnit} onChange={(event) => setUsageUnit(event.target.value)}><option value="个">个</option><option value="瓶">瓶</option><option value="克">克</option><option value="毫升">毫升</option><option value="套">套</option></select></label></div><label className="field-block"><span>每{purchaseUnit}折算多少{usageUnit}</span><div className="money-input"><input type="number" min="0.0001" step="0.0001" value={conversionFactor} onChange={(event) => { setConversionFactor(event.target.value); setValidationError(null); }} /><b>{usageUnit}</b></div></label><div className="material-preview"><span>当前估算使用单位成本</span><strong>{formatCurrency(unitCost)} / {usageUnit}</strong><p>公式：采购金额 ÷（采购数量 × 换算系数）；商品配方会按使用单位核算。</p></div>{validationError && <p className="form-error" role="alert">{validationError}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> {editingMaterial ? "保存材料修改" : "保存原材料"}</button></section></div>;
 }
 
 function SalesRecordSheet({ products, onClose, onSave }: { products: LedgerProduct[]; onClose: () => void; onSave: (sale: SalesRecord) => void }) {

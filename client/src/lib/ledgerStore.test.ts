@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, calculateDirectCost, calculateUnitCost, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, calculateDirectCost, calculateUnitCost, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 
 describe("summarizeLedger", () => {
   it("aggregates income, expenses, result, counts and categories from ledger records", () => {
@@ -101,6 +101,28 @@ describe("summarizeSales", () => {
 });
 
 describe("industry templates", () => {
+  it("provides products and materials for every industry", () => {
+    (["catering", "retail", "stall", "handmade"] as const).forEach((industry) => {
+      const sample = getIndustrySampleData(industry);
+      expect(sample.materials.length).toBeGreaterThanOrEqual(3);
+      expect(sample.products.length).toBeGreaterThanOrEqual(2);
+      expect(sample.products.every((product) => product.name && product.bom.every((item) => sample.materials.some((material) => material.id === item.materialId)))).toBe(true);
+    });
+  });
+
+  it("uses retail samples only during first onboarding", () => {
+    const firstLedger = initializeIndustryLedger(seedLedger(), "社区便利店", "retail");
+    expect(firstLedger.materials.map((material) => material.name)).toContain("瓶装饮用水");
+    expect(firstLedger.products.map((product) => product.name)).toContain("矿泉水");
+
+    const base = seedLedger();
+    const existing = { ...base, profile: { ...base.profile, onboarded: true }, materials: [{ id: "custom-mat", name: "我的材料", unit: "个", unitCost: 2, source: "我的供应商" }], products: [{ ...base.products[0], name: "我的商品" }], records: [{ id: "custom-record", type: "expense" as const, amount: 88, category: "我的分类", note: "我的流水", date: "2026-08-17" }] };
+    const switched = initializeIndustryLedger(existing, "我的小店", "retail");
+    expect(switched.materials[0].name).toBe("我的材料");
+    expect(switched.products[0].name).toBe("我的商品");
+    expect(switched.records).toEqual(existing.records);
+  });
+
   it("initializes a retail ledger after onboarding", () => {
     const next = initializeIndustryLedger(seedLedger(), "社区便利店", "retail");
     expect(next.profile).toMatchObject({ storeName: "社区便利店", industry: "retail", onboarded: true });
