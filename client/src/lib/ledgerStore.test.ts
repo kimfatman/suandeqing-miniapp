@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, calculateBomVersionDirectCost, calculateDirectCost, calculateUnitCost, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateUnitCost, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -217,5 +217,35 @@ describe("makeBomVersionSnapshot", () => {
     ledger.materials[0].unitCost = 9;
     const restoredProduct = { ...ledger.products[0], bom: version.items, lossRate: version.lossRate, batchYield: version.batchYield, materialUnitCosts: version.materialUnitCosts, packaging: version.packaging, directLabor: version.directLabor };
     expect(calculateDirectCost(restoredProduct, ledger.materials)).toBe(version.directCost);
+  });
+
+  it("keeps quick primary and secondary costs as a single traceable direct-cost version", () => {
+    const ledger = seedLedger();
+    const product = { ...ledger.products[0], packaging: 0, directLabor: 0, bom: [
+      { id: "quick-primary", materialId: "", quantity: 1, customName: "进货价", customUnit: "件", customUnitCost: 6.5, presetId: "quick-primary" as const },
+      { id: "quick-secondary", materialId: "", quantity: 1, customName: "单件配送费", customUnit: "件", customUnitCost: 0.8, presetId: "quick-secondary" as const },
+    ] };
+    const version = makeBomVersionSnapshot(product, ledger.materials, { lossRate: 0, batchYield: 1 }, "2026-08-18");
+    expect(calculateDirectCost(product, ledger.materials)).toBe(7.3);
+    expect(version.directCost).toBe(7.3);
+    expect(calculateBomVersionDirectCost(version)).toBe(7.3);
+    expect(version.items.map((item) => item.presetId)).toEqual(["quick-primary", "quick-secondary"]);
+  });
+
+  it("backs up advanced details before a quick-cost update without changing prior sales snapshots", () => {
+    const ledger = seedLedger();
+    const advancedProduct = { ...ledger.products[0], bomVersions: [] };
+    ledger.products = [advancedProduct];
+    ledger.sales = [{ id: "sale-before-quick", productId: advancedProduct.id, quantity: 2, unitPrice: 12, date: "2026-08-17", note: "", costVersionId: "advanced-sale-version", unitDirectCostSnapshot: 2.99, fixedCostSnapshot: 0, hiddenCostSnapshot: 0, fundingCostSnapshot: 0 }];
+    const before = summarizeSales(ledger);
+    const updated = applyQuickCost(advancedProduct, { items: [
+      { id: "quick-primary", materialId: "", quantity: 1, customName: "食材成本", customUnit: "份", customUnitCost: 6.5, presetId: "quick-primary" },
+    ], costCategory: "食材采购", lossRate: 0, batchYield: 1 }, ledger.materials, 0, 0, "2026-08-18");
+    expect(updated.bomVersions).toHaveLength(2);
+    expect(updated.bomVersions?.[0]).toMatchObject({ entryMode: "advanced", items: advancedProduct.bom, packaging: advancedProduct.packaging, directLabor: advancedProduct.directLabor });
+    expect(updated.bomVersions?.[1].entryMode).toBe("quick");
+    ledger.products = [updated];
+    expect(ledger.sales[0]).toMatchObject({ costVersionId: "advanced-sale-version", unitDirectCostSnapshot: 2.99 });
+    expect(summarizeSales(ledger).costOfSales).toBe(before.costOfSales);
   });
 });

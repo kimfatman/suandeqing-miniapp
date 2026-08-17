@@ -4,10 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => cleanup());
 import { BomEditorSheet } from "@/components/BomEditorSheet";
+import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CategorySheet, MaterialSheet, ProductNameSheet, ProfileView } from "@/pages/Home";
-import { makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
+import { CategorySheet, MaterialSheet, ProductNameSheet, ProductsView, ProfileView } from "@/pages/Home";
+import { INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
   it("submits a non-catering industry with the store name", () => {
@@ -103,6 +104,35 @@ describe("QuickRecordSheet interactions", () => {
     expect(screen.getByText("借款与还款")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "本金还款" }));
     expect(screen.getByText("本金还款会减少手上现金，但不计入经营成本。")).toBeTruthy();
+  });
+});
+
+describe("QuickCostSheet interactions", () => {
+  it("requires only a primary amount and saves the two industry-preset cost items", () => {
+    const ledger = seedLedger();
+    const onSave = vi.fn();
+    const template = INDUSTRY_TEMPLATES.find((item) => item.key === "retail")!;
+    render(<QuickCostSheet product={{ ...ledger.products[0], bom: [] }} template={template} onClose={vi.fn()} onOpenAdvanced={vi.fn()} onSave={onSave} />);
+    expect(screen.getByText("进货价")).toBeTruthy();
+    expect(screen.getByText("单件配送费")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /保存并生成成本版本/ }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("主成本必须大于 0");
+    fireEvent.change(screen.getByRole("spinbutton", { name: "主成本金额" }), { target: { value: "6.5" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "附加成本金额" }), { target: { value: "0.8" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存并生成成本版本/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ items: [expect.objectContaining({ customName: "进货价", customUnit: "件", customUnitCost: 6.5, presetId: "quick-primary" }), expect.objectContaining({ customName: "单件配送费", customUnitCost: 0.8, presetId: "quick-secondary" })], lossRate: 0, batchYield: 1 }));
+  });
+
+  it("keeps the material editor as an explicit secondary route from the product detail", () => {
+    const ledger = seedLedger();
+    const onQuickCost = vi.fn();
+    const onBom = vi.fn();
+    render(<ProductsView products={ledger.products} activeProductId={ledger.products[0].id} onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={onQuickCost} onBom={onBom} onAdd={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /更新成本|录入成本/ }));
+    expect(onQuickCost).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /编辑配方/ }));
+    expect(onBom).toHaveBeenCalled();
   });
 });
 

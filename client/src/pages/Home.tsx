@@ -29,8 +29,9 @@ import { PricingPanel } from "@/components/PricingPanel";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { BomEditorSheet } from "@/components/BomEditorSheet";
+import { QuickCostSheet, QuickCostSave } from "@/components/QuickCostSheet";
 import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
-import {   applyIndustryTemplate,
+import {   applyIndustryTemplate, applyQuickCost,
   calculateDirectCost,
   getActiveCategories, calculateUnitCost, INDUSTRY_TEMPLATES, IndustryKey, LedgerData, initializeIndustryLedger, LedgerProduct, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateCategoryName, validateMaterialDraft, validateProductName } from "@/lib/validation";
@@ -88,6 +89,7 @@ export default function Home() {
   const [showQuickRecord, setShowQuickRecord] = useState(false);
   const [showSaleRecord, setShowSaleRecord] = useState(false);
   const [showBomEditor, setShowBomEditor] = useState(false);
+  const [showQuickCost, setShowQuickCost] = useState(false);
   const [showProductNameSheet, setShowProductNameSheet] = useState(false);
   const [costEditor, setCostEditor] = useState<"hidden" | "funding" | null>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
@@ -174,7 +176,7 @@ export default function Home() {
             onPrimaryAction={() => {
               if (readiness.stage === "record") setShowQuickRecord(true);
               if (readiness.stage === "product") setShowProductNameSheet(true);
-              if (readiness.stage === "cost") { setActiveTab("products"); setShowBomEditor(true); }
+              if (readiness.stage === "cost") { setActiveTab("products"); setShowQuickCost(true); }
               if (readiness.stage === "sale") setShowSaleRecord(true);
               if (readiness.stage === "analysis") navigate("business");
             }}
@@ -188,6 +190,7 @@ export default function Home() {
             onPricing={() => setShowPricing(true)}
             productCostAction={currentTemplate.productCostAction}
             productCostLabel={currentTemplate.productCostLabel}
+            onQuickCost={() => setShowQuickCost(true)}
             onBom={() => setShowBomEditor(true)}
             onAdd={() => setShowProductNameSheet(true)}
           />
@@ -219,6 +222,7 @@ export default function Home() {
       {showQuickRecord && <QuickRecordSheet categories={getActiveCategories(ledger)} onClose={() => setShowQuickRecord(false)} onRecordSale={() => { setShowQuickRecord(false); setShowSaleRecord(true); }} onSave={(record) => { setLedger((current) => { const next = { ...current, records: [{ id: makeId(), ...record, date: new Date().toISOString().slice(0, 10) }, ...current.records] }; persistLedger(next); return next; }); setShowQuickRecord(false); notify(record.type === "income" ? "已记入其他收入，经营账已更新" : "已记入支出，成本账已更新"); }} />}
       {showSaleRecord && <SalesRecordSheet products={ledger.products} onClose={() => setShowSaleRecord(false)} onSave={(sale) => { setLedger((current) => { const product = current.products.find((entry) => entry.id === sale.productId); const amount = sale.quantity * sale.unitPrice; const salePeriod = current.costs.allocationPeriod ?? sale.date.slice(0, 7); const hiddenSource = current.costs.hiddenCostSource ?? "manual"; const hiddenSnapshot = hiddenSource === "ledger" ? current.records.filter((record) => record.type === "expense" && record.date.startsWith(salePeriod) && record.category === (current.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0) : current.costs.hiddenCost; const enrichedSale: SalesRecord = { ...sale, costVersionId: product?.bomVersions?.at(-1)?.id ?? `current-${sale.date}`, unitDirectCostSnapshot: product ? calculateDirectCost(product, current.materials) : 0, fixedCostSnapshot: current.costs.fixedCost, hiddenCostSnapshot: hiddenSnapshot, hiddenCostSourceSnapshot: hiddenSource, hiddenCostBasisSnapshot: current.costs.hiddenCostBasis ?? "perUnit", fundingCostSnapshot: current.costs.fundingCost, fundingSourceSnapshot: current.costs.fundingSource ?? "manual", costPeriod: salePeriod }; const next = { ...current, sales: [enrichedSale, ...(current.sales ?? [])], records: [{ id: makeId(), type: "income" as const, amount, category: "销售收入", note: `${product?.name ?? "商品"}销售`, date: sale.date }, ...current.records] }; persistLedger(next); return next; }); setShowSaleRecord(false); notify("已记录销售，商品成本已结转"); }} />}
 
+      {showQuickCost && <QuickCostSheet product={selectedProduct} template={currentTemplate} onClose={() => setShowQuickCost(false)} onOpenAdvanced={() => { setShowQuickCost(false); setShowBomEditor(true); }} onSave={(draft: QuickCostSave) => { setLedger((current) => { const products = current.products.map((item) => item.id === selectedProduct.id ? applyQuickCost(item, draft, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost, new Date().toISOString().slice(0, 10)) : item); const next = { ...current, products }; persistLedger(next); return next; }); setShowQuickCost(false); notify("已保存快速成本，并生成新的成本版本"); }} />}
       {showBomEditor && <BomEditorSheet product={selectedProduct} materials={ledger.materials} categories={getActiveCategories(ledger)} costLabel={currentTemplate.productCostLabel} costAction={currentTemplate.productCostAction} costEmpty={currentTemplate.productCostEmpty} onClose={() => setShowBomEditor(false)} onSave={(items, settings) => { setLedger((current) => { const products = current.products.map((item) => { if (item.id !== selectedProduct.id) return item; const draftProduct = { ...item, bom: items, costCategory: settings.costCategory, lossRate: settings.lossRate, batchYield: settings.batchYield, materialUnitCosts: settings.costSnapshot?.materialUnitCosts, packaging: settings.costSnapshot?.packaging ?? item.packaging, directLabor: settings.costSnapshot?.directLabor ?? item.directLabor }; const recalculated = recalculateProduct(draftProduct, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost); const nextVersion = makeBomVersionSnapshot(draftProduct, current.materials, settings, new Date().toISOString().slice(0, 10)); return { ...recalculated, category: items.length || recalculated.direct > 0 ? "已补齐成本" : getProductPendingLabel(currentTemplate.productCostLabel), bomVersions: [...(item.bomVersions ?? []), nextVersion] }; }); const next = { ...current, products }; persistLedger(next); return next; }); setShowBomEditor(false); notify(`已保存${currentTemplate.productCostLabel}，并生成新的成本版本`); }} />}
       {costEditor && <CostSettingsSheet type={costEditor} value={costEditor === "hidden" ? currentCosts.hiddenCost : currentCosts.fundingCost} onClose={() => setCostEditor(null)} onSave={(value) => { const nextCosts = { ...currentCosts, [costEditor === "hidden" ? "hiddenCost" : "fundingCost"]: value }; setCurrentCosts(nextCosts); setLedger((current) => { const next = { ...current, costs: nextCosts, products: costEditor === "hidden" ? current.products.map((product) => recalculateProduct(product, current.materials, nextCosts.hiddenCost, nextCosts.fixedCost)) : current.products }; persistLedger(next); return next; }); setCostEditor(null); notify(costEditor === "hidden" ? "已更新隐形成本，经营成本已重新计算" : "已更新资金成本，完整成本已重新计算"); }} />}
       {toast && <div className="app-toast"><CheckBadge />{toast}</div>}
@@ -321,7 +325,7 @@ function CashFlowChart({ series, onRecord }: { series: ReturnType<typeof summari
   return <section className="cash-flow-chart chart-card" aria-label="现金流走势"><div className="chart-heading"><div><span className="eyebrow">现金流走势</span><h2>每天进出的钱</h2></div><span className="legend"><i />收入 <i className="green" />流出</span></div><div className="cash-flow-bars">{series.map((item) => <div className="cash-flow-day" key={item.label}><div className="cash-flow-columns"><span className="cash-income-bar" style={{ height: `${Math.max(item.income / max * 100, item.income ? 7 : 0)}%` }} title={`收入 ${formatCurrency(item.income)}`} /><span className="cash-expense-bar" style={{ height: `${Math.max(item.expenses / max * 100, item.expenses ? 7 : 0)}%` }} title={`流出 ${formatCurrency(item.expenses)}`} /></div><small>{item.label}</small></div>)}</div></section>;
 }
 
-function ProductsView({ products, activeProductId, onSelect, onPricing, productCostAction, productCostLabel, onBom, onAdd }: { products: LedgerProduct[]; activeProductId: number; onSelect: (id: number) => void; onPricing: () => void; productCostAction: string; productCostLabel: string; onBom: () => void; onAdd: () => void }) {
+export function ProductsView({ products, activeProductId, onSelect, onPricing, productCostAction, productCostLabel, onQuickCost, onBom, onAdd }: { products: LedgerProduct[]; activeProductId: number; onSelect: (id: number) => void; onPricing: () => void; productCostAction: string; productCostLabel: string; onQuickCost: () => void; onBom: () => void; onAdd: () => void }) {
   if (!products.length) return <div className="page-content product-content empty-product-page"><section className="empty-state-card"><span className="eyebrow">正式账本</span><h1>先建立第一个商品</h1><p>当前行业示例只在引导预览中展示，正式使用从你的真实商品开始。</p><button className="primary-action" onClick={onAdd}><Plus size={18} /> 新建商品</button></section></div>;
   const selected = products.find((product) => product.id === activeProductId) ?? products[0];
   const margin = selected.price > 0 ? ((selected.price - selected.operating) / selected.price) * 100 : 0;
@@ -346,7 +350,7 @@ function ProductsView({ products, activeProductId, onSelect, onPricing, productC
         <div className="detail-card-title"><div><span className="eyebrow">当前商品</span><h2>{selected.name}</h2></div><span className={needsCost ? "status-pill warning" : "status-pill"}>{needsCost ? `待补${productCostLabel}` : needsPricing ? "待定价" : "已核算"}</span></div>
         <div className="product-chart-summary"><span>经营成本 <b>{formatCurrency(selected.operating)}</b></span><span>成本归类 <b>{selected.costCategory ?? "未设置"}</b></span><span>预计利润率 <b>{selected.price ? `${margin.toFixed(1)}%` : "—"}</b></span></div>
         <CostCompositionChart product={selected} operatingCost={selected.operating} fullCost={selected.operating + 0.28} />
-        <div className="product-action-pair"><button className={needsCost ? "primary-action" : "secondary-card-action"} onClick={onBom}><ClipboardList size={17} /> {needsCost ? `补齐${productCostLabel}` : productCostAction}</button><button className={!needsCost && needsPricing ? "primary-action" : "secondary-card-action"} onClick={onPricing}><Sparkles size={18} /> {needsPricing ? "设置售价" : "定价建议"}</button></div>
+        <div className="product-action-pair"><button className="primary-action quick-cost-entry" onClick={onQuickCost}><Coins size={18} /><span>{needsCost ? "录入成本" : "更新成本"}<small>主成本 + 可选附加成本</small></span></button><button className="secondary-card-action" onClick={onBom}><ClipboardList size={17} /> {productCostAction}</button><button className={!needsCost && needsPricing ? "primary-action" : "secondary-card-action"} onClick={onPricing}><Sparkles size={18} /> {needsPricing ? "设置售价" : "定价建议"}</button></div>
       </section>
     </div>
   );

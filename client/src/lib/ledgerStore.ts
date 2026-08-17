@@ -13,6 +13,10 @@ export type IndustryTemplate = {
   productCostLabel: string;
   productCostAction: string;
   productCostEmpty: string;
+  /** 快速成本录入只显示一主一辅两项，名称与单位由行业预设。 */
+  quickPrimaryLabel: string;
+  quickSecondaryOptions: string[];
+  quickUnit: string;
 };
 
 export type Material = {
@@ -34,6 +38,8 @@ export type BomItem = {
   customName?: string;
   customUnit?: string;
   customUnitCost?: number;
+  /** 区分行业快速成本预设与用户在进阶模式自行建立的明细，旧数据保持为空。 */
+  presetId?: "quick-primary" | "quick-secondary";
 };
 
 export type LedgerProduct = {
@@ -94,6 +100,8 @@ export type BomVersion = {
   directLabor: number;
   directCost: number;
   operatingCost: number;
+  /** 快速成本和进阶明细分别保留来源，便于用户恢复更细的材料版本。 */
+  entryMode?: "quick" | "advanced";
 };
 
 export type LedgerCosts = {
@@ -149,10 +157,10 @@ export type LedgerSummary = {
 };
 
 export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
-  { key: "catering", label: "餐饮饮品", shortLabel: "餐饮", description: "配方、损耗、包装与人工", hiddenCostCategory: "平台服务", hiddenCostDescription: "店主工时、配送、平台抽佣和设备占用", fundingCostDescription: "外卖平台服务费、短期周转利息和融资费用", productCostLabel: "商品配方", productCostAction: "编辑配方", productCostEmpty: "还没有配方材料，先添加一项食材。", categories: ["食材采购", "包装耗材", "平台服务", "房租水电", "人工分摊"] },
-  { key: "retail", label: "社区零售", shortLabel: "零售", description: "进货、促销、配送与平台", hiddenCostCategory: "物流配送", hiddenCostDescription: "补货配送、促销让利、货架占用和平台服务", fundingCostDescription: "进货周转借款、供应商账期费用和融资费用", productCostLabel: "进货明细", productCostAction: "编辑进货明细", productCostEmpty: "还没有进货明细，先添加一项货品。", categories: ["货品采购", "物流配送", "促销让利", "摊位房租", "平台服务"] },
-  { key: "stall", label: "商贸摆摊", shortLabel: "摆摊", description: "进货、摊位、交通与尾货", hiddenCostCategory: "交通配送", hiddenCostDescription: "摊位、交通、尾货损耗和临时人工", fundingCostDescription: "进货周转、摊位押金借款和融资费用", productCostLabel: "货品成本", productCostAction: "编辑货品成本", productCostEmpty: "还没有货品成本明细，先添加一项进货。", categories: ["进货成本", "摊位费用", "交通配送", "货品损耗", "尾货折价"] },
-  { key: "handmade", label: "手作生产", shortLabel: "手作", description: "材料、工时、工具与试做", hiddenCostCategory: "手工工时", hiddenCostDescription: "手工工时、设备折旧、试做报废和包材", fundingCostDescription: "材料备货借款、设备分期利息和融资费用", productCostLabel: "制作成本", productCostAction: "编辑制作成本", productCostEmpty: "还没有制作成本明细，先添加一项材料。", categories: ["材料采购", "包材耗材", "手工工时", "设备工具", "试做报废"] },
+  { key: "catering", label: "餐饮饮品", shortLabel: "餐饮", description: "配方、损耗、包装与人工", hiddenCostCategory: "平台服务", hiddenCostDescription: "店主工时、配送、平台抽佣和设备占用", fundingCostDescription: "外卖平台服务费、短期周转利息和融资费用", productCostLabel: "商品配方", productCostAction: "编辑配方", productCostEmpty: "还没有配方材料，先添加一项食材。", quickPrimaryLabel: "食材成本", quickSecondaryOptions: ["包装费", "单件人工"], quickUnit: "份", categories: ["食材采购", "包装耗材", "平台服务", "房租水电", "人工分摊"] },
+  { key: "retail", label: "社区零售", shortLabel: "零售", description: "进货、促销、配送与平台", hiddenCostCategory: "物流配送", hiddenCostDescription: "补货配送、促销让利、货架占用和平台服务", fundingCostDescription: "进货周转借款、供应商账期费用和融资费用", productCostLabel: "进货明细", productCostAction: "编辑进货明细", productCostEmpty: "还没有进货明细，先添加一项货品。", quickPrimaryLabel: "进货价", quickSecondaryOptions: ["单件配送费", "促销让利"], quickUnit: "件", categories: ["货品采购", "物流配送", "促销让利", "摊位房租", "平台服务"] },
+  { key: "stall", label: "商贸摆摊", shortLabel: "摆摊", description: "进货、摊位、交通与尾货", hiddenCostCategory: "交通配送", hiddenCostDescription: "摊位、交通、尾货损耗和临时人工", fundingCostDescription: "进货周转、摊位押金借款和融资费用", productCostLabel: "货品成本", productCostAction: "编辑货品成本", productCostEmpty: "还没有货品成本明细，先添加一项进货。", quickPrimaryLabel: "拿货价", quickSecondaryOptions: ["摊位交通分摊", "尾货损耗"], quickUnit: "件", categories: ["进货成本", "摊位费用", "交通配送", "货品损耗", "尾货折价"] },
+  { key: "handmade", label: "手作生产", shortLabel: "手作", description: "材料、工时、工具与试做", hiddenCostCategory: "手工工时", hiddenCostDescription: "手工工时、设备折旧、试做报废和包材", fundingCostDescription: "材料备货借款、设备分期利息和融资费用", productCostLabel: "制作成本", productCostAction: "编辑制作成本", productCostEmpty: "还没有制作成本明细，先添加一项材料。", quickPrimaryLabel: "材料成本", quickSecondaryOptions: ["直接人工", "包材费"], quickUnit: "件", categories: ["材料采购", "包材耗材", "手工工时", "设备工具", "试做报废"] },
 ];
 
 export type IndustrySampleData = { materials: Material[]; products: LedgerProduct[] };
@@ -347,6 +355,35 @@ export const makeBomVersionSnapshot = (product: LedgerProduct, materials: Materi
     id: uid(), effectiveFrom, items: product.bom, lossRate: settings.lossRate, batchYield: settings.batchYield,
     materialUnitCosts: product.materialUnitCosts ?? Object.fromEntries(materials.map((material) => [material.id, material.unitCost])),
     packaging: product.packaging, directLabor: product.directLabor, directCost: recalculated.direct, operatingCost: recalculated.operating,
+    entryMode: product.bom.some((item) => !item.presetId) ? "advanced" : "quick",
+  };
+};
+
+/**
+ * 快速成本只更新当前商品成本；若当前使用的是进阶材料明细，先将其快照备份，便于用户随时恢复。
+ * 该函数不接触 sales，因此已结转销售永远保持当时的成本快照。
+ */
+export const applyQuickCost = (
+  product: LedgerProduct,
+  draft: { items: BomItem[]; costCategory: string; lossRate: number; batchYield: number },
+  materials: Material[],
+  hiddenCost: number,
+  fixedCost: number,
+  effectiveFrom: string,
+) => {
+  const hasAdvancedDetails = product.bom.some((item) => !item.presetId);
+  const latestVersion = product.bomVersions?.at(-1);
+  const needsAdvancedBackup = hasAdvancedDetails && latestVersion?.entryMode !== "advanced";
+  const advancedBackup = needsAdvancedBackup
+    ? makeBomVersionSnapshot(product, materials, { lossRate: product.lossRate ?? 0, batchYield: product.batchYield ?? 1 }, effectiveFrom)
+    : null;
+  const draftProduct: LedgerProduct = { ...product, bom: draft.items, costCategory: draft.costCategory, lossRate: draft.lossRate, batchYield: draft.batchYield, materialUnitCosts: undefined, packaging: 0, directLabor: 0 };
+  const recalculated = recalculateProduct(draftProduct, materials, hiddenCost, fixedCost);
+  const quickVersion = makeBomVersionSnapshot(draftProduct, materials, draft, effectiveFrom);
+  return {
+    ...recalculated,
+    category: "已补齐成本",
+    bomVersions: [...(product.bomVersions ?? []), ...(advancedBackup ? [advancedBackup] : []), quickVersion],
   };
 };
 
