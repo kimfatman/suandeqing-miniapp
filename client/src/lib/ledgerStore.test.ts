@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateDirectCost, calculateUnitCost, makeBomVersionSnapshot, normalizeLedger, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, calculateDirectCost, calculateUnitCost, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 
 describe("summarizeLedger", () => {
   it("aggregates income, expenses, result, counts and categories from ledger records", () => {
@@ -97,6 +97,27 @@ describe("summarizeSales", () => {
     ledger.costs.hiddenCostCategory = "交通配送";
     ledger.records.push({ id: "delivery", type: "expense", amount: 8, category: "交通配送", note: "", date: "2026-08-17" });
     expect(summarizeSales(ledger).allocatedIndirectCosts).toBe(9.84);
+  });
+});
+
+describe("industry templates", () => {
+  it("initializes a retail ledger after onboarding", () => {
+    const next = initializeIndustryLedger(seedLedger(), "社区便利店", "retail");
+    expect(next.profile).toMatchObject({ storeName: "社区便利店", industry: "retail", onboarded: true });
+    expect(next.categories[0]).toBe("货品采购");
+    expect(next.costs.hiddenCostCategory).toBe("物流配送");
+  });
+
+  it("switches categories without deleting existing business records", () => {
+    const ledger = seedLedger();
+    const next = applyIndustryTemplate(ledger, "retail");
+    expect(next.profile.industry).toBe("retail");
+    expect(next.categories).toEqual(["货品采购", "物流配送", "促销让利", "摊位房租", "平台服务"]);
+    expect(next.costs.hiddenCostCategory).toBe("物流配送");
+    expect(INDUSTRY_TEMPLATES.find((item) => item.key === "retail")?.hiddenCostDescription).toContain("补货配送");
+    expect(INDUSTRY_TEMPLATES.find((item) => item.key === "retail")?.fundingCostDescription).toContain("进货周转");
+    expect(next.records).toHaveLength(ledger.records.length);
+    expect(next.products).toHaveLength(ledger.products.length);
   });
 });
 

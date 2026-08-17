@@ -7,6 +7,9 @@ export type IndustryTemplate = {
   shortLabel: string;
   description: string;
   categories: string[];
+  hiddenCostCategory: string;
+  hiddenCostDescription: string;
+  fundingCostDescription: string;
 };
 
 export type Material = {
@@ -132,10 +135,10 @@ export type LedgerSummary = {
 };
 
 export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
-  { key: "catering", label: "餐饮饮品", shortLabel: "餐饮", description: "配方、损耗、包装与人工", categories: ["食材采购", "包装耗材", "平台服务", "房租水电", "人工分摊"] },
-  { key: "retail", label: "社区零售", shortLabel: "零售", description: "进货、促销、配送与平台", categories: ["货品采购", "物流配送", "促销让利", "摊位房租", "平台服务"] },
-  { key: "stall", label: "商贸摆摊", shortLabel: "摆摊", description: "进货、摊位、交通与尾货", categories: ["进货成本", "摊位费用", "交通配送", "货品损耗", "尾货折价"] },
-  { key: "handmade", label: "手作生产", shortLabel: "手作", description: "材料、工时、工具与试做", categories: ["材料采购", "包材耗材", "手工工时", "设备工具", "试做报废"] },
+  { key: "catering", label: "餐饮饮品", shortLabel: "餐饮", description: "配方、损耗、包装与人工", hiddenCostCategory: "平台服务", hiddenCostDescription: "店主工时、配送、平台抽佣和设备占用", fundingCostDescription: "外卖平台服务费、短期周转利息和融资费用", categories: ["食材采购", "包装耗材", "平台服务", "房租水电", "人工分摊"] },
+  { key: "retail", label: "社区零售", shortLabel: "零售", description: "进货、促销、配送与平台", hiddenCostCategory: "物流配送", hiddenCostDescription: "补货配送、促销让利、货架占用和平台服务", fundingCostDescription: "进货周转借款、供应商账期费用和融资费用", categories: ["货品采购", "物流配送", "促销让利", "摊位房租", "平台服务"] },
+  { key: "stall", label: "商贸摆摊", shortLabel: "摆摊", description: "进货、摊位、交通与尾货", hiddenCostCategory: "交通配送", hiddenCostDescription: "摊位、交通、尾货损耗和临时人工", fundingCostDescription: "进货周转、摊位押金借款和融资费用", categories: ["进货成本", "摊位费用", "交通配送", "货品损耗", "尾货折价"] },
+  { key: "handmade", label: "手作生产", shortLabel: "手作", description: "材料、工时、工具与试做", hiddenCostCategory: "手工工时", hiddenCostDescription: "手工工时、设备折旧、试做报废和包材", fundingCostDescription: "材料备货借款、设备分期利息和融资费用", categories: ["材料采购", "包材耗材", "手工工时", "设备工具", "试做报废"] },
 ];
 
 const STORAGE_KEY = "suandeqing-ledger-v1";
@@ -200,6 +203,18 @@ export const normalizeLedger = (ledger: LedgerData): LedgerData => ({
     ? recalculateProduct(product, ledger.materials, ledger.costs.hiddenCost, ledger.costs.fixedCost)
     : product),
 });
+
+export const initializeIndustryLedger = (ledger: LedgerData, storeName: string, industry: IndustryKey): LedgerData => applyIndustryTemplate({ ...ledger, profile: { ...ledger.profile, storeName, onboarded: true } }, industry);
+
+export const applyIndustryTemplate = (ledger: LedgerData, industry: IndustryKey): LedgerData => {
+  const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+  return {
+    ...ledger,
+    profile: { ...ledger.profile, industry: template.key },
+    categories: [...template.categories],
+    costs: { ...ledger.costs, hiddenCostCategory: template.hiddenCostCategory },
+  };
+};
 
 export const persistLedger = (ledger: LedgerData) => {
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger)); } catch { /* 演示模式不阻断操作 */ }

@@ -4,8 +4,30 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => cleanup());
 import { BomEditorSheet } from "@/components/BomEditorSheet";
-import { MaterialSheet, ProductNameSheet } from "@/pages/Home";
+import { OnboardingFlow } from "@/components/OnboardingFlow";
+import { MaterialSheet, ProductNameSheet, ProfileView } from "@/pages/Home";
 import { makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
+
+describe("OnboardingFlow industry initialization", () => {
+  it("submits a non-catering industry with the store name", () => {
+    const onComplete = vi.fn();
+    render(<OnboardingFlow initialName="" onComplete={onComplete} />);
+    fireEvent.click(screen.getByRole("button", { name: /社区零售/ }));
+    fireEvent.click(screen.getByRole("button", { name: /按这个行业建账/ }));
+    fireEvent.change(screen.getByPlaceholderText("例如：巷口奶茶铺"), { target: { value: "社区便利店" } });
+    fireEvent.click(screen.getByRole("button", { name: /开始算第一笔账/ }));
+    expect(onComplete).toHaveBeenCalledWith({ storeName: "社区便利店", industry: "retail" });
+  });
+});
+
+describe("ProfileView industry template interactions", () => {
+  it("selects a different industry template", () => {
+    const onIndustryChange = vi.fn();
+    render(<ProfileView storeName="测试小店" industry="catering" onIndustryChange={onIndustryChange} onHiddenCost={vi.fn()} onDebt={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /社区零售/ }));
+    expect(onIndustryChange).toHaveBeenCalledWith("retail");
+  });
+});
 
 describe("ProductNameSheet interactions", () => {
   it("rejects an empty name and accepts a custom name", () => {

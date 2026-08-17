@@ -30,7 +30,7 @@ import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
-import { calculateDirectCost, calculateUnitCost, INDUSTRY_TEMPLATES, IndustryKey, LedgerProduct, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
+import { applyIndustryTemplate, calculateDirectCost, calculateUnitCost, INDUSTRY_TEMPLATES, IndustryKey, initializeIndustryLedger, LedgerProduct, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateMaterialDraft, validateProductName } from "@/lib/validation";
 
 type Tab = "home" | "products" | "business" | "profile";
@@ -92,7 +92,7 @@ export default function Home() {
   const completeOnboarding = ({ storeName, industry }: { storeName: string; industry: IndustryKey }) => {
     const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
     setLedger((current) => {
-      const next = { ...current, profile: { ...current.profile, storeName, industry, onboarded: true }, categories: template.categories };
+      const next = initializeIndustryLedger(current, storeName, industry);
       persistLedger(next);
       return next;
     });
@@ -149,7 +149,7 @@ export default function Home() {
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} />}
-        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
+        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} onIndustryChange={(industry) => { setLedger((current) => { const next = applyIndustryTemplate(current, industry); persistLedger(next); return next; }); notify(`已切换为${INDUSTRY_TEMPLATES.find((item) => item.key === industry)?.label ?? "新行业"}模板`); }} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
       </main>
 
       <nav className="mobile-tabbar" aria-label="底部导航">
@@ -332,13 +332,15 @@ function BusinessView({ summary, costs, onPricing, onRecord, onSale }: { summary
   );
 }
 
-function ProfileView({ storeName, industry, onHiddenCost, onDebt }: { storeName: string; industry: IndustryKey; onHiddenCost: () => void; onDebt: () => void }) {
-  const industryName = INDUSTRY_TEMPLATES.find((item) => item.key === industry)?.label ?? "小店经营";
+export function ProfileView({ storeName, industry, onIndustryChange, onHiddenCost, onDebt }: { storeName: string; industry: IndustryKey; onIndustryChange: (industry: IndustryKey) => void; onHiddenCost: () => void; onDebt: () => void }) {
+  const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+  const industryName = template.label;
   return (
     <div className="page-content profile-content">
       <section className="profile-hero"><div className="profile-mark"><BrandMark size={54} /></div><div><span>我在经营</span><h1>{storeName}</h1><p>{industryName} · 本地账本已开启</p></div><button className="icon-button"><Settings2 size={20} /></button></section>
       <section className="profile-banner"><img src="/manus-storage/suandeqing-onboarding-ledger_eee908b4.png" alt="成本账簿插画" /><div><span className="eyebrow">把账补完整</span><strong>再补 2 项成本，利润会更接近真实。</strong><button onClick={onHiddenCost}>去补成本 <ArrowRight size={15} /></button></div></section>
-      <section className="setting-group"><span className="group-label">经营设置</span><SettingItem icon={<ClipboardList size={19} />} label="隐形成本" note="店主人工、配送、设备与平台费" onClick={onHiddenCost} /><SettingItem icon={<WalletCards size={19} />} label="资金成本" note="利息与融资费用，不含借款本金" onClick={onDebt} /><SettingItem icon={<ReceiptText size={19} />} label="默认分摊方式" note="按商品销量分摊" onClick={() => undefined} /></section>
+      <section className="setting-group"><span className="group-label">行业模板</span><div className="industry-switcher" role="list" aria-label="选择行业模板">{INDUSTRY_TEMPLATES.map((template) => <button key={template.key} className={template.key === industry ? "industry-switch-card active" : "industry-switch-card"} onClick={() => onIndustryChange(template.key)}><span className="industry-switch-symbol">{template.shortLabel.slice(0, 1)}</span><span><b>{template.label}</b><small>{template.description}</small></span>{template.key === industry && <CheckBadge />}</button>)}</div></section>
+      <section className="setting-group"><span className="group-label">经营设置</span><SettingItem icon={<ClipboardList size={19} />} label="隐形成本" note={`默认归入：${template.hiddenCostCategory} · ${template.hiddenCostDescription}`} onClick={onHiddenCost} /><SettingItem icon={<WalletCards size={19} />} label="资金成本" note={template.fundingCostDescription} onClick={onDebt} /><SettingItem icon={<ReceiptText size={19} />} label="默认分摊方式" note="按商品销量分摊" onClick={() => undefined} /></section>
       <section className="setting-group"><span className="group-label">数据与账户</span><SettingItem icon={<BookOpenCheck size={19} />} label="成本口径说明" note="直接、经营与完整成本" onClick={() => undefined} /><SettingItem icon={<Settings2 size={19} />} label="数据管理" note="导出与隐私设置" onClick={() => undefined} /></section>
     </div>
   );
