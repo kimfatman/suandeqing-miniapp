@@ -185,3 +185,39 @@ h2 { font-size: 18px; letter-spacing: -.045em; font-weight: 800; line-height: 1.
 @media (max-width: 520px) {
   .bar-chart .bar-pair > span { flex-basis: 6px; max-width: 6px; }
 }
+
+/* 图表交互与加载反馈 */
+.cash-flow-copy { position: relative; min-width: 0; }
+.micro-info { display: inline-grid; width: 19px; height: 19px; margin-left: 4px; padding: 0; place-items: center; color: #d9efff; border: 1px solid rgb(255 255 255 / .45); border-radius: 50%; background: transparent; vertical-align: -3px; cursor: pointer; }
+.micro-info:hover, .micro-info:focus-visible { color: #0b1836; outline: 2px solid rgb(255 255 255 / .55); background: white; }
+.cash-flow-detail { max-width: 360px; margin-top: 11px; padding: 9px 11px; color: rgb(255 255 255 / .78); border-left: 2px solid #91e2c3; background: rgb(255 255 255 / .08); font-size: 10px; line-height: 1.55; }
+.chart-card { position: relative; }
+.chart-card.is-refreshing { overflow: hidden; }
+.chart-loading { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: #658096; font-size: 10px; }
+.loading-sweep { display: inline-block; width: 38px; height: 5px; overflow: hidden; border-radius: 99px; background: #dcecf9; }
+.loading-sweep::after { content: ""; display: block; width: 16px; height: 100%; border-radius: inherit; background: #087ff5; animation: ledger-sweep 700ms cubic-bezier(.23,1,.32,1) infinite; }
+.bar-chart .bar-pair { position: relative; align-self: stretch; min-width: 24px; padding: 0; border: 0; border-radius: 7px 7px 0 0; background: transparent; cursor: pointer; }
+.bar-chart .bar-pair:hover, .bar-chart .bar-pair:focus-visible, .bar-chart .bar-pair.is-active { background: rgb(8 127 245 / .08); outline: none; }
+.bar-chart .bar-pair:focus-visible { box-shadow: 0 0 0 2px #087ff5; }
+.bar-chart .bar-pair > span { position: absolute; bottom: 0; }
+.bar-chart .bar-pair.is-active .income-bar { filter: brightness(.88); }
+.bar-chart .bar-pair.is-active .expense-bar { filter: brightness(.9); }
+.chart-labels button { padding: 0 4px; color: inherit; border: 0; background: transparent; font: inherit; cursor: pointer; }
+.chart-labels button:hover, .chart-labels button:focus-visible, .chart-labels button.is-active { color: #087ff5; font-weight: 700; outline: none; }
+.chart-labels button:focus-visible { border-radius: 4px; box-shadow: 0 0 0 2px rgb(8 127 245 / .18); }
+.chart-tooltip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 33px; margin-top: 10px; padding: 8px 10px; color: #5b6d7e; border: 1px solid #dce5ef; border-radius: 10px 13px 13px 10px; background: #fbfdff; font-size: 10px; }
+.chart-tooltip b { color: #0b1836; font-family: "DM Sans", sans-serif; font-size: 11px; }
+.chart-tooltip span { display: inline-flex; align-items: center; gap: 4px; }
+.income-dot, .expense-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #087ff5; }
+.expense-dot { background: #79cbb1; }
+@keyframes ledger-sweep { from { transform: translateX(-18px); } to { transform: translateX(40px); } }
+@media (prefers-reduced-motion: reduce) { .loading-sweep::after { animation: none; transform: translateX(11px); } }
+@media (max-width: 520px) { .chart-tooltip { gap: 7px; font-size: 9px; } .cash-flow-detail { max-width: 250px; } }
+
+.chart-empty { display: flex; min-height: 112px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; margin-top: 12px; padding: 16px; color: #6a8093; border: 1px dashed #c8ddeb; border-radius: 12px; background: #f7fbfe; text-align: center; }
+.chart-empty svg { color: #087ff5; }
+.chart-empty strong { color: #0b1836; font-size: 12px; }
+.chart-empty span { font-size: 10px; }
+.chart-empty button { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; padding: 5px 9px; color: #087ff5; border: 1px solid #b8d9f3; border-radius: 99px; background: white; font-size: 10px; font-weight: 700; cursor: pointer; }
+.chart-empty button:hover, .chart-empty button:focus-visible { color: white; outline: none; background: #087ff5; }
+.cash-flow-empty { color: rgb(255 255 255 / .72) !important; }

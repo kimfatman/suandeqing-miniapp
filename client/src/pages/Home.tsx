@@ -1,5 +1,5 @@
 /** 商户账簿工作台：首页按“结论—待办—明细”排列，让小商家在每次打开时先知道该做什么。 */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   Banknote,
@@ -152,7 +152,7 @@ export default function Home() {
             }}
           />
         )}
-        {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} onPricing={() => setShowPricing(true)} />}
+        {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} />}
         {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
       </main>
 
@@ -268,17 +268,31 @@ function ProductsView({ products, activeProductId, onSelect, onPricing, onBom, o
   );
 }
 
-function BusinessView({ summary, costs, onPricing }: { summary: ReturnType<typeof summarizeLedger>; costs: CostInputs; onPricing: () => void }) {
+function BusinessView({ summary, costs, onPricing, onRecord }: { summary: ReturnType<typeof summarizeLedger>; costs: CostInputs; onPricing: () => void; onRecord: () => void }) {
+  const [activeLabel, setActiveLabel] = useState(summary.dailySeries.at(-1)?.label ?? "");
+  const [showCashDetails, setShowCashDetails] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const chartKey = summary.dailySeries.map((item) => `${item.label}:${item.income}:${item.expenses}`).join("|");
   const maxValue = Math.max(...summary.dailySeries.flatMap((item) => [item.income, item.expenses]), 1);
+  const activeItem = summary.dailySeries.find((item) => item.label === activeLabel) ?? summary.dailySeries.at(-1);
+  const hasTrendData = summary.dailySeries.some((item) => item.income > 0 || item.expenses > 0);
   const materialTotal = Object.entries(summary.categoryTotals).filter(([category]) => /采购|进货|材料|货品/.test(category)).reduce((total, [, value]) => total + value, 0);
   const hiddenTotal = Math.max(summary.expenses - materialTotal, 0);
+
+  useEffect(() => {
+    setActiveLabel(summary.dailySeries.at(-1)?.label ?? "");
+    setIsRefreshing(true);
+    const timer = window.setTimeout(() => setIsRefreshing(false), 420);
+    return () => window.clearTimeout(timer);
+  }, [chartKey]);
+
   return (
     <div className="page-content business-content">
       <section className="period-row"><div><span className="eyebrow">经营账</span><h1>收入进来后，真正还剩多少？</h1></div><button className="range-chip">本月 <ChevronRight size={16} /></button></section>
-      <section className="cash-flow-card">
-        <div><span>现金流压力</span><h2>{formatCurrency(summary.cashOutflow)}</h2><p>本金还款 {formatCurrency(summary.principalRepayment)} · 利息与融资费 {formatCurrency(summary.financingCosts)}</p></div><div className="cash-orbit"><CircleDollarSign size={32} /><span>本期</span></div>
+      <section className={`cash-flow-card ${isRefreshing ? "is-refreshing" : ""}`}>
+        <div className="cash-flow-copy"><span>现金流压力 <button className="micro-info" aria-label="查看现金流压力说明" aria-expanded={showCashDetails} onClick={() => setShowCashDetails((current) => !current)}><Info size={13} /></button></span><h2>{formatCurrency(summary.cashOutflow)}</h2>{summary.cashOutflow > 0 ? <p>本金还款 {formatCurrency(summary.principalRepayment)} · 利息与融资费 {formatCurrency(summary.financingCosts)}</p> : <p className="cash-flow-empty">先记一笔支出或还款，这里会显示现金流压力。</p>}{showCashDetails && <div className="cash-flow-detail" role="status">现金流压力包含本期全部实际流出；本金影响现金，不计入经营利润；利息和融资费用计入资金成本。</div>}</div><div className="cash-orbit" aria-hidden="true"><CircleDollarSign size={32} /><span>{isRefreshing ? "更新中" : "本期"}</span></div>
       </section>
-      <section className="chart-card"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>收入与经营成本</h2></div><span className="legend"><i />收入 <i className="green" />成本</span></div><div className="bar-chart">{summary.dailySeries.map((item) => <div className="bar-pair" key={item.label}><span className="income-bar" title={`收入 ${formatCurrency(item.income)}`} style={{ height: `${Math.max((item.income / maxValue) * 100, item.income ? 8 : 0)}%` }} /><span className="expense-bar" title={`成本 ${formatCurrency(item.expenses)}`} style={{ height: `${Math.max((item.expenses / maxValue) * 100, item.expenses ? 8 : 0)}%` }} /></div>)}</div><div className="chart-labels">{summary.dailySeries.map((item) => <span key={item.label}>{item.label}</span>)}</div></section>
+      <section className={`chart-card ${isRefreshing ? "is-refreshing" : ""}`} aria-label="经营趋势图表"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>收入与经营成本</h2></div><span className="legend"><i />收入 <i className="green" />成本</span></div>{isRefreshing && <div className="chart-loading" role="status" aria-live="polite"><span className="loading-sweep" />正在更新经营趋势</div>}{hasTrendData ? <><div className="bar-chart" role="list" aria-label="按日期查看收入和经营成本">{summary.dailySeries.map((item) => <button type="button" className={`bar-pair ${activeItem?.label === item.label ? "is-active" : ""}`} key={item.label} onMouseEnter={() => setActiveLabel(item.label)} onFocus={() => setActiveLabel(item.label)} onClick={() => setActiveLabel(item.label)} aria-label={`${item.label}，收入${formatCurrency(item.income)}，经营成本${formatCurrency(item.expenses)}`} role="listitem"><span className="income-bar" aria-hidden="true" style={{ height: `${Math.max((item.income / maxValue) * 100, item.income ? 8 : 0)}%` }} /><span className="expense-bar" aria-hidden="true" style={{ height: `${Math.max((item.expenses / maxValue) * 100, item.expenses ? 8 : 0)}%` }} /></button>)}</div><div className="chart-labels">{summary.dailySeries.map((item) => <button type="button" className={activeItem?.label === item.label ? "is-active" : ""} onClick={() => setActiveLabel(item.label)} key={item.label}>{item.label}</button>)}</div>{activeItem && <div className="chart-tooltip" role="status"><b>{activeItem.label}</b><span><i className="income-dot" />收入 {formatCurrency(activeItem.income)}</span><span><i className="expense-dot" />成本 {formatCurrency(activeItem.expenses)}</span></div>}</> : <div className="chart-empty" role="status"><BarChart3 size={22} /><strong>还没有经营趋势</strong><span>先记一笔收入或支出，趋势会出现在这里。</span><button type="button" onClick={onRecord}>去记一笔 <ArrowRight size={14} /></button></div>}</section>
       <section className="section-heading compact"><div><span className="eyebrow">本月成本构成</span><h2>不只看材料钱</h2></div></section>
       <section className="ledger-lines">
         <LineItem icon={<Coins size={18} />} label="已记录支出" value={formatCurrency(summary.expenses)} width={`${summary.expenses ? Math.min(summary.expenses / Math.max(summary.income, summary.expenses) * 100, 100) : 0}%`} color="blue" />
