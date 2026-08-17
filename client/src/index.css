@@ -472,6 +472,13 @@ body { font-family: "Inter", "MiSans", "Noto Sans SC", "PingFang SC", "Microsoft
 .material-cash-toggle b, .material-cash-toggle small { display: block; }
 .material-cash-toggle b { color: #173c56; font-size: 11px; }
 .material-cash-toggle small { margin-top: 3px; color: #6d8799; font-size: 10px; line-height: 1.45; }
+.custom-bom-row.has-error { border-color: #f4b5b5; background: #fffafb; }
+.custom-cost-fields label span em, .custom-quantity span em { color: #e54d4d; font-style: normal; }
+.custom-cost-fields input[aria-invalid="true"], .custom-quantity input[aria-invalid="true"] { border-color: #e67676; box-shadow: 0 0 0 3px rgb(229 77 77 / .08); }
+.custom-cost-feedback { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; color: #718398; font-size: 10px; }
+.custom-cost-feedback b { color: #176ba9; font-family: "Inter", sans-serif; font-size: 10px; }
+.custom-item-error { display: block; margin-top: 6px; color: #c54646; font-size: 10px; font-weight: 700; }
+.bom-add-hint { grid-column: 1 / -1; padding: 8px 2px 0; color: #70849a; font-size: 10px; line-height: 1.45; }
 .profile-data-boundary { display: flex; gap: 9px; align-items: flex-start; margin: 12px 0 0; padding: 10px 12px; color: #397090; border: 1px solid #cfe4f4; border-radius: 12px 15px 15px 12px; background: #f4faff; }
 .profile-data-boundary > svg { flex: 0 0 auto; margin-top: 2px; color: #087ff5; }
 .profile-data-boundary b, .profile-data-boundary small { display: block; }

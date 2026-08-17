@@ -137,8 +137,23 @@ describe("BomEditorSheet interactions", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "自定义成本名称" }), { target: { value: "平台服务费" } });
     fireEvent.change(screen.getByRole("textbox", { name: "自定义成本单位" }), { target: { value: "单" } });
     fireEvent.change(screen.getByRole("spinbutton", { name: "自定义成本单价" }), { target: { value: "1.5" } });
+    expect(screen.getByText("¥2.58")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
     expect(onSave).toHaveBeenCalledWith([expect.objectContaining({ customName: "平台服务费", customUnit: "单", customUnitCost: 1.5, quantity: 1 })], expect.any(Object));
+  });
+
+  it("trims custom detail text fields and persists a user-entered quantity", () => {
+    const ledger = seedLedger();
+    const onSave = vi.fn();
+    render(<BomEditorSheet product={{ ...ledger.products[0], bom: [] }} materials={ledger.materials} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "新增成本明细类型" }), { target: { value: "custom" } });
+    fireEvent.click(screen.getByRole("button", { name: /新增自定义项目/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "自定义成本名称" }), { target: { value: "  平台服务费  " } });
+    fireEvent.change(screen.getByRole("textbox", { name: "自定义成本单位" }), { target: { value: " 单 " } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "自定义成本单价" }), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "自定义成本数量" }), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
+    expect(onSave).toHaveBeenCalledWith([expect.objectContaining({ customName: "平台服务费", customUnit: "单", customUnitCost: 1.5, quantity: 2 })], expect.any(Object));
   });
 
   it("blocks saving a custom cost detail without a name", () => {
@@ -150,6 +165,7 @@ describe("BomEditorSheet interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存并重新核算/ }));
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("自定义成本项目需要填写名称");
+    expect(screen.getByText("请填写项目名称")).toBeTruthy();
   });
 
   it("shows an error and does not call onSave for zero BOM quantity", () => {
