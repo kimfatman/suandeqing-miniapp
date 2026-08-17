@@ -397,3 +397,51 @@ body { font-family: "Inter", "MiSans", "Noto Sans SC", "PingFang SC", "Microsoft
   .bom-add { grid-template-columns: 1fr 1fr; }
   .bom-add button { grid-column: 1 / -1; }
 }
+
+/* 移动端自定义成本行修复：覆盖材料行的通用label规则，避免字段互相覆盖 */
+.custom-bom-row { grid-template-columns: 9px minmax(0, 1fr) 56px 30px; min-height: 0; align-items: start; gap: 8px; padding: 12px; }
+.custom-bom-row .custom-cost-fields { grid-column: 2; min-width: 0; }
+.custom-bom-row .custom-cost-fields label,
+.custom-bom-row .custom-quantity { display: grid; height: auto; min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: #84919e; font-size: 9px; }
+.custom-bom-row .custom-cost-fields label span,
+.custom-bom-row .custom-quantity span { display: block; color: #84919e; font-size: 9px; line-height: 1.2; }
+.custom-bom-row .custom-cost-fields input,
+.custom-bom-row .custom-quantity input { display: block; box-sizing: border-box; width: 100%; height: 34px; margin: 0; padding: 0 8px; text-align: left; }
+.custom-bom-row .custom-cost-inline { display: grid; grid-template-columns: minmax(62px, .7fr) minmax(0, 1.3fr); gap: 7px; margin-top: 8px; }
+.custom-bom-row .custom-quantity { grid-column: 3; margin-top: 17px; }
+.custom-bom-row > button { grid-column: 4; grid-row: 1 / span 2; align-self: start; margin: 17px 0 0; }
+.custom-bom-row .bom-dot.custom { margin-top: 20px; }
+@media (max-width: 520px) {
+  .custom-bom-row { grid-template-columns: 8px minmax(0, 1fr) 30px; gap: 7px; padding: 12px 9px; }
+  .custom-bom-row .custom-cost-fields { grid-column: 2; }
+  .custom-bom-row .custom-cost-inline { grid-template-columns: minmax(56px, .75fr) minmax(0, 1.25fr); gap: 7px; }
+  .custom-bom-row .custom-quantity { grid-column: 2; margin-top: 8px; }
+  .custom-bom-row .custom-quantity input { max-width: 100px; }
+  .custom-bom-row > button { grid-column: 3; grid-row: 1 / span 3; margin-top: 17px; }
+  .custom-bom-row .bom-dot.custom { margin-top: 20px; }
+  .bom-add { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .bom-add select, .bom-add button { min-width: 0; }
+  .bom-add button { grid-column: 1 / -1; min-height: 40px; }
+}
+
+/* 成本明细弹层移动端操作区：内容滚动，保存按钮固定在弹层底部安全区 */
+.bom-sheet { display: flex; flex-direction: column; max-height: min(760px, calc(100dvh - 20px)); overflow: hidden; }
+.bom-sheet .sheet-header,
+.bom-sheet .bom-total,
+.bom-sheet .bom-settings,
+.bom-sheet .bom-category-field,
+.bom-sheet .bom-list,
+.bom-sheet .bom-add,
+.bom-sheet .calculation-details,
+.bom-sheet .form-error { flex: 0 0 auto; }
+.bom-sheet .bom-list { max-height: 30vh; overflow-y: auto; overscroll-behavior: contain; }
+.bom-sheet .calculation-details { max-height: 23vh; overflow-y: auto; overscroll-behavior: contain; }
+.bom-sheet .sheet-action { position: sticky; bottom: 0; z-index: 2; flex: 0 0 auto; min-height: 48px; margin-top: 10px; margin-bottom: env(safe-area-inset-bottom); box-shadow: 0 -8px 18px rgb(253 252 248 / .94); }
+@media (max-width: 520px) {
+  .bom-sheet { width: min(100%, 430px); max-height: calc(100dvh - 12px); padding: 14px 14px calc(12px + env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; }
+  .bom-sheet .bom-total { margin-top: 12px; padding: 14px; }
+  .bom-sheet .bom-total strong { font-size: 27px; }
+  .bom-sheet .bom-list { max-height: 34vh; }
+  .bom-sheet .calculation-details { max-height: 18vh; }
+  .bom-sheet .sheet-action { margin-top: 8px; }
+}
