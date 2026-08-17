@@ -130,7 +130,6 @@ export default function Home() {
             operatingCost={operatingCost}
             fullCost={fullCost}
             onPricing={() => setShowPricing(true)}
-            onProducts={() => navigate("products")}
             onAddMaterial={() => setShowMaterialPanel(true)}
             onRecord={() => setShowQuickRecord(true)}
             onBusiness={() => navigate("business")}
@@ -181,7 +180,6 @@ function HomeView({
   operatingCost,
   fullCost,
   onPricing,
-  onProducts,
   onAddMaterial,
   onRecord,
   onBusiness,
@@ -191,7 +189,6 @@ function HomeView({
   operatingCost: number;
   fullCost: number;
   onPricing: () => void;
-  onProducts: () => void;
   onAddMaterial: () => void;
   onRecord: () => void;
   onBusiness: () => void;
@@ -212,25 +209,25 @@ function HomeView({
         <div className="ledger-card-foot"><span>已记录 <b>{summary.incomeCount + summary.expenseCount}</b> 笔</span><button onClick={onBusiness}>翻开经营账 <ArrowRight size={16} /></button></div>
       </section>
 
-      <section className="metric-grid">
-        <MetricCard label="本月收入" value={formatCurrency(summary.income)} note={`共记录 ${summary.incomeCount} 笔`} tone="light" delta={summary.incomeCount ? "已入账" : "待记录"} />
-        <MetricCard label="经营成本" value={formatCurrency(summary.expenses)} note="来自实际支出记录" tone="navy" delta={summary.expenseCount ? `${summary.expenseCount} 笔支出` : "待记录"} positive={false} />
+      <section className="summary-strip" aria-label="本月关键指标">
+        <div><span>收入</span><strong>{formatCurrency(summary.income)}</strong><small>{summary.incomeCount ? `已入账 ${summary.incomeCount} 笔` : "还没有收入记录"}</small></div>
+        <div><span>经营成本</span><strong>{formatCurrency(summary.expenses)}</strong><small>{summary.expenseCount ? `实际支出 ${summary.expenseCount} 笔` : "还没有支出记录"}</small></div>
+        <div className="is-result"><span>结余</span><strong>{formatCurrency(summary.result)}</strong><small>{summary.result >= 0 ? "当前为正" : "需要关注"}</small></div>
       </section>
 
-      <section className="quick-actions">
-        <button className="quick-action primary" onClick={onPricing}><Sparkles size={20} /><span>算商品<br /><b>建议售价</b></span></button>
-        <button className="quick-action" onClick={onAddMaterial}><PackagePlus size={20} /><span>新增<br /><b>原材料</b></span></button>
-        <button className="quick-action" onClick={onRecord}><ReceiptText size={20} /><span>快速<br /><b>记一笔</b></span></button>
-        <button className="quick-action compact" onClick={onProducts}><LayoutGrid size={20} /><span>商品<br /><b>成本账</b></span></button>
+      <section className="quick-actions" aria-label="常用操作">
+        <button className="quick-action primary" onClick={onPricing}><Sparkles size={20} /><span><b>建议售价</b><small>按利润率反推</small></span></button>
+        <button className="quick-action" onClick={onRecord}><ReceiptText size={20} /><span><b>记一笔</b><small>收入或支出</small></span></button>
+        <button className="quick-action" onClick={onAddMaterial}><PackagePlus size={20} /><span><b>加原材料</b><small>更新商品成本</small></span></button>
       </section>
 
-      <section className="section-heading"><div><span className="eyebrow">待补的账</span><h2>这两笔先处理，利润才算准</h2></div><button onClick={onBusiness}>全部 <ChevronRight size={16} /></button></section>
+      <section className="section-heading"><div><span className="eyebrow">下一步</span><h2>先处理这两项，利润才算准</h2></div><button onClick={onBusiness}>查看经营 <ChevronRight size={16} /></button></section>
       <section className="attention-list">
         <article className="attention-item amber"><div className="attention-icon"><TrendingUp size={19} /></div><div><strong>茶底采购价上涨 8%</strong><p>“招牌奶茶”每份成本增加 0.28 元</p></div><button onClick={onPricing}>去核算</button></article>
         <article className="attention-item blue"><div className="attention-icon"><WalletCards size={19} /></div><div><strong>还有一笔隐形成本未分摊</strong><p>本月配送与交通费 ¥286.00</p></div><button onClick={onBusiness}>查看</button></article>
       </section>
 
-      <section className="section-heading compact"><div><span className="eyebrow">成本口径</span><h2>一件商品，三层答案</h2></div><span className="section-stamp">账已分层</span></section>
+      <section className="section-heading compact"><div><span className="eyebrow">商品成本</span><h2>{product.name}的三层成本</h2></div><span className="section-stamp">账已分层</span></section>
       <section className="cost-layer-card">
         <div className="cost-layer-row"><span>{product.name} · 直接成本</span><div><b>{formatCurrency(product.direct)}</b><small>材料 · 包装 · 直接人工</small></div></div>
         <div className="cost-layer-row active"><span>经营成本</span><div><b>{formatCurrency(operatingCost)}</b><small>已加固定费用与隐形成本</small></div></div>
@@ -288,12 +285,12 @@ function BusinessView({ summary, costs, onPricing, onRecord }: { summary: Return
 
   return (
     <div className="page-content business-content">
-      <section className="period-row"><div><span className="eyebrow">经营账</span><h1>收入进来后，真正还剩多少？</h1></div><button className="range-chip">本月 <ChevronRight size={16} /></button></section>
+      <section className="period-row"><div><span className="eyebrow">经营总览</span><h1>收入进来后，真正还剩多少？</h1><p className="page-subtitle">现金流、趋势和成本构成集中在这里。</p></div><button className="range-chip">本月 <ChevronRight size={16} /></button></section>
       <section className={`cash-flow-card ${isRefreshing ? "is-refreshing" : ""}`}>
         <div className="cash-flow-copy"><span>现金流压力 <button className="micro-info" aria-label="查看现金流压力说明" aria-expanded={showCashDetails} onClick={() => setShowCashDetails((current) => !current)}><Info size={13} /></button></span><h2>{formatCurrency(summary.cashOutflow)}</h2>{summary.cashOutflow > 0 ? <p>本金还款 {formatCurrency(summary.principalRepayment)} · 利息与融资费 {formatCurrency(summary.financingCosts)}</p> : <p className="cash-flow-empty">先记一笔支出或还款，这里会显示现金流压力。</p>}{showCashDetails && <div className="cash-flow-detail" role="status">现金流压力包含本期全部实际流出；本金影响现金，不计入经营利润；利息和融资费用计入资金成本。</div>}</div><div className="cash-orbit" aria-hidden="true"><CircleDollarSign size={32} /><span>{isRefreshing ? "更新中" : "本期"}</span></div>
       </section>
       <section className={`chart-card ${isRefreshing ? "is-refreshing" : ""}`} aria-label="经营趋势图表"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>收入与经营成本</h2></div><span className="legend"><i />收入 <i className="green" />成本</span></div>{isRefreshing && <div className="chart-loading" role="status" aria-live="polite"><span className="loading-sweep" />正在更新经营趋势</div>}{hasTrendData ? <><div className="bar-chart" role="list" aria-label="按日期查看收入和经营成本">{summary.dailySeries.map((item) => <button type="button" className={`bar-pair ${activeItem?.label === item.label ? "is-active" : ""}`} key={item.label} onMouseEnter={() => setActiveLabel(item.label)} onFocus={() => setActiveLabel(item.label)} onClick={() => setActiveLabel(item.label)} aria-label={`${item.label}，收入${formatCurrency(item.income)}，经营成本${formatCurrency(item.expenses)}`} role="listitem"><span className="income-bar" aria-hidden="true" style={{ height: `${Math.max((item.income / maxValue) * 100, item.income ? 8 : 0)}%` }} /><span className="expense-bar" aria-hidden="true" style={{ height: `${Math.max((item.expenses / maxValue) * 100, item.expenses ? 8 : 0)}%` }} /></button>)}</div><div className="chart-labels">{summary.dailySeries.map((item) => <button type="button" className={activeItem?.label === item.label ? "is-active" : ""} onClick={() => setActiveLabel(item.label)} key={item.label}>{item.label}</button>)}</div>{activeItem && <div className="chart-tooltip" role="status"><b>{activeItem.label}</b><span><i className="income-dot" />收入 {formatCurrency(activeItem.income)}</span><span><i className="expense-dot" />成本 {formatCurrency(activeItem.expenses)}</span></div>}</> : <div className="chart-empty" role="status"><BarChart3 size={22} /><strong>还没有经营趋势</strong><span>先记一笔收入或支出，趋势会出现在这里。</span><button type="button" onClick={onRecord}>去记一笔 <ArrowRight size={14} /></button></div>}</section>
-      <section className="section-heading compact"><div><span className="eyebrow">本月成本构成</span><h2>不只看材料钱</h2></div></section>
+      <section className="section-heading compact"><div><span className="eyebrow">成本构成</span><h2>不只看材料钱</h2></div><span className="section-stamp">本月</span></section>
       <section className="ledger-lines">
         <LineItem icon={<Coins size={18} />} label="已记录支出" value={formatCurrency(summary.expenses)} width={`${summary.expenses ? Math.min(summary.expenses / Math.max(summary.income, summary.expenses) * 100, 100) : 0}%`} color="blue" />
         <LineItem icon={<ClipboardList size={18} />} label="非采购支出" value={formatCurrency(hiddenTotal)} width={`${summary.expenses ? Math.min(hiddenTotal / summary.expenses * 100, 100) : 0}%`} color="green" />
