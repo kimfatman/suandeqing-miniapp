@@ -466,6 +466,12 @@ body { font-family: "Inter", "MiSans", "Noto Sans SC", "PingFang SC", "Microsoft
 .category-group-label { display: block; margin: 12px 0 5px; color: #7d8c9c; font-size: 10px; font-weight: 700; }
 .record-category-hint { margin: 9px 0 0; padding: 8px 9px; color: #63758a; border-left: 2px solid #87c4f5; border-radius: 0 8px 8px 0; background: #f1f8fe; font-size: 10px; line-height: 1.5; }
 .financing-categories button.selected { color: #8b5500; border-color: #efc078; background: #fff4df; }
+.record-sale-link { display: inline-flex; align-items: center; min-height: 32px; margin-top: 8px; padding: 0 11px; color: #087ff5; border: 1px solid #a8d5fb; border-radius: 9px; background: #f6fbff; font-size: 11px; font-weight: 700; }
+.material-cash-toggle { display: flex; gap: 9px; align-items: flex-start; margin-top: 11px; padding: 10px; color: #405d72; border: 1px solid #cfe4f4; border-radius: 11px; background: #f7fbff; }
+.material-cash-toggle input { flex: 0 0 auto; width: 16px; height: 16px; margin: 2px 0 0; accent-color: #087ff5; }
+.material-cash-toggle b, .material-cash-toggle small { display: block; }
+.material-cash-toggle b { color: #173c56; font-size: 11px; }
+.material-cash-toggle small { margin-top: 3px; color: #6d8799; font-size: 10px; line-height: 1.45; }
 .profile-data-boundary { display: flex; gap: 9px; align-items: flex-start; margin: 12px 0 0; padding: 10px 12px; color: #397090; border: 1px solid #cfe4f4; border-radius: 12px 15px 15px 12px; background: #f4faff; }
 .profile-data-boundary > svg { flex: 0 0 auto; margin-top: 2px; color: #087ff5; }
 .profile-data-boundary b, .profile-data-boundary small { display: block; }

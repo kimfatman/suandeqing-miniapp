@@ -75,6 +75,9 @@ export type SalesRecord = {
   unitDirectCostSnapshot?: number;
   fixedCostSnapshot?: number;
   hiddenCostSnapshot?: number;
+  /** 隐形成本快照的来源和分摊规则；ledger 代表期间流水总额，仅能在期间内计入一次。 */
+  hiddenCostSourceSnapshot?: "manual" | "ledger";
+  hiddenCostBasisSnapshot?: "perUnit" | "perSale";
   fundingCostSnapshot?: number;
   fundingSourceSnapshot?: "manual" | "ledger";
   costPeriod?: string;
@@ -269,6 +272,12 @@ export const normalizeLedger = (ledger: LedgerData): LedgerData => ({
   products: ledger.products.map((product) => product.bom.length
     ? recalculateProduct(product, ledger.materials, ledger.costs.hiddenCost, ledger.costs.fixedCost)
     : product),
+  sales: (ledger.sales ?? []).map((sale) => ({
+    ...sale,
+    hiddenCostSourceSnapshot: sale.hiddenCostSourceSnapshot ?? (sale.hiddenCostSnapshot !== undefined ? "manual" : undefined),
+    hiddenCostBasisSnapshot: sale.hiddenCostBasisSnapshot ?? (sale.hiddenCostSnapshot !== undefined ? "perUnit" : undefined),
+    fundingSourceSnapshot: sale.fundingSourceSnapshot ?? (sale.fundingCostSnapshot !== undefined ? "manual" : undefined),
+  })),
 });
 
 export const initializeIndustryLedger = (ledger: LedgerData, storeName: string, industry: IndustryKey): LedgerData => {
@@ -276,6 +285,7 @@ export const initializeIndustryLedger = (ledger: LedgerData, storeName: string, 
   if (ledger.profile.onboarded) return next;
   return {
     ...next,
+    costs: { ...next.costs, fixedCost: 0, hiddenCost: 0, fundingCost: 0, hiddenCostSource: "manual", fundingSource: "manual" },
     categoryStatus: Object.fromEntries(next.categories.map((category) => [category, true])),
     materials: [],
     products: [],
@@ -354,6 +364,9 @@ export const summarizeSales = (ledger: LedgerData) => {
   let salesQuantity = 0;
   let costOfSales = 0;
   let allocatedIndirectCosts = 0;
+  let manualFundingCosts = 0;
+  let needsLedgerFunding = false;
+  let needsLedgerHiddenCost = false;
   salesForPeriod.forEach((sale) => {
     const product = ledger.products.find((entry) => entry.id === sale.productId);
     const quantity = Number.isFinite(sale.quantity) && sale.quantity > 0 ? sale.quantity : 0;
@@ -362,22 +375,34 @@ export const summarizeSales = (ledger: LedgerData) => {
     const direct = sale.unitDirectCostSnapshot ?? calculateDirectCost(product, ledger.materials);
     const fixedCost = sale.fixedCostSnapshot ?? ledger.costs.fixedCost;
     const hiddenCost = sale.hiddenCostSnapshot ?? configuredHiddenCost;
+    const hiddenSource = sale.hiddenCostSourceSnapshot ?? ledger.costs.hiddenCostSource ?? "manual";
+    const hiddenBasis = sale.hiddenCostBasisSnapshot ?? ledger.costs.hiddenCostBasis ?? "perUnit";
+    const fundingSource = sale.fundingSourceSnapshot ?? ledger.costs.fundingSource ?? "manual";
     salesRevenue += quantity * unitPrice;
     salesQuantity += quantity;
     costOfSales += direct * quantity;
-    const hiddenAllocation = (sale.hiddenCostSnapshot !== undefined || ledger.costs.hiddenCostBasis !== "perSale") ? hiddenCost * quantity : hiddenCost;
-    allocatedIndirectCosts += fixedCost * quantity + hiddenAllocation;
+    allocatedIndirectCosts += fixedCost * quantity;
+    if (hiddenSource === "ledger") {
+      needsLedgerHiddenCost = true;
+    } else {
+      allocatedIndirectCosts += hiddenBasis === "perSale" ? hiddenCost : hiddenCost * quantity;
+    }
+    if (fundingSource === "ledger") {
+      needsLedgerFunding = true;
+    } else {
+      manualFundingCosts += Math.max(sale.fundingCostSnapshot ?? ledger.costs.fundingCost, 0) * quantity;
+    }
   });
   const ledgerFinancingCosts = summarizeLedgerRecords(ledger.records, period).financingCosts;
-  const snapshotFunding = salesForPeriod.reduce((sum, sale) => sum + (sale.fundingCostSnapshot ?? 0) * (Number.isFinite(sale.quantity) && sale.quantity > 0 ? sale.quantity : 0), 0);
-  const fundingPerSale = ledger.costs.fundingSource === "ledger" ? 0 : Math.max(ledger.costs.fundingCost, 0);
-  const financingCosts = salesForPeriod.some((sale) => sale.fundingCostSnapshot !== undefined) ? ledgerFinancingCosts + snapshotFunding : ledgerFinancingCosts + fundingPerSale * salesQuantity;
+  if (needsLedgerHiddenCost) allocatedIndirectCosts += ledgerHiddenCost;
+  const financingCosts = manualFundingCosts + (needsLedgerFunding ? ledgerFinancingCosts : 0);
   return {
     salesRevenue: money(salesRevenue),
     salesQuantity: money(salesQuantity),
     salesCount: salesForPeriod.length,
     costOfSales: money(costOfSales),
     allocatedIndirectCosts: money(allocatedIndirectCosts),
+    financingCosts: money(financingCosts),
     grossProfit: money(salesRevenue - costOfSales),
     operatingResult: money(salesRevenue - costOfSales - allocatedIndirectCosts - financingCosts),
   };
@@ -444,7 +469,7 @@ export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
     costOfSales: sales.costOfSales,
     grossProfit: sales.grossProfit,
     allocatedIndirectCosts: sales.allocatedIndirectCosts,
-    financingCosts: money(financingCosts),
+    financingCosts: hasSales ? sales.financingCosts : money(financingCosts),
     principalRepayment: money(principalRepayment),
     result: operatingResult,
     incomeCount: ledger.records.filter((record) => record.type === "income").length,

@@ -81,6 +81,15 @@ describe("MaterialSheet interactions", () => {
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("采购金额、采购数量和换算系数都必须大于0");
   });
+
+  it("records a new purchase as a cash outflow by default while allowing price-only entry", () => {
+    const onSave = vi.fn();
+    render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
+    const recordPurchase = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(recordPurchase.checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /保存原材料/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ recordPurchase: true }));
+  });
 });
 
 describe("QuickRecordSheet interactions", () => {
