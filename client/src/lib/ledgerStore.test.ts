@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyIndustryTemplate, calculateBomVersionDirectCost, calculateDirectCost, calculateUnitCost, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
   it("aggregates income, expenses, result, counts and categories from ledger records", () => {
@@ -74,6 +75,21 @@ describe("unit cost and BOM normalization", () => {
     const version = makeBomVersionSnapshot(product, ledger.materials, { lossRate: 0, batchYield: 1 }, "2026-08-18");
     ledger.materials[0].unitCost = 99;
     expect(calculateBomVersionDirectCost(version)).toBe(4.08);
+  });
+});
+
+describe("home readiness", () => {
+  it("guides an empty ledger to record the first real expense before showing other actions", () => {
+    const ledger = initializeIndustryLedger(seedLedger(), "测试小店", "retail");
+    const readiness = getReadiness(ledger, summarizeLedger(ledger), "进货明细");
+    expect(readiness).toMatchObject({ stage: "record", actionLabel: "记一笔支出" });
+  });
+
+  it("moves from product cost completion to sales recording instead of treating cash as profit", () => {
+    const ledger = seedLedger();
+    ledger.records = [{ id: "expense-1", type: "expense", amount: 50, category: "食材采购", note: "采购", date: "2026-08-18" }];
+    const readiness = getReadiness(ledger, summarizeLedger(ledger), "商品配方");
+    expect(readiness).toMatchObject({ stage: "sale", actionLabel: "记录第一笔销售" });
   });
 });
 

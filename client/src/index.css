@@ -445,3 +445,35 @@ body { font-family: "Inter", "MiSans", "Noto Sans SC", "PingFang SC", "Microsoft
   .bom-sheet .calculation-details { max-height: 18vh; }
   .bom-sheet .sheet-action { margin-top: 8px; }
 }
+
+/* 首页完整度引导：在不同数据阶段只突出一个下一步 */
+.ledger-stamp.pending { color: #ffd76e; background: rgb(255 215 110 / .12); border-color: rgb(255 215 110 / .26); }
+.ledger-card-heading + strong + p b { display: block; margin-top: 3px; color: #ffd76e; font-weight: 700; }
+.readiness-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; margin-top: 16px; padding: 17px; overflow: hidden; border: 1px solid #cfe3f7; border-radius: 16px 20px 20px 16px; background: linear-gradient(135deg, #f9fcff 0%, #eff7ff 100%); }
+.readiness-card::before { content: "="; position: absolute; right: 16px; top: -15px; color: rgb(8 127 245 / .08); font-family: "Inter", sans-serif; font-size: 92px; font-weight: 800; }
+.readiness-copy, .readiness-card button { position: relative; z-index: 1; }
+.readiness-copy h2 { margin: 4px 0 5px; color: #0b1836; font-size: 16px; letter-spacing: -.03em; }
+.readiness-copy p { max-width: 440px; margin: 0; color: #627287; font-size: 11px; line-height: 1.55; }
+.readiness-action { min-height: 42px; padding: 0 13px; white-space: nowrap; }
+.readiness-secondary { grid-column: 1 / -1; justify-self: start; display: inline-flex; align-items: center; gap: 3px; padding: 0; color: #377ebc; border: 0; background: transparent; font-size: 11px; font-weight: 700; }
+.analysis-readiness { padding: 19px; }
+.analysis-readiness h2 { margin: 4px 0 12px; color: #0b1836; font-size: 16px; }
+.analysis-readiness p { margin: 11px 0 14px; color: #6e7e8e; font-size: 11px; }
+.analysis-steps { display: flex; flex-wrap: wrap; gap: 7px; }
+.analysis-steps span { padding: 6px 8px; color: #8a99a7; border: 1px dashed #cad7e4; border-radius: 8px; background: #fff; font-size: 10px; }
+.analysis-steps span.done { color: #0e7b57; border-style: solid; border-color: #b5e9d5; background: #f1fbf7; font-weight: 700; }
+.status-pill.warning { color: #a76600; background: #fff4dc; border-color: #ffd995; }
+.category-group-label { display: block; margin: 12px 0 5px; color: #7d8c9c; font-size: 10px; font-weight: 700; }
+.record-category-hint { margin: 9px 0 0; padding: 8px 9px; color: #63758a; border-left: 2px solid #87c4f5; border-radius: 0 8px 8px 0; background: #f1f8fe; font-size: 10px; line-height: 1.5; }
+.financing-categories button.selected { color: #8b5500; border-color: #efc078; background: #fff4df; }
+.profile-data-boundary { display: flex; gap: 9px; align-items: flex-start; margin: 12px 0 0; padding: 10px 12px; color: #397090; border: 1px solid #cfe4f4; border-radius: 12px 15px 15px 12px; background: #f4faff; }
+.profile-data-boundary > svg { flex: 0 0 auto; margin-top: 2px; color: #087ff5; }
+.profile-data-boundary b, .profile-data-boundary small { display: block; }
+.profile-data-boundary b { color: #24516e; font-size: 11px; }
+.profile-data-boundary small { margin-top: 3px; color: #628098; font-size: 10px; line-height: 1.45; }
+.industry-switch-hint { margin: 9px 2px 0; color: #718297; font-size: 10px; line-height: 1.5; }
+@media (max-width: 520px) {
+  .readiness-card { grid-template-columns: 1fr; gap: 12px; padding: 15px; }
+  .readiness-action { width: 100%; justify-content: center; }
+  .analysis-steps { display: grid; grid-template-columns: 1fr; }
+}

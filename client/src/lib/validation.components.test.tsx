@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => cleanup());
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
+import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { CategorySheet, MaterialSheet, ProductNameSheet, ProfileView } from "@/pages/Home";
 import { makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
@@ -79,6 +80,20 @@ describe("MaterialSheet interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存原材料/ }));
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("采购金额、采购数量和换算系数都必须大于0");
+  });
+});
+
+describe("QuickRecordSheet interactions", () => {
+  it("starts with an empty amount and separates financing categories with an explanatory hint", () => {
+    const onSave = vi.fn();
+    render(<QuickRecordSheet categories={["货品采购", "物流配送"]} onClose={vi.fn()} onSave={onSave} />);
+    const amount = screen.getByRole("spinbutton") as HTMLInputElement;
+    expect(amount.value).toBe("");
+    expect((screen.getByRole("button", { name: /保存这笔账/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("经营支出")).toBeTruthy();
+    expect(screen.getByText("借款与还款")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "本金还款" }));
+    expect(screen.getByText("本金还款会减少手上现金，但不计入经营成本。")).toBeTruthy();
   });
 });
 
