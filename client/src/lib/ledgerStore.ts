@@ -108,7 +108,10 @@ export type ProductIndirectAllocation = {
   totalIndirectCost: number;
   unitIndirectCost: number;
   allocationBasis: number;
+  totalBasis: number;
+  allocationShare: number;
   outputQuantity: number;
+  salesAmount: number;
 };
 
 export type UnitIndirectCostDetail = {
@@ -244,11 +247,13 @@ export const calculateProductIndirectAllocations = (plan: MonthlyIndirectCostPla
   return Object.fromEntries(plan.products.map((input) => {
     const allocationBasis = basisFor(input);
     const outputQuantity = Math.max(Number(input.outputQuantity) || 0, 0);
+    const salesAmount = Math.max(Number(input.salesAmount) || 0, 0);
+    const allocationShare = totalBasis > 0 ? allocationBasis / totalBasis : 0;
     const unitIndirectCost = totalBasis > 0 && outputQuantity > 0
       ? money(total * allocationBasis / totalBasis / outputQuantity)
       : 0;
     const totalIndirectCost = money(unitIndirectCost * outputQuantity);
-    return [input.productId, { productId: input.productId, totalIndirectCost, unitIndirectCost, allocationBasis, outputQuantity }];
+    return [input.productId, { productId: input.productId, totalIndirectCost, unitIndirectCost, allocationBasis, totalBasis, allocationShare, outputQuantity, salesAmount }];
   }));
 };
 

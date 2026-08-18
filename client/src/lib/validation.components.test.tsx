@@ -75,6 +75,17 @@ describe("PricingPanel cost traceability", () => {
     fireEvent.click(screen.getByText("价格怎么推出来？"));
     expect(screen.getByText("反推分母")).toBeTruthy();
   });
+
+  it("shows revenue-share evidence and warns when one unit bears the entire monthly allocation", () => {
+    const onAdjustAllocation = vi.fn();
+    render(<PricingPanel productName="手作挂饰" costs={{ directCost: 8.5, fixedCost: 470, hiddenCost: 0, fundingCost: 0, feeRate: 0 }} costLines={[{ label: "拿货价", amount: 8.5, source: "商品成本", layer: "direct" }, { label: "房租", amount: 150, source: "2026年8月 · 按销售额分摊", layer: "operating" }, { label: "人工", amount: 300, source: "2026年8月 · 按销售额分摊", layer: "operating" }, { label: "水电", amount: 20, source: "2026年8月 · 按销售额分摊", layer: "operating" }]} allocationContext={{ periodLabel: "2026年8月", method: "revenue", monthlyIndirectTotal: 470, productIndirectTotal: 470, unitIndirectCost: 470, allocationShare: 1, outputQuantity: 1, productSalesAmount: 1000, totalSalesAmount: 1000 }} onClose={vi.fn()} onAdjustAllocation={onAdjustAllocation} />);
+    expect(screen.getByText("本月分摊依据")).toBeTruthy();
+    expect(screen.getByText("销售额占比")).toBeTruthy();
+    expect(screen.getByText("100.0%")).toBeTruthy();
+    expect(screen.getByText("当前商品承担了本月全部间接费用")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "检查并调整本月分摊" }));
+    expect(onAdjustAllocation).toHaveBeenCalledOnce();
+  });
 });
 
 describe("Sale refund and inventory interactions", () => {

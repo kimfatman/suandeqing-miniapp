@@ -271,6 +271,10 @@ describe("monthly indirect-cost allocation", () => {
     const revenue = calculateProductIndirectAllocations(makePlan("revenue"));
     expect(revenue[1].unitIndirectCost).toBeCloseTo(3.25, 2);
     expect(revenue[2].unitIndirectCost).toBeCloseTo(19.5, 2);
+    expect(revenue[1].salesAmount).toBe(1000);
+    expect(revenue[1].totalBasis).toBe(4000);
+    expect(revenue[1].allocationShare).toBe(0.25);
+    expect(revenue[1].totalIndirectCost / revenue[1].outputQuantity).toBe(revenue[1].unitIndirectCost);
   });
 
   it("uses weighted production hours and allocates the full monthly total exactly once", () => {

@@ -160,6 +160,18 @@ export default function Home() {
   const fullCost = operatingCost + currentCosts.fundingCost;
   const pricingPlan = getMonthlyIndirectPlan(ledger, selectedPeriod);
   const pricingAllocation = pricingPlan ? calculateProductIndirectAllocations(pricingPlan)[selectedProduct.id] : undefined;
+  const pricingTotalSalesAmount = pricingPlan?.products.reduce((sum, item) => sum + Math.max(Number(item.salesAmount) || 0, 0), 0) ?? 0;
+  const pricingAllocationContext = pricingPlan && pricingAllocation ? {
+    periodLabel: formatBusinessPeriod(pricingPlan.period),
+    method: pricingPlan.method,
+    monthlyIndirectTotal: calculateMonthlyIndirectTotal(pricingPlan.fixedCosts),
+    productIndirectTotal: pricingAllocation.totalIndirectCost,
+    unitIndirectCost: pricingAllocation.unitIndirectCost,
+    allocationShare: pricingAllocation.allocationShare,
+    outputQuantity: pricingAllocation.outputQuantity,
+    productSalesAmount: pricingAllocation.salesAmount,
+    totalSalesAmount: pricingTotalSalesAmount,
+  } : undefined;
   const pricingDirectCost = calculateDirectCost(selectedProduct, ledger.materials);
   const pricingIndirectCost = pricingAllocation?.unitIndirectCost ?? Math.max(selectedProduct.operating - pricingDirectCost, 0);
   const pricingCosts = { ...currentCosts, directCost: pricingDirectCost, fixedCost: pricingIndirectCost, hiddenCost: pricingPlan ? 0 : currentCosts.hiddenCost };
@@ -354,7 +366,7 @@ export default function Home() {
         ))}
       </nav>
 
-      {showPricing && <PricingPanel costs={pricingCosts} productName={selectedProduct.name} costLines={pricingCostLines} onClose={() => setShowPricing(false)} onSave={saveSuggestedPrice} />}
+      {showPricing && <PricingPanel costs={pricingCosts} productName={selectedProduct.name} costLines={pricingCostLines} allocationContext={pricingAllocationContext} onClose={() => setShowPricing(false)} onSave={saveSuggestedPrice} onAdjustAllocation={() => { setShowPricing(false); setShowMonthlyAllocation(true); }} />}
       {showProductNameSheet && <ProductNameSheet onClose={() => setShowProductNameSheet(false)} onSave={(name) => {
         const nextId = Math.max(0, ...ledger.products.map((item) => item.id)) + 1;
         const nextProduct: LedgerProduct = { id: nextId, name, category: getProductPendingLabel(currentTemplate.productCostLabel), price: 0, direct: 0, operating: 0, change: `先补充${currentTemplate.productCostLabel}`, packaging: 0, directLabor: 0, bom: [] };
