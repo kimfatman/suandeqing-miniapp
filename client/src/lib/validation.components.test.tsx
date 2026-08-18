@@ -86,6 +86,21 @@ describe("PricingPanel cost traceability", () => {
     fireEvent.click(screen.getByRole("button", { name: "检查并调整本月分摊" }));
     expect(onAdjustAllocation).toHaveBeenCalledOnce();
   });
+
+  it("keeps zero-value fees visually empty and lets a target margin be cleared and re-entered", () => {
+    render(<PricingPanel costs={{ directCost: 6, fixedCost: 0, hiddenCost: 0, fundingCost: 0, feeRate: 3 }} onClose={vi.fn()} />);
+    const target = screen.getByRole("spinbutton", { name: "目标利润率" });
+    const fixedFee = screen.getByRole("spinbutton", { name: "每单固定费用" });
+    expect((fixedFee as HTMLInputElement).value).toBe("");
+    fireEvent.change(target, { target: { value: "" } });
+    expect((target as HTMLInputElement).value).toBe("");
+    expect(screen.getByText("请填写目标利润率。")).toBeTruthy();
+    fireEvent.change(target, { target: { value: "80" } });
+    expect((target as HTMLInputElement).value).toBe("80");
+    expect(screen.queryByText("请填写目标利润率。")).toBeNull();
+    fireEvent.change(target, { target: { value: "98" } });
+    expect(screen.getByText(/目标利润率与平台费率合计必须小于 100%/)).toBeTruthy();
+  });
 });
 
 describe("Sale refund and inventory interactions", () => {

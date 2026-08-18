@@ -52,8 +52,10 @@ const scopeNames: Record<CostScope, string> = {
 export function PricingPanel({ costs, productName = "当前商品", costLines = [], allocationContext, onClose, onSave, onAdjustAllocation }: PricingPanelProps) {
   const [scope, setScope] = useState<CostScope>("operating");
   const [mode, setMode] = useState<PricingMode>("margin");
-  const [target, setTarget] = useState(30);
-  const [fixedFee, setFixedFee] = useState(0);
+  const [targetText, setTargetText] = useState("30");
+  const [fixedFeeText, setFixedFeeText] = useState("");
+  const target = targetText.trim() === "" ? Number.NaN : Number(targetText);
+  const fixedFee = fixedFeeText.trim() === "" ? 0 : Number(fixedFeeText);
   const result = useMemo(
     () => calculatePricing({ inputs: costs, scope, mode, target, fixedFee }),
     [costs, fixedFee, mode, scope, target],
@@ -62,6 +64,17 @@ export function PricingPanel({ costs, productName = "当前商品", costLines = 
   const visibleCostTotal = visibleCostLines.reduce((total, line) => total + line.amount, 0);
   const scopeDifference = result.cost - visibleCostTotal;
   const formulaDenominator = mode === "margin" ? 1 - costs.feeRate / 100 - target / 100 : 1 - costs.feeRate / 100;
+  const targetError = !Number.isFinite(target)
+    ? mode === "margin" ? "请填写目标利润率。" : "请填写目标单份利润。"
+    : target < 0
+      ? "目标值不能小于 0。"
+      : !Number.isFinite(fixedFee) || fixedFee < 0
+        ? "每单固定费用不能小于 0。"
+        : costs.feeRate >= 100
+          ? "平台费率必须小于 100%。"
+          : mode === "margin" && target + costs.feeRate >= 100
+            ? `目标利润率与平台费率合计必须小于 100%（当前 ${(target + costs.feeRate).toFixed(1)}%）。`
+            : "目标值暂时无法计算，请检查输入。";
   const methodName = allocationContext?.method === "revenue" ? "按销售额" : allocationContext?.method === "hours" ? "按工时" : "按产量";
   const fullShare = Boolean(allocationContext && allocationContext.allocationShare >= 0.999);
   const lowOutput = Boolean(allocationContext && allocationContext.outputQuantity > 0 && allocationContext.outputQuantity <= 1);
@@ -120,9 +133,11 @@ export function PricingPanel({ costs, productName = "当前商品", costLines = 
             <input
               type="number"
               inputMode="decimal"
-              value={target}
+              value={targetText}
               min="0"
-              onChange={(event) => setTarget(Number(event.target.value))}
+              aria-label={mode === "margin" ? "目标利润率" : "目标单份利润"}
+              placeholder={mode === "margin" ? "例如 30" : "例如 8"}
+              onChange={(event) => setTargetText(event.target.value)}
             />
             <b>{mode === "margin" ? "%" : "元"}</b>
           </div>
@@ -133,9 +148,11 @@ export function PricingPanel({ costs, productName = "当前商品", costLines = 
             <input
               type="number"
               inputMode="decimal"
-              value={fixedFee}
+              value={fixedFeeText}
               min="0"
-              onChange={(event) => setFixedFee(Number(event.target.value))}
+              aria-label="每单固定费用"
+              placeholder="没有则留空"
+              onChange={(event) => setFixedFeeText(event.target.value)}
             />
             <b>元</b>
           </div>
@@ -153,7 +170,7 @@ export function PricingPanel({ costs, productName = "当前商品", costLines = 
             </div>
           </div>
         ) : (
-          <div className="invalid-note">目标利润率过高或费率设置无效，请调整后再计算。</div>
+          <div className="invalid-note">{targetError}</div>
         )}
 
         <details className="pricing-cost-details" open>
@@ -187,7 +204,7 @@ export function PricingPanel({ costs, productName = "当前商品", costLines = 
             <span><b>本次成本</b><em>{formatCurrency(result.cost)}</em></span>
             <span><b>每单固定费用</b><em>+ {formatCurrency(fixedFee)}</em></span>
             {mode === "profit" && <span><b>目标单份利润</b><em>+ {formatCurrency(target)}</em></span>}
-            <span><b>反推分母</b><em>÷ (1 − {costs.feeRate}%{mode === "margin" ? ` − ${target}%` : ""}) = {formulaDenominator.toFixed(3)}</em></span>
+            <span><b>反推分母</b><em>÷ (1 − {costs.feeRate}%{mode === "margin" ? ` − ${Number.isFinite(target) ? target : "—"}%` : ""}) = {Number.isFinite(formulaDenominator) ? formulaDenominator.toFixed(3) : "—"}</em></span>
             <span><b>未取整价格</b><em>{formatCurrency(result.rawPrice)}</em></span>
             <span><b>建议售价</b><em>向上取整至 0.5 元：{formatCurrency(result.suggestedPrice)}</em></span>
           </div>
