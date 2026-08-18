@@ -7,7 +7,7 @@ import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CategorySheet, MaterialSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
+import { CategorySheet, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
 import { INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -31,6 +31,18 @@ describe("ProfileView industry template interactions", () => {
     expect(onIndustryChange).toHaveBeenCalledWith("retail");
     fireEvent.click(screen.getByRole("button", { name: /停用食材采购/ }));
     expect(onToggleCategory).toHaveBeenCalledWith("食材采购");
+  });
+});
+
+describe("MessageInboxSheet interactions", () => {
+  it("marks an unread message as read and uses its app action", () => {
+    const onMarkRead = vi.fn();
+    const onAction = vi.fn();
+    render(<MessageInboxSheet isAuthenticated loading={false} unreadCount={1} onClose={vi.fn()} onLogin={vi.fn()} onMarkRead={onMarkRead} onMarkAll={vi.fn()} onAction={onAction} messages={[{ id: 9, title: "请及时备份账本", summary: "换设备前先创建一份云端备份。", body: null, level: "safety", actionLabel: "打开我的", actionPath: "/?tab=profile", publishedAt: new Date("2026-08-18T01:00:00.000Z"), readAt: null, createdAt: new Date("2026-08-18T01:00:00.000Z") }]} />);
+    fireEvent.click(screen.getByRole("button", { name: /请及时备份账本/ }));
+    expect(onMarkRead).toHaveBeenCalledWith(9);
+    fireEvent.click(screen.getByRole("button", { name: /打开我的/ }));
+    expect(onAction).toHaveBeenCalledWith("/?tab=profile");
   });
 });
 

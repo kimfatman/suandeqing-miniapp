@@ -1,5 +1,5 @@
 /** 商户账簿工作台：首页按“结论—待办—明细”排列，让小商家在每次打开时先知道该做什么。 */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Banknote,
@@ -27,6 +27,8 @@ import {
   TrendingUp,
   WalletCards,
   Download,
+  FileText,
+  Send,
   Upload,
 } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
@@ -44,6 +46,7 @@ import { validateCategoryName, validateMaterialDraft, validateProductName, valid
 import { startLogin } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { getMessageLevelLabel, type MessageLevel } from "@shared/messagePolicy";
 
 type Tab = "home" | "products" | "business" | "profile";
 
@@ -105,10 +108,18 @@ export default function Home() {
   const [costEditor, setCostEditor] = useState<"hidden" | "funding" | null>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [showDataManagement, setShowDataManagement] = useState(false);
+  const [showMessages, setShowMessages] = useState(false);
+  const [showAdminMessages, setShowAdminMessages] = useState(false);
   const [pendingIndustry, setPendingIndustry] = useState<IndustryKey | null>(null);
   const { user, loading: authLoading, isAuthenticated, logout, isLoggingOut } = useAuth();
   const cloudLedger = trpc.ledger.get.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const backupLedger = trpc.ledger.backup.useMutation();
+  const messageUnread = trpc.messages.unreadCount.useQuery(undefined, { enabled: isAuthenticated, retry: false, refetchOnWindowFocus: true });
+  const inbox = trpc.messages.list.useQuery({ limit: 30 }, { enabled: isAuthenticated && showMessages, retry: false });
+  const trpcUtils = trpc.useUtils();
+  const markMessageRead = trpc.messages.markRead.useMutation({ onSuccess: async () => { await Promise.all([trpcUtils.messages.unreadCount.invalidate(), trpcUtils.messages.list.invalidate()]); } });
+  const markAllMessagesRead = trpc.messages.markAllRead.useMutation({ onSuccess: async () => { await Promise.all([trpcUtils.messages.unreadCount.invalidate(), trpcUtils.messages.list.invalidate()]); } });
+  const unreadCount = messageUnread.data?.count ?? 0;
   const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
   const [selectedPeriod, setSelectedPeriod] = useState(() => getBusinessPeriod());
@@ -184,6 +195,12 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleMessageAction = (path?: string | null) => {
+    setShowMessages(false);
+    const tab = path?.match(/[?&]tab=(home|products|business|profile)/)?.[1] as Tab | undefined;
+    navigate(tab ?? "home");
+  };
+
   const completeOnboarding = ({ storeName, industry }: { storeName: string; industry: IndustryKey }) => {
     const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
     setLedger((current) => {
@@ -217,8 +234,8 @@ export default function Home() {
       <main className="mobile-page">
         <header className="mobile-header">
           <div className="brand-lockup"><BrandMark size={38} /><div><strong>算得清</strong><span>{ledger.profile.storeName} · 小店账簿</span></div></div>
-          <button className="icon-button notification-button" onClick={() => notify("本周有 2 项成本需要关注") } aria-label="查看提醒">
-            <BellRing size={20} /><i />
+          <button className="icon-button notification-button" onClick={() => setShowMessages(true)} aria-label={unreadCount ? `查看提醒，${unreadCount} 条未读` : "查看提醒"}>
+            <BellRing size={20} />{Boolean(unreadCount) && <i>{unreadCount > 99 ? "99+" : unreadCount}</i>}
           </button>
         </header>
 
@@ -261,7 +278,7 @@ export default function Home() {
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} productCount={ledger.products.length} period={selectedPeriod} onPeriodChange={setSelectedPeriod} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} />}
-        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
+        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
       </main>
 
       <nav className="mobile-tabbar" aria-label="底部导航">
@@ -291,6 +308,8 @@ export default function Home() {
       {showBomEditor && <BomEditorSheet product={selectedProduct} materials={ledger.materials} categories={getActiveCategories(ledger)} costLabel={currentTemplate.productCostLabel} costAction={currentTemplate.productCostAction} costEmpty={currentTemplate.productCostEmpty} onClose={() => setShowBomEditor(false)} onSave={(items, settings) => { setLedger((current) => { const products = current.products.map((item) => { if (item.id !== selectedProduct.id) return item; const draftProduct = { ...item, bom: items, costCategory: settings.costCategory, lossRate: settings.lossRate, batchYield: settings.batchYield, materialUnitCosts: settings.costSnapshot?.materialUnitCosts, packaging: settings.costSnapshot?.packaging ?? item.packaging, directLabor: settings.costSnapshot?.directLabor ?? item.directLabor }; const recalculated = recalculateProduct(draftProduct, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost); const nextVersion = makeBomVersionSnapshot(draftProduct, current.materials, settings, new Date().toISOString().slice(0, 10)); return { ...recalculated, category: items.length || recalculated.direct > 0 ? "已补齐成本" : getProductPendingLabel(currentTemplate.productCostLabel), bomVersions: [...(item.bomVersions ?? []), nextVersion] }; }); const next = { ...current, products }; persistLedger(next); return next; }); setShowBomEditor(false); notify(`已保存${currentTemplate.productCostLabel}，并生成新的成本版本`); }} />}
       {costEditor && <CostSettingsSheet type={costEditor} value={costEditor === "hidden" ? currentCosts.hiddenCost : currentCosts.fundingCost} onClose={() => setCostEditor(null)} onSave={(value) => { const nextCosts = { ...currentCosts, [costEditor === "hidden" ? "hiddenCost" : "fundingCost"]: value }; setCurrentCosts(nextCosts); setLedger((current) => { const next = { ...current, costs: nextCosts, products: costEditor === "hidden" ? current.products.map((product) => recalculateProduct(product, current.materials, nextCosts.hiddenCost, nextCosts.fixedCost)) : current.products }; persistLedger(next); return next; }); setCostEditor(null); notify(costEditor === "hidden" ? "已更新隐形成本，经营成本已重新计算" : "已更新资金成本，完整成本已重新计算"); }} />}
       {showDataManagement && <DataManagementSheet isAuthenticated={isAuthenticated} cloudAvailable={Boolean(cloudLedger.data)} backupAt={cloudLedger.data?.backedUpAt} isBackingUp={backupLedger.isPending} onClose={() => setShowDataManagement(false)} onLogin={startLogin} onBackup={backupCurrentLedger} onRestoreCloud={() => { if (!cloudLedger.data) return; restoreLedger(cloudLedger.data.ledgerJson, "云端"); setShowDataManagement(false); }} onExport={exportLedger} onImport={(content) => { restoreLedger(content, "导入文件"); setShowDataManagement(false); }} />}
+      {showMessages && <MessageInboxSheet isAuthenticated={isAuthenticated} loading={inbox.isLoading} messages={inbox.data ?? []} unreadCount={messageUnread.data?.count ?? 0} onClose={() => setShowMessages(false)} onLogin={startLogin} onMarkRead={(id) => markMessageRead.mutate({ userMessageId: id })} onMarkAll={() => markAllMessagesRead.mutate()} onAction={handleMessageAction} />}
+      {showAdminMessages && user?.role === "admin" && <AdminMessageSheet onClose={() => setShowAdminMessages(false)} onNotice={notify} />}
       {pendingIndustry && <IndustryChangeSheet current={ledger.profile.industry} next={pendingIndustry} onClose={() => setPendingIndustry(null)} onConfirm={confirmIndustryChange} />}
       {toast && <div className="app-toast"><CheckBadge />{toast}</div>}
     </div>
@@ -466,7 +485,7 @@ function BusinessView({ summary, costs, productCount, period, onPeriodChange, on
   );
 }
 
-export function ProfileView({ storeName, industry, categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt }: { storeName: string; industry: IndustryKey; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void }) {
+export function ProfileView({ storeName, industry, categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt }: { storeName: string; industry: IndustryKey; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void }) {
   const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
   const industryName = template.label;
   return (
@@ -479,7 +498,7 @@ export function ProfileView({ storeName, industry, categories, categoryStatus, u
       {user && <button className="account-logout" onClick={() => void onLogout()} disabled={isLoggingOut}><LogOut size={15} />{isLoggingOut ? "正在退出" : "退出账号"}</button>}
       <section className="setting-group"><div className="setting-group-heading"><span className="group-label">经营资料</span><span className="setting-summary">新录入按行业适配</span></div><div className="industry-switcher" role="list" aria-label="选择行业模板">{INDUSTRY_TEMPLATES.map((template) => <button key={template.key} className={template.key === industry ? "industry-switch-card active" : "industry-switch-card"} onClick={() => onIndustryChange(template.key)}><span className="industry-switch-symbol">{template.shortLabel.slice(0, 1)}</span><span><b>{template.label}</b><small>{template.description}</small></span>{template.key === industry && <CheckBadge />}</button>)}</div></section>
       <section className="setting-group"><div className="setting-group-heading"><span className="group-label">成本项目</span><button className="text-action" onClick={onAddCategory}><Plus size={14} />新增</button></div><div className="custom-category-list">{categories.map((category) => { const active = categoryStatus?.[category] !== false; return <div className={active ? "custom-category-row" : "custom-category-row disabled"} key={category}><button className="category-name-button" onClick={() => onEditCategory(category)}><span>{category}</span><small>{active ? "启用" : "停用"}</small></button><button className="category-toggle" aria-label={`${active ? "停用" : "启用"}${category}`} onClick={() => onToggleCategory(category)}>{active ? "停用" : "启用"}</button><ChevronRight size={16} /></div>; })}</div></section><section className="setting-group"><span className="group-label">经营口径</span><SettingItem icon={<ClipboardList size={19} />} label="隐形成本" note={template.hiddenCostCategory} onClick={onHiddenCost} /><SettingItem icon={<WalletCards size={19} />} label="资金成本" note="仅利息和融资费" onClick={onDebt} /><SettingItem icon={<ReceiptText size={19} />} label="默认分摊" note="按销量" onClick={() => undefined} /></section>
-      <section className="setting-group"><span className="group-label">数据与安全</span><SettingItem icon={<BookOpenCheck size={19} />} label="成本口径" note="直接 · 经营 · 完整" onClick={() => undefined} /><SettingItem icon={<Settings2 size={19} />} label="数据管理" note={user ? "备份、恢复与导出" : "导出与导入恢复"} onClick={onDataManagement} /></section>
+      <section className="setting-group"><span className="group-label">数据与安全</span><SettingItem icon={<BookOpenCheck size={19} />} label="成本口径" note="直接 · 经营 · 完整" onClick={() => undefined} /><SettingItem icon={<Settings2 size={19} />} label="数据管理" note={user ? "备份、恢复与导出" : "导出与导入恢复"} onClick={onDataManagement} />{user?.role === "admin" && <SettingItem icon={<Send size={19} />} label="商户消息" note="创建、发布与撤回" onClick={() => onAdminMessages?.()} />}</section>
     </div>
   );
 }
@@ -510,6 +529,51 @@ function IndustryChangeSheet({ current, next, onClose, onConfirm }: { current: I
   const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === current) ?? INDUSTRY_TEMPLATES[0];
   const nextTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === next) ?? INDUSTRY_TEMPLATES[0];
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet industry-change-sheet" role="dialog" aria-modal="true" aria-label="确认切换行业" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">经营资料</span><h2>切换为{nextTemplate.label}</h2></div><button className="icon-button" onClick={onClose}>×</button></header><p className="industry-change-lead">从{currentTemplate.label}切换后，只影响之后的新录入。</p><div className="impact-list"><p><b>将改变</b> 默认成本分类、商品成本名称、快速成本预设和模板隐形成本分类。</p><p><b>不会改变</b> 已有商品、材料、流水、销售、成本版本和自定义成本口径。</p></div><button className="primary-action sheet-action" onClick={onConfirm}><CheckBadge />确认切换行业</button></section></div>;
+}
+
+type InboxMessage = { id: number; title: string; summary: string; body: string | null; level: MessageLevel; actionLabel: string | null; actionPath: string | null; publishedAt: Date | null; readAt: Date | null; createdAt: Date };
+
+export function MessageInboxSheet({ isAuthenticated, loading, messages, unreadCount, onClose, onLogin, onMarkRead, onMarkAll, onAction }: { isAuthenticated: boolean; loading: boolean; messages: InboxMessage[]; unreadCount: number; onClose: () => void; onLogin: () => void; onMarkRead: (id: number) => void; onMarkAll: () => void; onAction: (path?: string | null) => void }) {
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet message-inbox-sheet" role="dialog" aria-modal="true" aria-label="消息中心" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">服务与提醒</span><h2>消息中心</h2></div><button className="icon-button" onClick={onClose}>×</button></header>{!isAuthenticated ? <div className="message-empty"><BellRing size={22} /><b>登录后查看服务消息</b><small>运营通知只会展示给对应的已登录商户。</small><button className="primary-action" onClick={onLogin}><LogIn size={16} />登录查看</button></div> : loading ? <div className="message-empty"><span className="loading-sweep" />正在加载消息</div> : !messages.length ? <div className="message-empty"><BellRing size={22} /><b>暂时没有新消息</b><small>账本安全和产品更新会在这里保留。</small></div> : <><div className="message-inbox-meta"><span>{unreadCount ? `${unreadCount} 条未读` : "已全部读完"}</span>{unreadCount > 0 && <button onClick={onMarkAll}>全部已读</button>}</div><div className="message-list">{messages.map((message) => <article className={message.readAt ? "message-card" : "message-card unread"} key={message.id}><button className="message-copy" onClick={() => !message.readAt && onMarkRead(message.id)}><span className={`message-level ${message.level}`}>{getMessageLevelLabel(message.level)}</span><b>{message.title}</b><p>{message.summary}</p><small>{new Date(message.publishedAt ?? message.createdAt).toLocaleString("zh-CN")}</small></button>{message.actionLabel && <button className="message-action" onClick={() => { if (!message.readAt) onMarkRead(message.id); onAction(message.actionPath); }}>{message.actionLabel}<ChevronRight size={14} /></button>}</article>)}</div></>}</section></div>;
+}
+
+const messageActionOptions = [
+  { value: "", label: "不设置跳转" },
+  { value: "/?tab=home", label: "查看首页" },
+  { value: "/?tab=products", label: "查看商品" },
+  { value: "/?tab=business", label: "查看经营" },
+  { value: "/?tab=profile", label: "打开我的" },
+] as const;
+
+function AdminMessageSheet({ onClose, onNotice }: { onClose: () => void; onNotice: (message: string) => void }) {
+  const [title, setTitle] = useState("");
+  const [summary, setSummary] = useState("");
+  const [body, setBody] = useState("");
+  const [level, setLevel] = useState<MessageLevel>("info");
+  const [targetType, setTargetType] = useState<"all" | "user">("all");
+  const [targetUserId, setTargetUserId] = useState("");
+  const [actionPath, setActionPath] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const utils = trpc.useUtils();
+  const targets = trpc.admin.messages.targetUsers.useQuery();
+  const previewInput = useMemo(() => ({ targetType, targetUserId: targetType === "user" && targetUserId ? Number(targetUserId) : undefined }), [targetType, targetUserId]);
+  const preview = trpc.admin.messages.preview.useQuery(previewInput, { enabled: targetType === "all" || Boolean(targetUserId) });
+  const campaigns = trpc.admin.messages.list.useQuery();
+  const createDraft = trpc.admin.messages.createDraft.useMutation();
+  const publish = trpc.admin.messages.publish.useMutation({ onSuccess: async () => { await Promise.all([utils.admin.messages.list.invalidate(), utils.admin.messages.preview.invalidate()]); onNotice("消息已发布，收件人已写入站内收件箱"); } });
+  const recall = trpc.admin.messages.recall.useMutation({ onSuccess: async () => { await utils.admin.messages.list.invalidate(); onNotice("消息已撤回，用户将不再看到该消息"); } });
+  const selectedAction = messageActionOptions.find((item) => item.value === actionPath);
+  const saveDraft = async () => {
+    setError(null);
+    try {
+      const draft = await createDraft.mutateAsync({ title, summary, body: body.trim() || null, level, targetType, targetUserId: targetType === "user" && targetUserId ? Number(targetUserId) : null, actionPath: selectedAction?.value || null, actionLabel: selectedAction?.value ? selectedAction.label : null, expiresAt: null });
+      await utils.admin.messages.list.invalidate();
+      onNotice(`已保存草稿，可发布给 ${preview.data?.recipientCount ?? 0} 位商户`);
+      setTitle(""); setSummary(""); setBody(""); setActionPath("");
+      if (!draft.id) setError("草稿已保存，但未返回可发布编号。");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "保存草稿失败，请稍后重试。"); }
+  };
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet admin-message-sheet" role="dialog" aria-modal="true" aria-label="商户消息后台" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">管理员后台</span><h2>发布商户消息</h2></div><button className="icon-button" onClick={onClose}>×</button></header><p className="admin-message-note">消息只会投递至站内收件箱。发布后会固化收件人范围，正文不支持外部链接。</p><label className="admin-message-field"><span>消息类型</span><select value={level} onChange={(event) => setLevel(event.target.value as MessageLevel)}>{(["safety", "important", "update", "info"] as MessageLevel[]).map((item) => <option value={item} key={item}>{getMessageLevelLabel(item)}</option>)}</select></label><label className="admin-message-field"><span>标题</span><input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} placeholder="例如：请及时备份账本" /></label><label className="admin-message-field"><span>摘要</span><input value={summary} maxLength={180} onChange={(event) => setSummary(event.target.value)} placeholder="最多两行，说明发生了什么和下一步动作" /></label><label className="admin-message-field"><span>详细说明（可选）</span><textarea value={body} maxLength={10000} onChange={(event) => setBody(event.target.value)} placeholder="仅填写与商户服务相关的说明" /></label><div className="admin-target"><span>投递范围</span><div><button className={targetType === "all" ? "selected" : ""} onClick={() => setTargetType("all")}>全部已登录商户</button><button className={targetType === "user" ? "selected" : ""} onClick={() => setTargetType("user")}>指定商户</button></div>{targetType === "user" && <select value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)}><option value="">选择商户</option>{targets.data?.map((target) => <option value={target.id} key={target.id}>{target.name || target.email || `商户 #${target.id}`}</option>)}</select>}<small>{preview.isLoading ? "正在计算收件人…" : `预计投递：${preview.data?.recipientCount ?? 0} 位商户`}</small></div><label className="admin-message-field"><span>点击动作</span><select value={actionPath} onChange={(event) => setActionPath(event.target.value)}>{messageActionOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action sheet-action" disabled={createDraft.isPending || !title.trim() || !summary.trim() || (targetType === "user" && !targetUserId)} onClick={() => void saveDraft()}><FileText size={16} />{createDraft.isPending ? "正在保存" : "保存为草稿"}</button><div className="campaign-list"><div className="campaign-list-head"><b>近期消息</b><small>发布后可撤回，不会删除投递审计</small></div>{campaigns.isLoading ? <div className="campaign-empty">正在读取消息记录…</div> : !campaigns.data?.length ? <div className="campaign-empty">还没有创建消息。</div> : campaigns.data.map((campaign) => <div className="campaign-row" key={campaign.id}><span className={`message-level ${campaign.level}`}>{getMessageLevelLabel(campaign.level)}</span><div><b>{campaign.title}</b><small>{campaign.status === "draft" ? "草稿" : campaign.status === "published" ? `已发布 · ${campaign.recipientCount} 人` : "已撤回"}</small></div>{campaign.status === "draft" && <button onClick={() => publish.mutate({ campaignId: campaign.id })} disabled={publish.isPending}><Send size={14} />发布</button>}{campaign.status === "published" && <button className="recall" onClick={() => recall.mutate({ campaignId: campaign.id })} disabled={recall.isPending}>撤回</button>}</div>)}</div></section></div>;
 }
 
 export function ProductNameSheet({ onClose, onSave }: { onClose: () => void; onSave: (name: string) => void }) {
