@@ -7,7 +7,7 @@ import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CategorySheet, getHomeAttentionItems, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
+import { CategorySheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
 import { INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -46,6 +46,21 @@ describe("Home conclusion attention priority", () => {
   it("shows cash pressure when product setup does not block accounting", () => {
     const items = getHomeAttentionItems({ missingCostProductCount: 0, unpricedProductCount: 0, cashBalance: -1 });
     expect(items).toEqual([expect.objectContaining({ tone: "cash", action: "business" })]);
+  });
+});
+
+describe("Product archive and hidden-cost allocation", () => {
+  it("explains that sold products are archived and requires an explicit confirmation", () => {
+    const onConfirm = vi.fn();
+    render(<DeleteProductSheet product={seedLedger().products[0]} saleCount={2} onClose={vi.fn()} onConfirm={onConfirm} />);
+    expect(screen.getByText(/历史销售、收入与成本快照会保留/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认归档" }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("allocates rent, utilities and labor across the entered period quantity", () => {
+    expect(getHiddenCostAllocation([{ id: "rent", label: "房租", amount: 900 }, { id: "water", label: "水电", amount: 90 }, { id: "labor", label: "人工", amount: 210 }], 300, 0)).toBe(4);
+    expect(getHiddenCostAllocation([], 0, 1.2)).toBe(1.2);
   });
 });
 

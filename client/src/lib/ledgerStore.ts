@@ -59,6 +59,8 @@ export type LedgerProduct = {
   batchYield?: number;
   bomVersions?: BomVersion[];
   materialUnitCosts?: Record<string, number>;
+  /** 已发生销售的商品仅归档，保留历史销售的商品引用与成本快照。 */
+  archivedAt?: string;
 };
 
 export type LedgerRecord = {
@@ -107,6 +109,9 @@ export type BomVersion = {
 export type LedgerCosts = {
   fixedCost: number;
   hiddenCost: number;
+  /** 本期房租、水电、人工等间接费用明细；汇总后按指定件数分摊为 hiddenCost。 */
+  hiddenCostItems?: HiddenCostItem[];
+  hiddenCostAllocationUnits?: number;
   hiddenCostBasis?: "perUnit" | "perSale";
   hiddenCostSource?: "manual" | "ledger";
   hiddenCostCategory?: string;
@@ -116,6 +121,12 @@ export type LedgerCosts = {
   fundingCost: number;
   fundingSource?: "manual" | "ledger";
   feeRate: number;
+};
+
+export type HiddenCostItem = {
+  id: string;
+  label: string;
+  amount: number;
 };
 
 export type LedgerData = {
@@ -297,7 +308,13 @@ export const normalizeLedger = (ledger: LedgerData): LedgerData => {
     ?? (ledger.costs.hiddenCostCategory && ledger.costs.hiddenCostCategory !== template.hiddenCostCategory ? "custom" : "template");
   return {
     ...ledger,
-    costs: { ...ledger.costs, hiddenCostCategorySource: categorySource },
+    costs: {
+      ...ledger.costs,
+      hiddenCost: Math.max(Number(ledger.costs.hiddenCost) || 0, 0),
+      hiddenCostItems: (ledger.costs.hiddenCostItems ?? []).map((item) => ({ ...item, label: item.label.trim(), amount: Math.max(Number(item.amount) || 0, 0) })).filter((item) => item.label),
+      hiddenCostAllocationUnits: Math.max(Number(ledger.costs.hiddenCostAllocationUnits) || 0, 0),
+      hiddenCostCategorySource: categorySource,
+    },
     products: ledger.products.map((product) => product.bom.length
       ? recalculateProduct(product, ledger.materials, ledger.costs.hiddenCost, ledger.costs.fixedCost)
       : product),

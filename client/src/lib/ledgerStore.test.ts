@@ -129,6 +129,16 @@ describe("summarizeSales", () => {
     expect(summary.costOfSales).toBe(4.55);
   });
 
+  it("keeps historical sales in summaries when the source product is archived", () => {
+    const ledger = normalizeLedger(seedLedger());
+    ledger.products[0].archivedAt = "2026-08-18T00:00:00.000Z";
+    ledger.sales = [{ id: "archived-sale", productId: 1, quantity: 2, unitPrice: 12, date: "2026-08-17", note: "", unitDirectCostSnapshot: 4.55, costPeriod: "2026-08" }];
+    const summary = summarizeSales(ledger, "2026-08");
+    expect(summary.salesCount).toBe(1);
+    expect(summary.salesRevenue).toBe(24);
+    expect(summary.costOfSales).toBe(9.1);
+  });
+
   it("bridges sale quantity to cost of sales and deduplicates ledger financing cost", () => {
     const ledger = normalizeLedger(seedLedger());
     ledger.sales = [{ id: "sale-1", productId: 1, quantity: 2, unitPrice: 12, date: "2026-08-17", note: "" }];
