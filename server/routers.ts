@@ -21,6 +21,7 @@ const campaignInput = z.object({
   if (input.targetType === "user" && !input.targetUserId) ctx.addIssue({ code: "custom", path: ["targetUserId"], message: "请选择指定商户。" });
   if (input.actionLabel && !input.actionPath) ctx.addIssue({ code: "custom", path: ["actionPath"], message: "设置动作文字后还需选择应用内跳转位置。" });
   if (input.actionPath && !input.actionLabel) ctx.addIssue({ code: "custom", path: ["actionLabel"], message: "设置跳转位置后还需填写动作文字。" });
+  if (input.expiresAt && input.expiresAt.getTime() <= Date.now()) ctx.addIssue({ code: "custom", path: ["expiresAt"], message: "有效期需晚于当前时间。" });
 });
 
 export const appRouter = router({
@@ -45,7 +46,7 @@ export const appRouter = router({
   messages: router({
     unreadCount: protectedProcedure.query(async ({ ctx }) => ({ count: await db.getUnreadMessageCount(ctx.user.id) })),
     importantBanner: protectedProcedure.query(({ ctx }) => db.getImportantMessageBanner(ctx.user.id)),
-    list: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(30) }).default({ limit: 30 })).query(({ ctx, input }) => db.listUserMessages(ctx.user.id, input.limit)),
+    list: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(30), level: z.enum(MESSAGE_LEVELS).optional() }).default({ limit: 30 })).query(({ ctx, input }) => db.listUserMessages(ctx.user.id, input.limit, input.level)),
     markDisplayed: protectedProcedure.input(z.object({ userMessageId: z.number().int().positive() })).mutation(async ({ ctx, input }) => ({ updated: await db.markUserMessageDisplayed(ctx.user.id, input.userMessageId) })),
     markRead: protectedProcedure.input(z.object({ userMessageId: z.number().int().positive() })).mutation(async ({ ctx, input }) => ({ updated: await db.markUserMessageRead(ctx.user.id, input.userMessageId) })),
     markAllRead: protectedProcedure.mutation(async ({ ctx }) => ({ updated: await db.markAllUserMessagesRead(ctx.user.id) })),

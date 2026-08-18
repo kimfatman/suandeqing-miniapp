@@ -124,10 +124,12 @@ export async function listMessageTargetUsers() {
 
 const activeMessageWhere = (userId: number, now: Date) => and(eq(userMessages.userId, userId), eq(messageCampaigns.status, "published"), or(isNull(messageCampaigns.expiresAt), gt(messageCampaigns.expiresAt, now)));
 
-export async function listUserMessages(userId: number, limit = 30) {
+export async function listUserMessages(userId: number, limit = 30, level?: MessageLevel) {
   const db = await getDb();
   if (!db) throw new Error("数据库暂不可用，请稍后重试。");
-  return db.select({ id: userMessages.id, campaignId: messageCampaigns.id, title: messageCampaigns.title, summary: messageCampaigns.summary, body: messageCampaigns.body, level: messageCampaigns.level, actionLabel: messageCampaigns.actionLabel, actionPath: messageCampaigns.actionPath, publishedAt: messageCampaigns.publishedAt, readAt: userMessages.readAt, createdAt: userMessages.createdAt }).from(userMessages).innerJoin(messageCampaigns, eq(userMessages.campaignId, messageCampaigns.id)).where(activeMessageWhere(userId, new Date())).orderBy(desc(messageCampaigns.publishedAt), desc(userMessages.createdAt)).limit(limit);
+  const activeWhere = activeMessageWhere(userId, new Date());
+  const where = level ? and(activeWhere, eq(messageCampaigns.level, level)) : activeWhere;
+  return db.select({ id: userMessages.id, campaignId: messageCampaigns.id, title: messageCampaigns.title, summary: messageCampaigns.summary, body: messageCampaigns.body, level: messageCampaigns.level, actionLabel: messageCampaigns.actionLabel, actionPath: messageCampaigns.actionPath, publishedAt: messageCampaigns.publishedAt, expiresAt: messageCampaigns.expiresAt, readAt: userMessages.readAt, createdAt: userMessages.createdAt }).from(userMessages).innerJoin(messageCampaigns, eq(userMessages.campaignId, messageCampaigns.id)).where(where).orderBy(desc(messageCampaigns.publishedAt), desc(userMessages.createdAt)).limit(limit);
 }
 
 export async function getImportantMessageBanner(userId: number) {

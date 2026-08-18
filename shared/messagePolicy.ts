@@ -12,6 +12,10 @@ export function canManageMessages(role: string | null | undefined) {
   return role === "admin";
 }
 
+export function isMessageExpired(expiresAt: Date | null | undefined, now = new Date()) {
+  return Boolean(expiresAt && expiresAt.getTime() <= now.getTime());
+}
+
 export function getMessageLevelLabel(level: MessageLevel) {
   return { safety: "账本安全", important: "重要公告", update: "产品更新", info: "服务消息" }[level];
 }

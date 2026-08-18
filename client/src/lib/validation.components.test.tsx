@@ -52,6 +52,13 @@ describe("MessageInboxSheet interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "关闭重要公告" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it("requests a server-backed importance-level filter", () => {
+    const onLevelFilterChange = vi.fn();
+    render(<MessageInboxSheet isAuthenticated loading={false} unreadCount={0} levelFilter="all" onLevelFilterChange={onLevelFilterChange} onClose={vi.fn()} onLogin={vi.fn()} onMarkRead={vi.fn()} onMarkAll={vi.fn()} onAction={vi.fn()} messages={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "账本安全" }));
+    expect(onLevelFilterChange).toHaveBeenCalledWith("safety");
+  });
 });
 
 describe("CategorySheet interactions", () => {
