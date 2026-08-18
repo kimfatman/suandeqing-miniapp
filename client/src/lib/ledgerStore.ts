@@ -269,8 +269,10 @@ export type LedgerSummary = {
   /** 实际收付款口径，包含本金还款。 */
   cashOutflow: number;
   cashBalance: number;
-  /** 没有销售记录时为流水层估算；有销售记录时由销售和成本版本计算。 */
+  /** 仅在本期存在有效销售结转时才可用；未结转时固定为0，页面应展示待结转状态。 */
   operatingResult: number;
+  /** 是否已有至少一笔有效销售可用于结转商品成本并计算利润。 */
+  profitReady: boolean;
   salesRevenue: number;
   salesQuantity: number;
   salesCount: number;
@@ -687,13 +689,14 @@ export const summarizeLedger = (ledger: LedgerData, selectedPeriod = ledger.cost
   const normalizedCashOutflow = money(cashOutflow);
   const sales = summarizeSales(ledger, selectedPeriod);
   const hasSales = sales.salesCount > 0;
-  const operatingResult = hasSales ? sales.operatingResult : money(normalizedIncome - normalizedExpenses);
+  const operatingResult = hasSales ? sales.operatingResult : 0;
   return {
     income: normalizedIncome,
     expenses: normalizedExpenses,
     cashOutflow: normalizedCashOutflow,
     cashBalance: money(normalizedIncome - normalizedCashOutflow),
     operatingResult,
+    profitReady: hasSales,
     salesRevenue: sales.salesRevenue,
     salesQuantity: sales.salesQuantity,
     salesCount: sales.salesCount,

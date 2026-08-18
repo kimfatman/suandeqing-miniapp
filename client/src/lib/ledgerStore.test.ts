@@ -3,7 +3,7 @@ import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, c
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
-  it("aggregates income, expenses, result, counts and categories from ledger records", () => {
+  it("aggregates cash receipts, payments and categories without treating them as profit before sales settle", () => {
     const ledger = seedLedger();
     ledger.records = [
       { id: "income-1", type: "income", amount: 1000, category: "销售收入", note: "", date: "2026-08-17" },
@@ -20,8 +20,9 @@ describe("summarizeLedger", () => {
     expect(summary.cashOutflow).toBe(420);
     expect(summary.financingCosts).toBe(20);
     expect(summary.principalRepayment).toBe(100);
-    expect(summary.result).toBe(680);
-    expect(summary.operatingResult).toBe(680);
+    expect(summary.result).toBe(0);
+    expect(summary.operatingResult).toBe(0);
+    expect(summary.profitReady).toBe(false);
     expect(summary.cashBalance).toBe(580);
     expect(summary.incomeCount).toBe(1);
     expect(summary.expenseCount).toBe(4);
@@ -35,14 +36,15 @@ describe("summarizeLedger", () => {
     ]);
   });
 
-  it("separates cash balance from operating result when principal repayment exists", () => {
+  it("keeps profit pending while still separating cash balance when principal repayment exists", () => {
     const ledger = seedLedger();
     ledger.records = [
       { id: "income-1", type: "income", amount: 1000, category: "销售收入", note: "", date: "2026-08-17" },
       { id: "principal-1", type: "expense", amount: 100, category: "本金还款", note: "", date: "2026-08-17" },
     ];
     const summary = summarizeLedger(ledger);
-    expect(summary.operatingResult).toBe(1000);
+    expect(summary.operatingResult).toBe(0);
+    expect(summary.profitReady).toBe(false);
     expect(summary.cashBalance).toBe(900);
   });
 
