@@ -221,6 +221,20 @@ const STORAGE_KEY = "suandeqing-ledger-v1";
 const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const money = (value: number) => Math.round(value * 100) / 100;
 
+/** 使用浏览器本地日历日，避免 UTC 零点把中国商户的业务归到错误日期。 */
+export const getBusinessDate = (date = new Date()) => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+};
+
+export const getBusinessPeriod = (date = getBusinessDate()) => date.slice(0, 7);
+
+export const formatBusinessPeriod = (period: string) => {
+  const [year, month] = period.split("-");
+  return year && month ? `${year}年${Number(month)}月` : "选择月份";
+};
+
 export const calculateUnitCost = (purchaseAmount: number, purchaseQuantity: number, conversionFactor = 1) => {
   if (![purchaseAmount, purchaseQuantity, conversionFactor].every(Number.isFinite) || purchaseAmount <= 0 || purchaseQuantity <= 0 || conversionFactor <= 0) return NaN;
   return money(purchaseAmount / (purchaseQuantity * conversionFactor));
@@ -228,7 +242,7 @@ export const calculateUnitCost = (purchaseAmount: number, purchaseQuantity: numb
 
 export const seedLedger = (): LedgerData => ({
   profile: { storeName: "巷口奶茶铺", industry: "catering", onboarded: false, monthlyBudget: 18000 },
-  costs: { fixedCost: 0.92, hiddenCost: 1.3, hiddenCostBasis: "perUnit", hiddenCostSource: "manual", hiddenCostCategory: "交通配送", allocationPeriod: "2026-08", fundingCost: 0.28, fundingSource: "manual", feeRate: 3 },
+  costs: { fixedCost: 0.92, hiddenCost: 1.3, hiddenCostBasis: "perUnit", hiddenCostSource: "manual", hiddenCostCategory: "交通配送", allocationPeriod: getBusinessPeriod(), fundingCost: 0.28, fundingSource: "manual", feeRate: 3 },
   categories: INDUSTRY_TEMPLATES[0].categories,
   categoryStatus: Object.fromEntries(INDUSTRY_TEMPLATES[0].categories.map((category) => [category, true])),
   materials: [
@@ -293,7 +307,7 @@ export const initializeIndustryLedger = (ledger: LedgerData, storeName: string, 
   if (ledger.profile.onboarded) return next;
   return {
     ...next,
-    costs: { ...next.costs, fixedCost: 0, hiddenCost: 0, fundingCost: 0, hiddenCostSource: "manual", fundingSource: "manual" },
+    costs: { ...next.costs, fixedCost: 0, hiddenCost: 0, fundingCost: 0, hiddenCostSource: "manual", fundingSource: "manual", allocationPeriod: getBusinessPeriod() },
     categoryStatus: Object.fromEntries(next.categories.map((category) => [category, true])),
     materials: [],
     products: [],
@@ -392,8 +406,8 @@ export const calculateBomVersionDirectCost = (version: BomVersion) => {
   return money((materialsCost * (1 + Math.max(version.lossRate, 0) / 100)) / Math.max(version.batchYield, 0.0001) + version.packaging + version.directLabor);
 };
 
-export const summarizeSales = (ledger: LedgerData) => {
-  const period = ledger.costs.allocationPeriod;
+export const summarizeSales = (ledger: LedgerData, selectedPeriod = ledger.costs.allocationPeriod ?? getBusinessPeriod()) => {
+  const period = selectedPeriod;
   const ledgerHiddenCost = ledger.records.filter((record) => (!period || record.date.startsWith(period)) && record.type === "expense" && record.category === (ledger.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0);
   const configuredHiddenCost = ledger.costs.hiddenCostSource === "ledger" ? ledgerHiddenCost : Math.max(ledger.costs.hiddenCost, 0);
   const salesForPeriod = (ledger.sales ?? []).filter((sale) => !period || sale.date.startsWith(period));
@@ -450,7 +464,7 @@ const summarizeLedgerRecords = (records: LedgerRecord[], period?: string) => rec
   return result;
 }, { financingCosts: 0 });
 
-export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
+export const summarizeLedger = (ledger: LedgerData, selectedPeriod = ledger.costs.allocationPeriod ?? getBusinessPeriod()): LedgerSummary => {
   const categoryTotals: Record<string, number> = {};
   const byDate: Record<string, { income: number; expenses: number }> = {};
   let income = 0;
@@ -459,7 +473,8 @@ export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
   let financingCosts = 0;
   let principalRepayment = 0;
 
-  ledger.records.forEach((record) => {
+  const recordsForPeriod = ledger.records.filter((record) => record.date.startsWith(selectedPeriod));
+  recordsForPeriod.forEach((record) => {
     const amount = Number.isFinite(record.amount) ? record.amount : 0;
     const bucket = byDate[record.date] ?? { income: 0, expenses: 0 };
     if (record.type === "income") {
@@ -491,7 +506,7 @@ export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
   const normalizedIncome = money(income);
   const normalizedExpenses = money(expenses);
   const normalizedCashOutflow = money(cashOutflow);
-  const sales = summarizeSales(ledger);
+  const sales = summarizeSales(ledger, selectedPeriod);
   const hasSales = sales.salesCount > 0;
   const operatingResult = hasSales ? sales.operatingResult : money(normalizedIncome - normalizedExpenses);
   return {
@@ -509,8 +524,8 @@ export const summarizeLedger = (ledger: LedgerData): LedgerSummary => {
     financingCosts: hasSales ? sales.financingCosts : money(financingCosts),
     principalRepayment: money(principalRepayment),
     result: operatingResult,
-    incomeCount: ledger.records.filter((record) => record.type === "income").length,
-    expenseCount: ledger.records.filter((record) => record.type === "expense").length,
+    incomeCount: recordsForPeriod.filter((record) => record.type === "income").length,
+    expenseCount: recordsForPeriod.filter((record) => record.type === "expense").length,
     categoryTotals,
     dailySeries,
   };

@@ -7,6 +7,13 @@ export type MaterialDraft = {
   conversionFactor: number;
 };
 
+export type SaleDraft = {
+  quantity: number;
+  unitPrice: number;
+  date: string;
+  productPrice?: number;
+};
+
 export const validateCategoryName = (name: string, existing: string[] = []) => {
   const trimmed = name.trim();
   if (!trimmed) return "请填写成本项目名称。";
@@ -27,6 +34,14 @@ export const validateMaterialDraft = (draft: MaterialDraft) => {
     || draft.amount <= 0 || draft.quantity <= 0 || draft.conversionFactor <= 0) {
     return "采购金额、采购数量和换算系数都必须大于0。";
   }
+  return null;
+};
+
+export const validateSaleDraft = (draft: SaleDraft) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) return "请选择业务日期。";
+  if (!Number.isFinite(draft.productPrice) || (draft.productPrice ?? 0) <= 0) return "请先设置商品售价，再记录销售。";
+  if (!Number.isFinite(draft.quantity) || draft.quantity <= 0) return "销售数量必须大于0。";
+  if (!Number.isFinite(draft.unitPrice) || draft.unitPrice <= 0) return "成交价必须大于0，请先设置售价或填写实际成交价。";
   return null;
 };
 

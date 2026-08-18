@@ -45,6 +45,23 @@ describe("summarizeLedger", () => {
     expect(summary.operatingResult).toBe(1000);
     expect(summary.cashBalance).toBe(900);
   });
+
+  it("filters cash flow, counts, charts and sales by the same selected period", () => {
+    const ledger = seedLedger();
+    ledger.records = [
+      { id: "july-income", type: "income", amount: 900, category: "销售收入", note: "", date: "2026-07-31" },
+      { id: "aug-income", type: "income", amount: 120, category: "销售收入", note: "", date: "2026-08-02" },
+      { id: "aug-expense", type: "expense", amount: 20, category: "食材采购", note: "", date: "2026-08-02" },
+    ];
+    ledger.sales = [
+      { id: "july-sale", productId: 1, quantity: 3, unitPrice: 10, date: "2026-07-31", note: "", unitDirectCostSnapshot: 4, costPeriod: "2026-07" },
+      { id: "aug-sale", productId: 1, quantity: 2, unitPrice: 10, date: "2026-08-02", note: "", unitDirectCostSnapshot: 4, costPeriod: "2026-08" },
+    ];
+    const august = summarizeLedger(ledger, "2026-08");
+    expect(august).toMatchObject({ income: 120, expenses: 20, cashBalance: 100, incomeCount: 1, expenseCount: 1, salesCount: 1, salesRevenue: 20, costOfSales: 8 });
+    expect(august.dailySeries).toEqual([{ label: "08/02", income: 120, expenses: 20 }]);
+    expect(summarizeLedger(ledger, "2026-07")).toMatchObject({ income: 900, salesCount: 1, salesRevenue: 30, costOfSales: 12 });
+  });
 });
 
 describe("unit cost and BOM normalization", () => {
@@ -90,6 +107,14 @@ describe("home readiness", () => {
     ledger.records = [{ id: "expense-1", type: "expense", amount: 50, category: "食材采购", note: "采购", date: "2026-08-18" }];
     const readiness = getReadiness(ledger, summarizeLedger(ledger), "商品配方");
     expect(readiness).toMatchObject({ stage: "sale", actionLabel: "记录第一笔销售" });
+  });
+
+  it("requires a positive product price before guiding a merchant to sales transfer", () => {
+    const ledger = seedLedger();
+    ledger.products = [{ ...ledger.products[0], price: 0 }];
+    ledger.records = [{ id: "expense-1", type: "expense", amount: 50, category: "食材采购", note: "采购", date: "2026-08-18" }];
+    const readiness = getReadiness(ledger, summarizeLedger(ledger), "商品配方");
+    expect(readiness).toMatchObject({ stage: "pricing", actionLabel: "设置售价" });
   });
 });
 

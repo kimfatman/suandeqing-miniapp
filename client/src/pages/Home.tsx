@@ -33,12 +33,12 @@ import { QuickCostSheet, QuickCostSave } from "@/components/QuickCostSheet";
 import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
 import {   applyIndustryTemplate, applyQuickCost,
   calculateDirectCost,
-  getActiveCategories, calculateUnitCost, INDUSTRY_TEMPLATES, IndustryKey, LedgerData, initializeIndustryLedger, LedgerProduct, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
-import { validateCategoryName, validateMaterialDraft, validateProductName } from "@/lib/validation";
+  formatBusinessPeriod, getActiveCategories, calculateUnitCost, getBusinessDate, getBusinessPeriod, INDUSTRY_TEMPLATES, IndustryKey, LedgerData, initializeIndustryLedger, LedgerProduct, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
+import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
 
 type Tab = "home" | "products" | "business" | "profile";
 
-type ReadinessStage = "record" | "product" | "cost" | "sale" | "analysis";
+type ReadinessStage = "record" | "product" | "cost" | "pricing" | "sale" | "analysis";
 
 type Readiness = {
   stage: ReadinessStage;
@@ -52,10 +52,12 @@ export function getReadiness(ledger: LedgerData, summary: ReturnType<typeof summ
   const recordCount = summary.incomeCount + summary.expenseCount;
   const hasProduct = ledger.products.length > 0;
   const hasProductCost = ledger.products.some((product) => product.direct > 0 || product.bom.length > 0);
+  const hasPricedProduct = ledger.products.some((product) => product.price > 0);
 
   if (!recordCount) return { stage: "record", label: "第 1 步 / 经营现金账", title: "先记第一笔采购或支出", description: "录入真实支出后，现金结余和经营趋势才会开始计算。", actionLabel: "记一笔支出" };
   if (!hasProduct) return { stage: "product", label: "第 2 步 / 商品成本", title: "现金账已开始，再建第一个商品", description: "商品是把采购、成本和售价连起来的关键。", actionLabel: "新建商品" };
   if (!hasProductCost) return { stage: "cost", label: "第 3 步 / 商品成本", title: `补齐${costLabel}，成本才有来路`, description: "先补材料、进货或制作成本，再决定售价是否合理。", actionLabel: `补齐${costLabel}` };
+  if (!hasPricedProduct) return { stage: "pricing", label: "第 4 步 / 商品定价", title: "先设置售价，再记录销售", description: "成交价必须大于0，才能结转真实收入和成本。", actionLabel: "设置售价" };
   if (!summary.salesCount) return { stage: "sale", label: "第 4 步 / 利润结转", title: "成本已建立，还差第一笔销售", description: "记录销量后，商品成本才会按销量结转为真实经营结果。", actionLabel: "记录第一笔销售" };
   return { stage: "analysis", label: "经营账已就绪", title: "账已开始结转，看看本月经营结果", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" };
 }
@@ -95,8 +97,9 @@ export default function Home() {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
+  const [selectedPeriod, setSelectedPeriod] = useState(() => getBusinessPeriod());
   const [toast, setToast] = useState<string | null>(null);
-  const summary = summarizeLedger(ledger);
+  const summary = summarizeLedger(ledger, selectedPeriod);
   const selectedProduct = ledger.products.find((product) => product.id === activeProductId) ?? ledger.products[0] ?? { id: 0, name: "还没有商品", category: "待添加", price: 0, direct: 0, operating: 0, change: "先创建商品", packaging: 0, directLabor: 0, bom: [] };
   const readiness = getReadiness(ledger, summary, currentTemplate.productCostLabel);
   const operatingCost = selectedProduct.operating;
@@ -130,6 +133,7 @@ export default function Home() {
       persistLedger(next);
       return next;
     });
+    setSelectedPeriod(getBusinessPeriod());
     notify(`已为${storeName}准备好${template.label}成本账本`);
   };
 
@@ -165,6 +169,8 @@ export default function Home() {
             product={selectedProduct}
             materials={ledger.materials}
             summary={summary}
+            period={selectedPeriod}
+            onPeriodChange={setSelectedPeriod}
             operatingCost={operatingCost}
             fullCost={fullCost}
             onPricing={() => setShowPricing(true)}
@@ -177,6 +183,7 @@ export default function Home() {
               if (readiness.stage === "record") setShowQuickRecord(true);
               if (readiness.stage === "product") setShowProductNameSheet(true);
               if (readiness.stage === "cost") { setActiveTab("products"); setShowQuickCost(true); }
+              if (readiness.stage === "pricing") setShowPricing(true);
               if (readiness.stage === "sale") setShowSaleRecord(true);
               if (readiness.stage === "analysis") navigate("business");
             }}
@@ -195,7 +202,7 @@ export default function Home() {
             onAdd={() => setShowProductNameSheet(true)}
           />
         )}
-        {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} productCount={ledger.products.length} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} />}
+        {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} productCount={ledger.products.length} period={selectedPeriod} onPeriodChange={setSelectedPeriod} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} />}
         {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} onIndustryChange={(industry) => { setLedger((current) => { const next = applyIndustryTemplate(current, industry); persistLedger(next); return next; }); notify(`已切换为${INDUSTRY_TEMPLATES.find((item) => item.key === industry)?.label ?? "新行业"}模板`); }} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
       </main>
 
@@ -218,9 +225,9 @@ export default function Home() {
         notify(`已新建“${name}”，请继续补充成本和售价`);
       }} />}
       {editingCategory !== null && <CategorySheet initialName={editingCategory} existing={ledger.categories} onClose={() => setEditingCategory(null)} onSave={(name) => { setLedger((current) => { const oldName = editingCategory; const next = oldName ? renameLedgerCategory(current, oldName, name) : { ...current, categories: [...current.categories, name], categoryStatus: { ...current.categoryStatus, [name]: true } }; persistLedger(next); return next; }); setEditingCategory(null); notify(editingCategory ? `已将成本项目改为“${name}”` : `已新增成本项目“${name}”`); }} />}
-      {showMaterialPanel && <MaterialSheet suggestion={ledger.materials[0]} editingMaterial={editingMaterialId ? ledger.materials.find((material) => material.id === editingMaterialId) : undefined} onClose={() => { setShowMaterialPanel(false); setEditingMaterialId(null); }} onSave={(material, purchase) => { setLedger((current) => { const materials = editingMaterialId ? current.materials.map((item) => item.id === editingMaterialId ? material : item) : [...current.materials, material]; const products = current.products.map((product) => product.bom.some((item) => item.materialId === material.id) ? recalculateProduct({ ...product, materialUnitCosts: undefined }, materials, current.costs.hiddenCost, current.costs.fixedCost) : product); const shouldRecordPurchase = !editingMaterialId && purchase?.recordPurchase && Number.isFinite(purchase.amount) && purchase.amount > 0; const records = shouldRecordPurchase ? [{ id: makeId(), type: "expense" as const, amount: purchase.amount, category: current.categories[0] ?? "材料采购", note: `${material.name}采购`, date: new Date().toISOString().slice(0, 10) }, ...current.records] : current.records; const next = { ...current, materials, products, records }; persistLedger(next); return next; }); const recordedPurchase = !editingMaterialId && purchase?.recordPurchase; setShowMaterialPanel(false); setEditingMaterialId(null); notify(editingMaterialId ? "已更新原材料，相关商品成本已重新核算；历史销售不受影响" : recordedPurchase ? "已保存原材料，并记入一笔采购现金支出" : "已保存原材料，后续核算会使用新成本"); }} />}
-      {showQuickRecord && <QuickRecordSheet categories={getActiveCategories(ledger)} onClose={() => setShowQuickRecord(false)} onRecordSale={() => { setShowQuickRecord(false); setShowSaleRecord(true); }} onSave={(record) => { setLedger((current) => { const next = { ...current, records: [{ id: makeId(), ...record, date: new Date().toISOString().slice(0, 10) }, ...current.records] }; persistLedger(next); return next; }); setShowQuickRecord(false); notify(record.type === "income" ? "已记入其他收入，经营账已更新" : "已记入支出，成本账已更新"); }} />}
-      {showSaleRecord && <SalesRecordSheet products={ledger.products} onClose={() => setShowSaleRecord(false)} onSave={(sale) => { setLedger((current) => { const product = current.products.find((entry) => entry.id === sale.productId); const amount = sale.quantity * sale.unitPrice; const salePeriod = current.costs.allocationPeriod ?? sale.date.slice(0, 7); const hiddenSource = current.costs.hiddenCostSource ?? "manual"; const hiddenSnapshot = hiddenSource === "ledger" ? current.records.filter((record) => record.type === "expense" && record.date.startsWith(salePeriod) && record.category === (current.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0) : current.costs.hiddenCost; const enrichedSale: SalesRecord = { ...sale, costVersionId: product?.bomVersions?.at(-1)?.id ?? `current-${sale.date}`, unitDirectCostSnapshot: product ? calculateDirectCost(product, current.materials) : 0, fixedCostSnapshot: current.costs.fixedCost, hiddenCostSnapshot: hiddenSnapshot, hiddenCostSourceSnapshot: hiddenSource, hiddenCostBasisSnapshot: current.costs.hiddenCostBasis ?? "perUnit", fundingCostSnapshot: current.costs.fundingCost, fundingSourceSnapshot: current.costs.fundingSource ?? "manual", costPeriod: salePeriod }; const next = { ...current, sales: [enrichedSale, ...(current.sales ?? [])], records: [{ id: makeId(), type: "income" as const, amount, category: "销售收入", note: `${product?.name ?? "商品"}销售`, date: sale.date }, ...current.records] }; persistLedger(next); return next; }); setShowSaleRecord(false); notify("已记录销售，商品成本已结转"); }} />}
+      {showMaterialPanel && <MaterialSheet suggestion={ledger.materials[0]} editingMaterial={editingMaterialId ? ledger.materials.find((material) => material.id === editingMaterialId) : undefined} onClose={() => { setShowMaterialPanel(false); setEditingMaterialId(null); }} onSave={(material, purchase) => { setLedger((current) => { const materials = editingMaterialId ? current.materials.map((item) => item.id === editingMaterialId ? material : item) : [...current.materials, material]; const products = current.products.map((product) => product.bom.some((item) => item.materialId === material.id) ? recalculateProduct({ ...product, materialUnitCosts: undefined }, materials, current.costs.hiddenCost, current.costs.fixedCost) : product); const shouldRecordPurchase = !editingMaterialId && purchase?.recordPurchase && Number.isFinite(purchase.amount) && purchase.amount > 0; const records = shouldRecordPurchase ? [{ id: makeId(), type: "expense" as const, amount: purchase.amount, category: current.categories[0] ?? "材料采购", note: `${material.name}采购`, date: purchase.date }, ...current.records] : current.records; const next = { ...current, materials, products, records }; persistLedger(next); return next; }); const recordedPurchase = !editingMaterialId && purchase?.recordPurchase; setShowMaterialPanel(false); setEditingMaterialId(null); notify(editingMaterialId ? "已更新原材料，相关商品成本已重新核算；历史销售不受影响" : recordedPurchase ? "已保存原材料，并记入一笔采购现金支出" : "已保存原材料，后续核算会使用新成本"); }} />}
+      {showQuickRecord && <QuickRecordSheet categories={getActiveCategories(ledger)} onClose={() => setShowQuickRecord(false)} onRecordSale={() => { setShowQuickRecord(false); setShowSaleRecord(true); }} onSave={(record) => { setLedger((current) => { const next = { ...current, records: [{ id: makeId(), ...record }, ...current.records] }; persistLedger(next); return next; }); setShowQuickRecord(false); notify(record.type === "income" ? "已记入其他收入，经营账已更新" : "已记入支出，成本账已更新"); }} />}
+      {showSaleRecord && <SalesRecordSheet products={ledger.products} onClose={() => setShowSaleRecord(false)} onSave={(sale) => { setLedger((current) => { const product = current.products.find((entry) => entry.id === sale.productId); const amount = sale.quantity * sale.unitPrice; const salePeriod = getBusinessPeriod(sale.date); const hiddenSource = current.costs.hiddenCostSource ?? "manual"; const hiddenSnapshot = hiddenSource === "ledger" ? current.records.filter((record) => record.type === "expense" && record.date.startsWith(salePeriod) && record.category === (current.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0) : current.costs.hiddenCost; const enrichedSale: SalesRecord = { ...sale, costVersionId: product?.bomVersions?.at(-1)?.id ?? `current-${sale.date}`, unitDirectCostSnapshot: product ? calculateDirectCost(product, current.materials) : 0, fixedCostSnapshot: current.costs.fixedCost, hiddenCostSnapshot: hiddenSnapshot, hiddenCostSourceSnapshot: hiddenSource, hiddenCostBasisSnapshot: current.costs.hiddenCostBasis ?? "perUnit", fundingCostSnapshot: current.costs.fundingCost, fundingSourceSnapshot: current.costs.fundingSource ?? "manual", costPeriod: salePeriod }; const next = { ...current, sales: [enrichedSale, ...(current.sales ?? [])], records: [{ id: makeId(), type: "income" as const, amount, category: "销售收入", note: `${product?.name ?? "商品"}销售`, date: sale.date }, ...current.records] }; persistLedger(next); return next; }); setShowSaleRecord(false); setSelectedPeriod(getBusinessPeriod(sale.date)); notify("已记录销售，商品成本已结转"); }} />}
 
       {showQuickCost && <QuickCostSheet product={selectedProduct} template={currentTemplate} onClose={() => setShowQuickCost(false)} onOpenAdvanced={() => { setShowQuickCost(false); setShowBomEditor(true); }} onSave={(draft: QuickCostSave) => { setLedger((current) => { const products = current.products.map((item) => item.id === selectedProduct.id ? applyQuickCost(item, draft, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost, new Date().toISOString().slice(0, 10)) : item); const next = { ...current, products }; persistLedger(next); return next; }); setShowQuickCost(false); notify("已保存快速成本，并生成新的成本版本"); }} />}
       {showBomEditor && <BomEditorSheet product={selectedProduct} materials={ledger.materials} categories={getActiveCategories(ledger)} costLabel={currentTemplate.productCostLabel} costAction={currentTemplate.productCostAction} costEmpty={currentTemplate.productCostEmpty} onClose={() => setShowBomEditor(false)} onSave={(items, settings) => { setLedger((current) => { const products = current.products.map((item) => { if (item.id !== selectedProduct.id) return item; const draftProduct = { ...item, bom: items, costCategory: settings.costCategory, lossRate: settings.lossRate, batchYield: settings.batchYield, materialUnitCosts: settings.costSnapshot?.materialUnitCosts, packaging: settings.costSnapshot?.packaging ?? item.packaging, directLabor: settings.costSnapshot?.directLabor ?? item.directLabor }; const recalculated = recalculateProduct(draftProduct, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost); const nextVersion = makeBomVersionSnapshot(draftProduct, current.materials, settings, new Date().toISOString().slice(0, 10)); return { ...recalculated, category: items.length || recalculated.direct > 0 ? "已补齐成本" : getProductPendingLabel(currentTemplate.productCostLabel), bomVersions: [...(item.bomVersions ?? []), nextVersion] }; }); const next = { ...current, products }; persistLedger(next); return next; }); setShowBomEditor(false); notify(`已保存${currentTemplate.productCostLabel}，并生成新的成本版本`); }} />}
@@ -234,6 +241,8 @@ function HomeView({
   product,
   materials,
   summary,
+  period,
+  onPeriodChange,
   operatingCost,
   fullCost,
   onPricing,
@@ -247,6 +256,8 @@ function HomeView({
   product: LedgerProduct;
   materials: Material[];
   summary: ReturnType<typeof summarizeLedger>;
+  period: string;
+  onPeriodChange: (period: string) => void;
   operatingCost: number;
   fullCost: number;
   onPricing: () => void;
@@ -259,24 +270,24 @@ function HomeView({
 }) {
   const hasSalesResult = summary.salesCount > 0;
   const profitStatus = hasSalesResult ? `已按 ${summary.salesCount} 笔销售结转` : "利润待补：还差销售记录";
-  const primaryIcon = readiness.stage === "record" ? <ReceiptText size={19} /> : readiness.stage === "product" ? <Plus size={19} /> : readiness.stage === "cost" ? <PackagePlus size={19} /> : readiness.stage === "sale" ? <ShoppingBag size={19} /> : <BarChart3 size={19} />;
+  const primaryIcon = readiness.stage === "record" ? <ReceiptText size={19} /> : readiness.stage === "product" ? <Plus size={19} /> : readiness.stage === "cost" ? <PackagePlus size={19} /> : readiness.stage === "pricing" ? <Sparkles size={19} /> : readiness.stage === "sale" ? <ShoppingBag size={19} /> : <BarChart3 size={19} />;
   return (
     <div className="page-content home-content">
       <section className="period-row">
-        <div><span className="eyebrow">本月</span><h1>经营总览</h1></div>
-        <button className="range-chip">本月 <ChevronRight size={16} /></button>
+        <div><span className="eyebrow">{formatBusinessPeriod(period)}</span><h1>经营总览</h1></div>
+        <PeriodPicker period={period} onChange={onPeriodChange} />
       </section>
 
       <section className="hero-ledger-card">
-        <div className="hero-card-top"><span className="ledger-tab">08 月 · 手上现金</span><span className={hasSalesResult ? "ledger-stamp" : "ledger-stamp pending"}>{hasSalesResult ? "利润已结转" : "利润待补"}</span></div>
+        <div className="hero-card-top"><span className="ledger-tab">{formatBusinessPeriod(period)} · 手上现金</span><span className={hasSalesResult ? "ledger-stamp" : "ledger-stamp pending"}>{hasSalesResult ? "利润已结转" : "利润待补"}</span></div>
         <div className="ledger-card-heading"><span>现金结余</span><BookOpenCheck size={18} /></div>
         <strong>{formatCurrency(summary.cashBalance)}</strong>
         <p><b>{profitStatus}</b></p>
         <div className="ledger-card-foot"><span><b>{summary.incomeCount + summary.expenseCount}</b> 笔流水</span><button onClick={onBusiness}>经营账 <ArrowRight size={16} /></button></div>
       </section>
 
-      <section className="overview-chart-card" aria-label="本月收入与支出概览">
-        <div className="chart-heading"><div><span className="eyebrow">本月</span><h2>收支走势</h2></div><span className="chart-summary-value">{formatCurrency(summary.cashBalance)} <small>结余</small></span></div>
+      <section className="overview-chart-card" aria-label="选定月份收入与支出概览">
+        <div className="chart-heading"><div><span className="eyebrow">{formatBusinessPeriod(period)}</span><h2>收支走势</h2></div><span className="chart-summary-value">{formatCurrency(summary.cashBalance)} <small>结余</small></span></div>
         <MiniTrendChart series={summary.dailySeries} />
       </section>
 
@@ -295,6 +306,10 @@ function HomeView({
       </section>
     </div>
   );
+}
+
+function PeriodPicker({ period, onChange }: { period: string; onChange: (period: string) => void }) {
+  return <label className="range-chip period-picker"><input aria-label="选择经营月份" type="month" value={period} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
 function MiniTrendChart({ series }: { series: ReturnType<typeof summarizeLedger>["dailySeries"] }) {
@@ -352,7 +367,7 @@ export function ProductsView({ products, activeProductId, onSelect, onPricing, p
   );
 }
 
-function BusinessView({ summary, costs, productCount, onPricing, onRecord, onSale }: { summary: ReturnType<typeof summarizeLedger>; costs: CostInputs; productCount: number; onPricing: () => void; onRecord: () => void; onSale: () => void }) {
+function BusinessView({ summary, costs, productCount, period, onPeriodChange, onPricing, onRecord, onSale }: { summary: ReturnType<typeof summarizeLedger>; costs: CostInputs; productCount: number; period: string; onPeriodChange: (period: string) => void; onPricing: () => void; onRecord: () => void; onSale: () => void }) {
   const [activeLabel, setActiveLabel] = useState(summary.dailySeries.at(-1)?.label ?? "");
   const [showCashDetails, setShowCashDetails] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -372,14 +387,14 @@ function BusinessView({ summary, costs, productCount, onPricing, onRecord, onSal
 
   return (
     <div className="page-content business-content">
-      <section className="period-row"><div><span className="eyebrow">本月</span><h1>经营</h1></div><button className="range-chip">本月 <ChevronRight size={16} /></button></section>
+      <section className="period-row"><div><span className="eyebrow">{formatBusinessPeriod(period)}</span><h1>经营</h1></div><PeriodPicker period={period} onChange={onPeriodChange} /></section>
       <section className={`cash-flow-card ${isRefreshing ? "is-refreshing" : ""}`}>
         <div className="cash-flow-copy"><span>现金流出 <button className="micro-info" aria-label="查看现金流压力说明" aria-expanded={showCashDetails} onClick={() => setShowCashDetails((current) => !current)}><Info size={13} /></button></span><h2>{formatCurrency(summary.cashOutflow)}</h2>{summary.cashOutflow > 0 ? <p>本金 {formatCurrency(summary.principalRepayment)} · 利息 {formatCurrency(summary.financingCosts)}</p> : <p className="cash-flow-empty">暂无支出</p>}{showCashDetails && <div className="cash-flow-detail" role="status">本金只影响现金；利息计入成本。</div>}</div><div className="cash-orbit" aria-hidden="true"><CircleDollarSign size={32} /><span>{isRefreshing ? "更新中" : "本期"}</span></div>
       </section>
       {!hasTrendData && !summary.salesCount ? <section className="analysis-readiness chart-card"><span className="eyebrow">准备度</span><h2>完成三步再看分析</h2><div className="analysis-steps"><span className={summary.incomeCount + summary.expenseCount ? "done" : ""}>1. 流水</span><span className={productCount ? "done" : ""}>2. 商品</span><span className={summary.salesCount ? "done" : ""}>3. 销售</span></div><button type="button" className="primary-action" onClick={summary.incomeCount + summary.expenseCount ? (productCount ? onSale : onRecord) : onRecord}>{summary.incomeCount + summary.expenseCount ? (productCount ? "记录第一笔销售" : "新建商品") : "记一笔"}<ArrowRight size={15} /></button></section> : <CashFlowChart series={summary.dailySeries} onRecord={onRecord} />}
       {summary.salesCount > 0 && <section className="sales-result-card"><div><span className="eyebrow">销售结转</span><h2>{summary.salesCount} 笔销售 · {summary.salesQuantity} 份</h2></div><div className="sales-result-grid"><span>销售收入 <b>{formatCurrency(summary.salesRevenue)}</b></span><span>销货成本 <b>{formatCurrency(summary.costOfSales)}</b></span><span>商品毛利 <b>{formatCurrency(summary.grossProfit)}</b></span><span>经营结果 <b>{formatCurrency(summary.operatingResult)}</b></span></div></section>}
       {(hasTrendData || summary.salesCount > 0) && <section className={`chart-card ${isRefreshing ? "is-refreshing" : ""}`} aria-label="经营趋势图表"><div className="chart-heading"><div><span className="eyebrow">趋势</span><h2>收入与成本</h2></div><span className="legend"><i />收入 <i className="green" />成本</span></div>{isRefreshing && <div className="chart-loading" role="status" aria-live="polite"><span className="loading-sweep" />更新中</div>}{hasTrendData ? <><div className="bar-chart" role="list" aria-label="按日期查看收入和经营成本">{summary.dailySeries.map((item) => <button type="button" className={`bar-pair ${activeItem?.label === item.label ? "is-active" : ""}`} key={item.label} onMouseEnter={() => setActiveLabel(item.label)} onFocus={() => setActiveLabel(item.label)} onClick={() => setActiveLabel(item.label)} aria-label={`${item.label}，收入${formatCurrency(item.income)}，经营成本${formatCurrency(item.expenses)}`} role="listitem"><span className="income-bar" aria-hidden="true" style={{ height: `${Math.max((item.income / maxValue) * 100, item.income ? 8 : 0)}%` }} /><span className="expense-bar" aria-hidden="true" style={{ height: `${Math.max((item.expenses / maxValue) * 100, item.expenses ? 8 : 0)}%` }} /></button>)}</div><div className="chart-labels">{summary.dailySeries.map((item) => <button type="button" className={activeItem?.label === item.label ? "is-active" : ""} onClick={() => setActiveLabel(item.label)} key={item.label}>{item.label}</button>)}</div>{activeItem && <div className="chart-tooltip" role="status"><b>{activeItem.label}</b><span><i className="income-dot" />收入 {formatCurrency(activeItem.income)}</span><span><i className="expense-dot" />成本 {formatCurrency(activeItem.expenses)}</span></div>}</> : null}</section>}
-      <section className="section-heading compact"><div><span className="eyebrow">成本</span><h2>本月构成</h2></div></section>
+      <section className="section-heading compact"><div><span className="eyebrow">成本</span><h2>{formatBusinessPeriod(period)}构成</h2></div></section>
       <section className="ledger-lines">
         <LineItem icon={<Coins size={18} />} label="已记录支出" value={formatCurrency(summary.expenses)} width={`${summary.expenses ? Math.min(summary.expenses / Math.max(summary.income, summary.expenses) * 100, 100) : 0}%`} color="blue" />
         {hiddenTotal > 0 && <LineItem icon={<ClipboardList size={18} />} label="非采购支出" value={formatCurrency(hiddenTotal)} width={`${summary.expenses ? Math.min(hiddenTotal / summary.expenses * 100, 100) : 0}%`} color="green" />}
@@ -417,7 +432,7 @@ export function ProductNameSheet({ onClose, onSave }: { onClose: () => void; onS
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet product-name-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">商品</span><h2>新建商品</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭">×</button></header><label className="field-block"><span>商品名称</span><div className="money-input"><input autoFocus value={name} maxLength={40} placeholder="例如：招牌冰咖啡" onChange={(event) => { setName(event.target.value); setValidationError(null); }} onKeyDown={(event) => { if (event.key === "Enter") save(); }} /><b>{name.length}/40</b></div></label>{validationError && <p className="field-error" role="alert">{validationError}</p>}<button className="primary-action sheet-save-button" onClick={save}>创建商品 <ArrowRight size={16} /></button></section></div>;
 }
 
-export function MaterialSheet({ suggestion, editingMaterial, onClose, onSave }: { suggestion?: Material; editingMaterial?: Material; onClose: () => void; onSave: (material: Material, purchase?: { amount: number; recordPurchase: boolean }) => void }) {
+export function MaterialSheet({ suggestion, editingMaterial, onClose, onSave }: { suggestion?: Material; editingMaterial?: Material; onClose: () => void; onSave: (material: Material, purchase?: { amount: number; recordPurchase: boolean; date: string }) => void }) {
   const [name, setName] = useState(editingMaterial?.name ?? suggestion?.name ?? "示例材料");
   const [amount, setAmount] = useState(String(Math.max((editingMaterial?.unitCost ?? 1) * 24, 0.01)));
   const [quantity, setQuantity] = useState("24");
@@ -425,6 +440,7 @@ export function MaterialSheet({ suggestion, editingMaterial, onClose, onSave }: 
   const [usageUnit, setUsageUnit] = useState(editingMaterial?.unit ?? "个");
   const [conversionFactor, setConversionFactor] = useState(String(editingMaterial?.conversionFactor ?? 1));
   const [recordPurchase, setRecordPurchase] = useState(!editingMaterial);
+  const [businessDate, setBusinessDate] = useState(getBusinessDate);
   const [validationError, setValidationError] = useState<string | null>(null);
   const purchaseAmount = Number(amount);
   const purchaseQuantity = Number(quantity);
@@ -436,27 +452,29 @@ export function MaterialSheet({ suggestion, editingMaterial, onClose, onSave }: 
     if (error) { setValidationError(error); return; }
     const material = { id: editingMaterial?.id ?? makeId(), name: name.trim(), unit: usageUnit, unitCost, source: `采购${purchaseQuantity}${purchaseUnit}，每${purchaseUnit}折算${factor}${usageUnit}`, purchaseUnit, conversionFactor: factor };
     if (editingMaterial) onSave(material);
-    else onSave(material, { amount: purchaseAmount, recordPurchase });
+    else onSave(material, { amount: purchaseAmount, recordPurchase, date: businessDate });
   };
-  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">材料</span><h2>{editingMaterial ? "编辑材料" : "新增材料"}</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>材料名称</span><div className="money-input"><input value={name} placeholder={suggestion ? `例如：${suggestion.name}` : "例如：瓶装饮用水"} onChange={(event) => { setName(event.target.value); setValidationError(null); }} /><b>名称</b></div></label><div className="two-fields"><label className="field-block"><span>采购金额</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => { setAmount(event.target.value); setValidationError(null); }} /><b>元</b></div></label><label className="field-block"><span>采购数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setValidationError(null); }} /><b>{purchaseUnit}</b></div></label></div><div className="two-fields"><label className="field-block"><span>采购单位</span><select value={purchaseUnit} onChange={(event) => setPurchaseUnit(event.target.value)}><option value="盒">盒</option><option value="箱">箱</option><option value="袋">袋</option><option value="瓶">瓶</option></select></label><label className="field-block"><span>使用单位</span><select value={usageUnit} onChange={(event) => setUsageUnit(event.target.value)}><option value="个">个</option><option value="瓶">瓶</option><option value="克">克</option><option value="毫升">毫升</option><option value="套">套</option></select></label></div><label className="field-block"><span>每{purchaseUnit}折算</span><div className="money-input"><input type="number" min="0.0001" step="0.0001" value={conversionFactor} onChange={(event) => { setConversionFactor(event.target.value); setValidationError(null); }} /><b>{usageUnit}</b></div></label><div className="material-preview"><span>单位成本</span><strong>{formatCurrency(unitCost)} / {usageUnit}</strong><p>金额 ÷ 数量 ÷ 换算</p></div>{!editingMaterial && <label className="material-cash-toggle"><input type="checkbox" checked={recordPurchase} onChange={(event) => setRecordPurchase(event.target.checked)} /><span><b>同时记采购支出</b><small>影响本月现金；取消则只更新成本。</small></span></label>}{validationError && <p className="form-error" role="alert">{validationError}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> {editingMaterial ? "保存修改" : "保存材料"}</button></section></div>;
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">材料</span><h2>{editingMaterial ? "编辑材料" : "新增材料"}</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>材料名称</span><div className="money-input"><input value={name} placeholder={suggestion ? `例如：${suggestion.name}` : "例如：瓶装饮用水"} onChange={(event) => { setName(event.target.value); setValidationError(null); }} /><b>名称</b></div></label><div className="two-fields"><label className="field-block"><span>采购金额</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={amount} onChange={(event) => { setAmount(event.target.value); setValidationError(null); }} /><b>元</b></div></label><label className="field-block"><span>采购数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setValidationError(null); }} /><b>{purchaseUnit}</b></div></label></div><div className="two-fields"><label className="field-block"><span>采购单位</span><select value={purchaseUnit} onChange={(event) => setPurchaseUnit(event.target.value)}><option value="盒">盒</option><option value="箱">箱</option><option value="袋">袋</option><option value="瓶">瓶</option></select></label><label className="field-block"><span>使用单位</span><select value={usageUnit} onChange={(event) => setUsageUnit(event.target.value)}><option value="个">个</option><option value="瓶">瓶</option><option value="克">克</option><option value="毫升">毫升</option><option value="套">套</option></select></label></div><label className="field-block"><span>每{purchaseUnit}折算</span><div className="money-input"><input type="number" min="0.0001" step="0.0001" value={conversionFactor} onChange={(event) => { setConversionFactor(event.target.value); setValidationError(null); }} /><b>{usageUnit}</b></div></label>{!editingMaterial && <label className="field-block business-date-field"><span>业务日期</span><input aria-label="采购业务日期" type="date" value={businessDate} onChange={(event) => setBusinessDate(event.target.value)} /></label>}<div className="material-preview"><span>单位成本</span><strong>{formatCurrency(unitCost)} / {usageUnit}</strong><p>金额 ÷ 数量 ÷ 换算</p></div>{!editingMaterial && <label className="material-cash-toggle"><input type="checkbox" checked={recordPurchase} onChange={(event) => setRecordPurchase(event.target.checked)} /><span><b>同时记采购支出</b><small>影响选定月份现金；取消则只更新成本。</small></span></label>}{validationError && <p className="form-error" role="alert">{validationError}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> {editingMaterial ? "保存修改" : "保存材料"}</button></section></div>;
 }
 
-function SalesRecordSheet({ products, onClose, onSave }: { products: LedgerProduct[]; onClose: () => void; onSave: (sale: SalesRecord) => void }) {
+export function SalesRecordSheet({ products, onClose, onSave }: { products: LedgerProduct[]; onClose: () => void; onSave: (sale: SalesRecord) => void }) {
   const [productId, setProductId] = useState(products[0]?.id ?? 0);
   const selected = products.find((product) => product.id === productId) ?? products[0];
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState(String(selected?.price ?? 0));
+  const [date, setDate] = useState(getBusinessDate);
   const [error, setError] = useState<string | null>(null);
   const save = () => {
     const parsedQuantity = Number(quantity);
     const parsedPrice = Number(unitPrice);
-    if (!selected || !Number.isFinite(parsedQuantity) || parsedQuantity <= 0 || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      setError("销售数量必须大于0，成交价不能为负数。");
+    const validationError = validateSaleDraft({ quantity: parsedQuantity, unitPrice: parsedPrice, date, productPrice: selected?.price });
+    if (!selected || validationError) {
+      setError(validationError ?? "请选择商品后再保存。 ");
       return;
     }
-    onSave({ id: makeId(), productId: selected.id, quantity: parsedQuantity, unitPrice: parsedPrice, date: new Date().toISOString().slice(0, 10), note: "" });
+    onSave({ id: makeId(), productId: selected.id, quantity: parsedQuantity, unitPrice: parsedPrice, date, note: "" });
   };
-  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">销售</span><h2>记录销售</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>商品</span><select value={productId} onChange={(event) => { const nextId = Number(event.target.value); setProductId(nextId); const next = products.find((product) => product.id === nextId); setUnitPrice(String(next?.price ?? 0)); setError(null); }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label><div className="two-fields"><label className="field-block"><span>数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(null); }} /><b>份</b></div></label><label className="field-block"><span>成交价</span><div className="money-input"><input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => { setUnitPrice(event.target.value); setError(null); }} /><b>元</b></div></label></div><div className="material-preview"><span>销售收入</span><strong>{formatCurrency((Number(quantity) || 0) * (Number(unitPrice) || 0))}</strong><p>同时结转收入和商品成本。</p></div>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> 保存并结转</button></section></div>;
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">销售</span><h2>记录销售</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>商品</span><select value={productId} onChange={(event) => { const nextId = Number(event.target.value); setProductId(nextId); const next = products.find((product) => product.id === nextId); setUnitPrice(String(next?.price ?? 0)); setError(null); }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label><div className="two-fields"><label className="field-block"><span>数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(null); }} /><b>份</b></div></label><label className="field-block"><span>成交价</span><div className="money-input"><input aria-label="销售成交价" type="number" min="0.01" step="0.01" value={unitPrice} onChange={(event) => { setUnitPrice(event.target.value); setError(null); }} /><b>元</b></div></label></div><label className="field-block business-date-field"><span>业务日期</span><input aria-label="销售业务日期" type="date" value={date} onChange={(event) => { setDate(event.target.value); setError(null); }} /></label>{selected?.price <= 0 && <p className="record-category-hint">该商品尚未定价，请先设置售价后再结转。</p>}<div className="material-preview"><span>销售收入</span><strong>{formatCurrency((Number(quantity) || 0) * (Number(unitPrice) || 0))}</strong><p>同时结转收入和商品成本。</p></div>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> 保存并结转</button></section></div>;
 }
 
 function CostSettingsSheet({ type, value, onClose, onSave }: { type: "hidden" | "funding"; value: number; onClose: () => void; onSave: (value: number) => void }) {

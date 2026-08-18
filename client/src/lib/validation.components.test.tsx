@@ -7,7 +7,7 @@ import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CategorySheet, MaterialSheet, ProductNameSheet, ProductsView, ProfileView } from "@/pages/Home";
+import { CategorySheet, MaterialSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
 import { INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -88,8 +88,9 @@ describe("MaterialSheet interactions", () => {
     render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
     const recordPurchase = screen.getByRole("checkbox") as HTMLInputElement;
     expect(recordPurchase.checked).toBe(true);
+    fireEvent.change(screen.getByLabelText("采购业务日期"), { target: { value: "2026-07-20" } });
     fireEvent.click(screen.getByRole("button", { name: /保存材料/ }));
-    expect(onSave).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ recordPurchase: true }));
+    expect(onSave).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ recordPurchase: true, date: "2026-07-20" }));
   });
 });
 
@@ -104,6 +105,33 @@ describe("QuickRecordSheet interactions", () => {
     expect(screen.getByText("借款")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "本金还款" }));
     expect(screen.getByText("本金还款会减少手上现金，但不计入经营成本。")).toBeTruthy();
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "88" } });
+    fireEvent.change(screen.getByLabelText("流水业务日期"), { target: { value: "2026-07-20" } });
+    fireEvent.click(screen.getByRole("button", { name: /^保存$/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ amount: 88, date: "2026-07-20", category: "本金还款" }));
+  });
+});
+
+describe("SalesRecordSheet interactions", () => {
+  it("blocks an unpriced product, clears the error after switching, accepts a priced sale, and still blocks a zero transaction price", () => {
+    const ledger = seedLedger();
+    const unpriced = { ...ledger.products[0], id: 91, name: "未定价商品", price: 0 };
+    const priced = { ...ledger.products[1], id: 92, name: "已定价商品", price: 12 };
+    const onSave = vi.fn();
+    render(<SalesRecordSheet products={[unpriced, priced]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByRole("spinbutton", { name: "销售成交价" }), { target: { value: "12" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存并结转/ }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("请先设置商品售价");
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: String(priced.id) } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /保存并结转/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ productId: priced.id, unitPrice: 12, date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }));
+
+    fireEvent.change(screen.getByRole("spinbutton", { name: "销售成交价" }), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存并结转/ }));
+    expect(screen.getByRole("alert").textContent).toContain("成交价必须大于0");
   });
 });
 
