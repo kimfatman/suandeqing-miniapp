@@ -139,6 +139,44 @@ describe("summarizeSales", () => {
     expect(summary.costOfSales).toBe(9.1);
   });
 
+  it("reverses revenue and the original cost snapshot for a partial refund", () => {
+    const ledger = normalizeLedger(seedLedger());
+    ledger.costs.fixedCost = 0;
+    ledger.costs.hiddenCost = 0;
+    ledger.costs.fundingCost = 0;
+    ledger.sales = [{ id: "partial-refund", productId: 1, quantity: 5, unitPrice: 10, date: "2026-08-17", note: "", unitDirectCostSnapshot: 4, costPeriod: "2026-08", refunds: [{ id: "refund-1", quantity: 2, amount: 20, date: "2026-08-18", note: "退款", restock: true }] }];
+    const summary = summarizeSales(ledger, "2026-08");
+    expect(summary.salesRevenue).toBe(30);
+    expect(summary.salesQuantity).toBe(3);
+    expect(summary.costOfSales).toBe(12);
+    expect(summary.grossProfit).toBe(18);
+    expect(summary.refundCount).toBe(1);
+    expect(summary.refundAmount).toBe(20);
+  });
+
+  it("applies a later refund in the refund business period using the original sale snapshot", () => {
+    const ledger = normalizeLedger(seedLedger());
+    ledger.costs.fixedCost = 0;
+    ledger.costs.hiddenCost = 0;
+    ledger.costs.fundingCost = 0;
+    ledger.sales = [{ id: "cross-period-refund", productId: 1, quantity: 2, unitPrice: 10, date: "2026-07-20", note: "", unitDirectCostSnapshot: 4, costPeriod: "2026-07", refunds: [{ id: "refund-2", quantity: 1, amount: 10, date: "2026-08-02", note: "退款" }] }];
+    const summary = summarizeSales(ledger, "2026-08");
+    expect(summary.salesRevenue).toBe(-10);
+    expect(summary.salesQuantity).toBe(-1);
+    expect(summary.costOfSales).toBe(-4);
+    expect(summary.grossProfit).toBe(-6);
+    expect(summary.salesCount).toBe(0);
+  });
+
+  it("does not count a fully refunded sale as an effective sale", () => {
+    const ledger = normalizeLedger(seedLedger());
+    ledger.sales = [{ id: "voided", productId: 1, quantity: 1, unitPrice: 10, date: "2026-08-17", note: "", unitDirectCostSnapshot: 4, refunds: [{ id: "full", quantity: 1, amount: 10, date: "2026-08-18", note: "退款" }] }];
+    const summary = summarizeSales(ledger, "2026-08");
+    expect(summary.salesCount).toBe(0);
+    expect(summary.salesRevenue).toBe(0);
+    expect(summary.costOfSales).toBe(0);
+  });
+
   it("bridges sale quantity to cost of sales and deduplicates ledger financing cost", () => {
     const ledger = normalizeLedger(seedLedger());
     ledger.sales = [{ id: "sale-1", productId: 1, quantity: 2, unitPrice: 12, date: "2026-08-17", note: "" }];

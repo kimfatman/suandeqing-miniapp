@@ -61,6 +61,8 @@ export type LedgerProduct = {
   materialUnitCosts?: Record<string, number>;
   /** 已发生销售的商品仅归档，保留历史销售的商品引用与成本快照。 */
   archivedAt?: string;
+  /** 启用后才参与销售扣减与退款恢复；未设置代表当前账本尚未建立库存台账。 */
+  stockQuantity?: number;
 };
 
 export type LedgerRecord = {
@@ -89,6 +91,19 @@ export type SalesRecord = {
   fundingCostSnapshot?: number;
   fundingSourceSnapshot?: "manual" | "ledger";
   costPeriod?: string;
+  status?: "completed" | "voided";
+  voidedAt?: string;
+  voidedDate?: string;
+  refunds?: SaleRefund[];
+};
+
+export type SaleRefund = {
+  id: string;
+  quantity: number;
+  amount: number;
+  date: string;
+  note: string;
+  restock?: boolean;
 };
 
 export type BomVersion = {
@@ -157,6 +172,8 @@ export type LedgerSummary = {
   salesRevenue: number;
   salesQuantity: number;
   salesCount: number;
+  refundCount: number;
+  refundAmount: number;
   costOfSales: number;
   grossProfit: number;
   allocatedIndirectCosts: number;
@@ -441,9 +458,12 @@ export const summarizeSales = (ledger: LedgerData, selectedPeriod = ledger.costs
   const period = selectedPeriod;
   const ledgerHiddenCost = ledger.records.filter((record) => (!period || record.date.startsWith(period)) && record.type === "expense" && record.category === (ledger.costs.hiddenCostCategory ?? "交通配送")).reduce((sum, record) => sum + Math.max(record.amount, 0), 0);
   const configuredHiddenCost = ledger.costs.hiddenCostSource === "ledger" ? ledgerHiddenCost : Math.max(ledger.costs.hiddenCost, 0);
-  const salesForPeriod = (ledger.sales ?? []).filter((sale) => !period || sale.date.startsWith(period));
+  const salesForPeriod = (ledger.sales ?? []).filter((sale) => !period || sale.date.startsWith(period) || (sale.refunds ?? []).some((refund) => refund.date.startsWith(period)));
   let salesRevenue = 0;
   let salesQuantity = 0;
+  let effectiveSalesCount = 0;
+  let refundCount = 0;
+  let refundAmount = 0;
   let costOfSales = 0;
   let allocatedIndirectCosts = 0;
   let manualFundingCosts = 0;
@@ -454,25 +474,35 @@ export const summarizeSales = (ledger: LedgerData, selectedPeriod = ledger.costs
     const quantity = Number.isFinite(sale.quantity) && sale.quantity > 0 ? sale.quantity : 0;
     const unitPrice = Number.isFinite(sale.unitPrice) && sale.unitPrice >= 0 ? sale.unitPrice : 0;
     if (!product || quantity <= 0) return;
+    const saleInPeriod = !period || sale.date.startsWith(period);
+    const refundsInPeriod = (sale.refunds ?? []).filter((refund) => !period || refund.date.startsWith(period));
+    const refundedQuantity = Math.min(refundsInPeriod.reduce((sum, refund) => sum + Math.max(Number(refund.quantity) || 0, 0), 0), quantity);
+    const refundedAmount = Math.min(refundsInPeriod.reduce((sum, refund) => sum + Math.max(Number(refund.amount) || 0, 0), 0), quantity * unitPrice);
+    const netQuantity = saleInPeriod ? quantity - refundedQuantity : -refundedQuantity;
+    const netRevenue = saleInPeriod ? quantity * unitPrice - refundedAmount : -refundedAmount;
+    if (!saleInPeriod && refundedQuantity <= 0 && refundedAmount <= 0) return;
+    refundCount += refundsInPeriod.length;
+    refundAmount += refundedAmount;
     const direct = sale.unitDirectCostSnapshot ?? calculateDirectCost(product, ledger.materials);
     const fixedCost = sale.fixedCostSnapshot ?? ledger.costs.fixedCost;
     const hiddenCost = sale.hiddenCostSnapshot ?? configuredHiddenCost;
     const hiddenSource = sale.hiddenCostSourceSnapshot ?? ledger.costs.hiddenCostSource ?? "manual";
     const hiddenBasis = sale.hiddenCostBasisSnapshot ?? ledger.costs.hiddenCostBasis ?? "perUnit";
     const fundingSource = sale.fundingSourceSnapshot ?? ledger.costs.fundingSource ?? "manual";
-    salesRevenue += quantity * unitPrice;
-    salesQuantity += quantity;
-    costOfSales += direct * quantity;
-    allocatedIndirectCosts += fixedCost * quantity;
+    salesRevenue += netRevenue;
+    salesQuantity += netQuantity;
+    if (saleInPeriod && netQuantity > 0) effectiveSalesCount += 1;
+    costOfSales += direct * netQuantity;
+    allocatedIndirectCosts += fixedCost * netQuantity;
     if (hiddenSource === "ledger") {
-      needsLedgerHiddenCost = true;
+      if (saleInPeriod && netQuantity > 0) needsLedgerHiddenCost = true;
     } else {
-      allocatedIndirectCosts += hiddenBasis === "perSale" ? hiddenCost : hiddenCost * quantity;
+      allocatedIndirectCosts += hiddenBasis === "perSale" ? hiddenCost * (netQuantity / quantity) : hiddenCost * netQuantity;
     }
     if (fundingSource === "ledger") {
-      needsLedgerFunding = true;
+      if (saleInPeriod && netQuantity > 0) needsLedgerFunding = true;
     } else {
-      manualFundingCosts += Math.max(sale.fundingCostSnapshot ?? ledger.costs.fundingCost, 0) * quantity;
+      manualFundingCosts += Math.max(sale.fundingCostSnapshot ?? ledger.costs.fundingCost, 0) * netQuantity;
     }
   });
   const ledgerFinancingCosts = summarizeLedgerRecords(ledger.records, period).financingCosts;
@@ -481,7 +511,9 @@ export const summarizeSales = (ledger: LedgerData, selectedPeriod = ledger.costs
   return {
     salesRevenue: money(salesRevenue),
     salesQuantity: money(salesQuantity),
-    salesCount: salesForPeriod.length,
+    salesCount: effectiveSalesCount,
+    refundCount,
+    refundAmount: money(refundAmount),
     costOfSales: money(costOfSales),
     allocatedIndirectCosts: money(allocatedIndirectCosts),
     financingCosts: money(financingCosts),
@@ -549,6 +581,8 @@ export const summarizeLedger = (ledger: LedgerData, selectedPeriod = ledger.cost
     salesRevenue: sales.salesRevenue,
     salesQuantity: sales.salesQuantity,
     salesCount: sales.salesCount,
+    refundCount: sales.refundCount,
+    refundAmount: sales.refundAmount,
     costOfSales: sales.costOfSales,
     grossProfit: sales.grossProfit,
     allocatedIndirectCosts: sales.allocatedIndirectCosts,

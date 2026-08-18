@@ -7,7 +7,7 @@ import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CategorySheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
+import { CategorySheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -61,6 +61,30 @@ describe("Product archive and hidden-cost allocation", () => {
   it("allocates rent, utilities and labor across the entered period quantity", () => {
     expect(getHiddenCostAllocation([{ id: "rent", label: "房租", amount: 900 }, { id: "water", label: "水电", amount: 90 }, { id: "labor", label: "人工", amount: 210 }], 300, 0)).toBe(4);
     expect(getHiddenCostAllocation([], 0, 1.2)).toBe(1.2);
+  });
+});
+
+describe("Sale refund and inventory interactions", () => {
+  it("confirms a full refund with inventory restoration enabled when the product tracks stock", () => {
+    const onConfirm = vi.fn();
+    const product = { ...seedLedger().products[0], stockQuantity: 3 };
+    render(<SaleRefundSheet product={product} sale={{ id: "sale", productId: product.id, quantity: 2, unitPrice: 10, date: "2026-08-18", note: "" }} onClose={vi.fn()} onConfirm={onConfirm} />);
+    fireEvent.click(screen.getByRole("button", { name: "确认全额撤销" }));
+    expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ quantity: 2, amount: 20, restock: true }));
+  });
+
+  it("limits refundable quantity to the original quantity less prior refunds", () => {
+    expect(getRefundableSaleQuantity({ id: "sale", productId: 1, quantity: 5, unitPrice: 10, date: "2026-08-18", note: "", refunds: [{ id: "r1", quantity: 2, amount: 20, date: "2026-08-18", note: "" }] })).toBe(3);
+  });
+
+  it("blocks a sale that exceeds enabled stock", () => {
+    const onSave = vi.fn();
+    const product = { ...seedLedger().products[0], price: 12, stockQuantity: 1 };
+    render(<SalesRecordSheet products={[product]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getAllByRole("spinbutton")[0], { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存并结转/ }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("可售库存仅剩");
   });
 });
 
