@@ -8,7 +8,7 @@ import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CashRecordsSheet, CategorySheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -126,6 +126,17 @@ describe("CashRecordsSheet corrections", () => {
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
     expect(onDelete).toHaveBeenCalledWith("manual");
     expect(screen.getByText("请在销售记录中更正")).toBeTruthy();
+  });
+});
+
+describe("DataManagementSheet local reset", () => {
+  it("requires explicit confirmation before clearing the current device ledger", () => {
+    const onClearLocal = vi.fn();
+    render(<DataManagementSheet isAuthenticated={false} cloudAvailable={false} isBackingUp={false} onClose={vi.fn()} onLogin={vi.fn()} onBackup={vi.fn()} onRestoreCloud={vi.fn()} onExport={vi.fn()} onImport={vi.fn()} onClearLocal={onClearLocal} />);
+    fireEvent.click(screen.getByRole("button", { name: "清空当前设备账本" }));
+    expect(screen.getByText("清空当前设备的全部账本数据？")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认清空" }));
+    expect(onClearLocal).toHaveBeenCalledOnce();
   });
 });
 
