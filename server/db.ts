@@ -1,7 +1,7 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { cloudLedgers, messageCampaigns, type CloudLedger, type InsertUser, type MessageCampaign, type UserMessage, userMessages, users } from "../drizzle/schema";
-import type { MessageLevel } from "@shared/messagePolicy";
+import { getFirstMessageOrNull, type MessageLevel } from "@shared/messagePolicy";
 import { ENV } from "./_core/env";
 
 let database: ReturnType<typeof drizzle> | null = null;
@@ -135,7 +135,8 @@ export async function listUserMessages(userId: number, limit = 30, level?: Messa
 export async function getImportantMessageBanner(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("数据库暂不可用，请稍后重试。");
-  return (await db.select({ id: userMessages.id, campaignId: messageCampaigns.id, title: messageCampaigns.title, summary: messageCampaigns.summary, body: messageCampaigns.body, level: messageCampaigns.level, actionLabel: messageCampaigns.actionLabel, actionPath: messageCampaigns.actionPath, publishedAt: messageCampaigns.publishedAt, readAt: userMessages.readAt, createdAt: userMessages.createdAt }).from(userMessages).innerJoin(messageCampaigns, eq(userMessages.campaignId, messageCampaigns.id)).where(and(activeMessageWhere(userId, new Date()), eq(messageCampaigns.level, "important"), isNull(userMessages.displayedAt))).orderBy(desc(messageCampaigns.publishedAt), desc(userMessages.createdAt)).limit(1))[0];
+  const banners = await db.select({ id: userMessages.id, campaignId: messageCampaigns.id, title: messageCampaigns.title, summary: messageCampaigns.summary, body: messageCampaigns.body, level: messageCampaigns.level, actionLabel: messageCampaigns.actionLabel, actionPath: messageCampaigns.actionPath, publishedAt: messageCampaigns.publishedAt, readAt: userMessages.readAt, createdAt: userMessages.createdAt }).from(userMessages).innerJoin(messageCampaigns, eq(userMessages.campaignId, messageCampaigns.id)).where(and(activeMessageWhere(userId, new Date()), eq(messageCampaigns.level, "important"), isNull(userMessages.displayedAt))).orderBy(desc(messageCampaigns.publishedAt), desc(userMessages.createdAt)).limit(1);
+  return getFirstMessageOrNull(banners);
 }
 
 export async function getUnreadMessageCount(userId: number) {

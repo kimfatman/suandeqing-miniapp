@@ -16,6 +16,11 @@ export function isMessageExpired(expiresAt: Date | null | undefined, now = new D
   return Boolean(expiresAt && expiresAt.getTime() <= now.getTime());
 }
 
+/** 查询缓存要求查询函数始终返回明确值；没有可展示公告时使用 null，而不是 undefined。 */
+export function getFirstMessageOrNull<T>(messages: readonly T[]): T | null {
+  return messages[0] ?? null;
+}
+
 export function getMessageLevelLabel(level: MessageLevel) {
   return { safety: "账本安全", important: "重要公告", update: "产品更新", info: "服务消息" }[level];
 }
