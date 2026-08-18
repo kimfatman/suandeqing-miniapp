@@ -258,6 +258,7 @@ export default function Home() {
         {activeTab === "home" && (
           <HomeView
             product={selectedProduct}
+            products={ledger.products}
             materials={ledger.materials}
             summary={summary}
             period={selectedPeriod}
@@ -269,6 +270,7 @@ export default function Home() {
             onEditMaterial={(material) => { setEditingMaterialId(material.id); setShowMaterialPanel(true); }}
             onRecord={() => setShowQuickRecord(true)}
             onBusiness={() => navigate("business")}
+            onProducts={() => navigate("products")}
             readiness={readiness}
             onPrimaryAction={() => {
               if (readiness.stage === "record") setShowQuickRecord(true);
@@ -332,8 +334,17 @@ export default function Home() {
   );
 }
 
+export function getHomeAttentionItems({ missingCostProductCount, unpricedProductCount, cashBalance }: { missingCostProductCount: number; unpricedProductCount: number; cashBalance: number }) {
+  const items: { title: string; detail: string; tone: "warning" | "cash"; action: "products" | "business" }[] = [];
+  if (missingCostProductCount > 0) items.push({ title: `${missingCostProductCount} 个商品待补成本`, detail: "未补成本的商品无法得出可信利润。", tone: "warning", action: "products" });
+  if (unpricedProductCount > 0) items.push({ title: `${unpricedProductCount} 个商品未定价`, detail: "先设置售价，才能记录销售和结转利润。", tone: "warning", action: "products" });
+  if (cashBalance < 0) items.push({ title: "现金结余为负", detail: "请查看本月现金流出，确认是否需要补充资金。", tone: "cash", action: "business" });
+  return items.slice(0, 2);
+}
+
 function HomeView({
   product,
+  products,
   materials,
   summary,
   period,
@@ -345,10 +356,12 @@ function HomeView({
   onEditMaterial,
   onRecord,
   onBusiness,
+  onProducts,
   readiness,
   onPrimaryAction,
 }: {
   product: LedgerProduct;
+  products: LedgerProduct[];
   materials: Material[];
   summary: ReturnType<typeof summarizeLedger>;
   period: string;
@@ -360,11 +373,27 @@ function HomeView({
   onEditMaterial: (material: Material) => void;
   onRecord: () => void;
   onBusiness: () => void;
+  onProducts: () => void;
   readiness: Readiness;
   onPrimaryAction: () => void;
 }) {
   const hasSalesResult = summary.salesCount > 0;
-  const profitStatus = hasSalesResult ? `已按 ${summary.salesCount} 笔销售结转` : "利润待补：还差销售记录";
+  const hasProduct = product.id !== 0;
+  const operatingResult = summary.operatingResult;
+  const resultTitle = !hasSalesResult ? "本月利润暂无法判断" : operatingResult > 0 ? "本月经营有盈利" : operatingResult < 0 ? "本月经营亏损" : "本月经营持平";
+  const resultDetail = !hasSalesResult ? "补一笔销售后，才能按真实商品成本结转利润。" : `已按 ${summary.salesCount} 笔销售结转，不将现金结余当作利润。`;
+  const resultCost = Math.max(summary.salesRevenue - operatingResult, 0);
+  const missingCostProductCount = products.filter((item) => item.direct <= 0 && item.bom.length === 0).length;
+  const unpricedProductCount = products.filter((item) => item.price <= 0).length;
+  const attentionItems = getHomeAttentionItems({ missingCostProductCount, unpricedProductCount, cashBalance: summary.cashBalance });
+  const unitCost = Math.max(fullCost, operatingCost, product.direct, 0);
+  const unitProfit = product.price > 0 ? product.price - unitCost : null;
+  const unitMargin = product.price > 0 ? unitProfit! / product.price * 100 : null;
+  const purchaseTotals = Object.entries(summary.categoryTotals).filter(([category]) => /采购|进货|材料/.test(category));
+  const purchaseAmount = purchaseTotals.reduce((total, [, amount]) => total + amount, 0);
+  const linkedMaterialIds = new Set(products.flatMap((item) => item.bom.map((part) => part.materialId)));
+  const unlinkedMaterialCount = materials.filter((material) => !linkedMaterialIds.has(material.id)).length;
+  const hasTrendData = summary.dailySeries.some((item) => item.income > 0 || item.expenses > 0);
   const primaryIcon = readiness.stage === "record" ? <ReceiptText size={19} /> : readiness.stage === "product" ? <Plus size={19} /> : readiness.stage === "cost" ? <PackagePlus size={19} /> : readiness.stage === "pricing" ? <Sparkles size={19} /> : readiness.stage === "sale" ? <ShoppingBag size={19} /> : <BarChart3 size={19} />;
   return (
     <div className="page-content home-content">
@@ -374,31 +403,36 @@ function HomeView({
       </section>
 
       <section className="hero-ledger-card">
-        <div className="hero-card-top"><span className="ledger-tab">{formatBusinessPeriod(period)} · 手上现金</span><span className={hasSalesResult ? "ledger-stamp" : "ledger-stamp pending"}>{hasSalesResult ? "利润已结转" : "利润待补"}</span></div>
-        <div className="ledger-card-heading"><span>现金结余</span><BookOpenCheck size={18} /></div>
-        <strong>{formatCurrency(summary.cashBalance)}</strong>
-        <p><b>{profitStatus}</b></p>
-        <div className="ledger-card-foot"><span><b>{summary.incomeCount + summary.expenseCount}</b> 笔流水</span><button onClick={onBusiness}>经营账 <ArrowRight size={16} /></button></div>
-      </section>
-
-      <section className="overview-chart-card" aria-label="选定月份收入与支出概览">
-        <div className="chart-heading"><div><span className="eyebrow">{formatBusinessPeriod(period)}</span><h2>收支走势</h2></div><span className="chart-summary-value">{formatCurrency(summary.cashBalance)} <small>结余</small></span></div>
-        <MiniTrendChart series={summary.dailySeries} />
+        <div className="hero-card-top"><span className="ledger-tab">{formatBusinessPeriod(period)} · 本月经营结论</span><span className={hasSalesResult ? "ledger-stamp" : "ledger-stamp pending"}>{hasSalesResult ? "已结转" : "待结转"}</span></div>
+        <div className="ledger-card-heading"><span>{resultTitle}</span><BookOpenCheck size={18} /></div>
+        <strong>{hasSalesResult ? formatCurrency(operatingResult) : "暂无法判断"}</strong>
+        <p><b>{resultDetail}</b></p>
+        {hasSalesResult ? <div className="hero-calculation-trail"><span>销售收入<b>{formatCurrency(summary.salesRevenue)}</b></span><i>−</i><span>已结转成本<b>{formatCurrency(resultCost)}</b></span><i>=</i><span className="trail-result">经营结果<b>{formatCurrency(operatingResult)}</b></span></div> : <div className="hero-calculation-trail incomplete"><span>本月收入<b>{formatCurrency(summary.income)}</b></span><i>−</i><span>本月支出<b>{formatCurrency(summary.expenses)}</b></span><i>=</i><span className="trail-result">利润<b>待销售结转</b></span></div>}
+        <div className="ledger-card-foot"><span>现金结余 <b>{formatCurrency(summary.cashBalance)}</b></span><button onClick={onBusiness}>查看经营 <ArrowRight size={16} /></button></div>
       </section>
 
       <section className="readiness-card" aria-label="经营账下一步">
-        <div className="readiness-copy"><span className="eyebrow">下一步</span><h2>{readiness.title}</h2></div>
+        <div className="readiness-copy"><span className="eyebrow">现在最该做</span><h2>{readiness.title}</h2><p>{readiness.description}</p></div>
         <button className="primary-action readiness-action" onClick={onPrimaryAction}>{primaryIcon}{readiness.actionLabel}<ArrowRight size={16} /></button>
       </section>
 
-      <section className="section-heading compact"><div><span className="eyebrow">商品成本</span><h2>{product.name}</h2></div></section>
-      <section className="cost-composition-card" aria-label="商品成本构成图">
-        <CostCompositionChart product={product} operatingCost={operatingCost} fullCost={fullCost} />
-      </section>
-      <section className="sample-materials-card" aria-label="行业示例材料">
-        <div className="section-heading compact"><div><span className="eyebrow">材料</span><h2>采购成本</h2></div><button onClick={onAddMaterial}>新增 <Plus size={14} /></button></div>
-        {materials.length ? <div className="sample-material-list">{materials.slice(0, 4).map((material) => <button key={material.id} className="sample-material-row" onClick={() => onEditMaterial(material)}><span><strong>{material.name}</strong><small>{material.source} · {material.unit}</small></span><b>{formatCurrency(material.unitCost)} / {material.unit}</b><ChevronRight size={15} /></button>)}</div> : <div className="sample-material-empty"><PackagePlus size={20} /><span>还没有材料</span><button onClick={onAddMaterial}>添加材料 <ArrowRight size={14} /></button></div>}
-      </section>
+      {attentionItems.length > 0 && <section className="home-attention-card" aria-label="需要关注"><div className="section-heading compact"><div><span className="eyebrow">需要关注</span><h2>先处理这 {attentionItems.length} 件事</h2></div></div><div className="home-attention-list">{attentionItems.map((item) => <button className={`home-attention-row ${item.tone}`} key={item.title} onClick={item.action === "products" ? onProducts : onBusiness}><Info size={17} /><span><b>{item.title}</b><small>{item.detail}</small></span><ChevronRight size={16} /></button>)}</div></section>}
+
+      {hasTrendData && <section className="overview-chart-card" aria-label="选定月份收入与支出概览">
+        <div className="chart-heading"><div><span className="eyebrow">经营走势</span><h2>收支变化</h2></div><span className="chart-summary-value">{formatCurrency(summary.cashBalance)} <small>现金结余</small></span></div>
+        <MiniTrendChart series={summary.dailySeries} />
+      </section>}
+
+      {hasProduct && <section className="unit-economics-card" aria-label={`${product.name}单件成本与利润`}>
+        <div className="section-heading compact"><div><span className="eyebrow">商品单件账</span><h2>{product.name}</h2></div><button onClick={onProducts}>管理商品 <ChevronRight size={14} /></button></div>
+        <div className="unit-economics-metrics"><span><small>售价</small><b>{product.price > 0 ? formatCurrency(product.price) : "未定价"}</b></span><i>−</i><span><small>单件成本</small><b>{formatCurrency(unitCost)}</b></span><i>=</i><span className={unitProfit === null ? "unit-profit pending" : unitProfit >= 0 ? "unit-profit" : "unit-profit loss"}><small>预计单件利润</small><b>{unitProfit === null ? "—" : formatCurrency(unitProfit)}</b></span></div>
+        <div className="unit-economics-note">{unitProfit === null ? "先设置售价，才能比较每件商品的成本和利润。" : unitProfit < 0 ? `每卖 1 件预计亏损 ${formatCurrency(Math.abs(unitProfit))}，建议调整售价或成本。` : `预计利润率 ${unitMargin?.toFixed(1)}%，成本包含直接、经营和资金口径。`}</div>
+        <details className="cost-breakdown"><summary>查看单件成本构成</summary><CostCompositionChart product={product} operatingCost={operatingCost} fullCost={fullCost} /></details>
+      </section>}
+
+      {(purchaseAmount > 0 || unlinkedMaterialCount > 0 || (!materials.length && readiness.stage === "cost")) && <section className="material-pulse-card" aria-label="材料采购提示">
+        {purchaseAmount > 0 ? <><span className="material-pulse-icon"><ReceiptText size={17} /></span><div><span className="eyebrow">材料采购</span><b>本月采购 {formatCurrency(purchaseAmount)}</b><small>{purchaseTotals.length} 类采购已计入现金流，不展示材料单价明细。</small></div><button onClick={onBusiness}>查看 <ChevronRight size={15} /></button></> : unlinkedMaterialCount > 0 ? <><span className="material-pulse-icon"><PackagePlus size={17} /></span><div><span className="eyebrow">材料提醒</span><b>{unlinkedMaterialCount} 项材料尚未用于商品成本</b><small>补齐关联后，单件成本会更可信。</small></div><button onClick={onProducts}>补成本 <ChevronRight size={15} /></button></> : <><span className="material-pulse-icon"><PackagePlus size={17} /></span><div><span className="eyebrow">材料</span><b>还没有材料采购记录</b><small>添加材料后可用于商品成本核算。</small></div><button onClick={onAddMaterial}>添加 <Plus size={15} /></button></>}
+      </section>}
     </div>
   );
 }

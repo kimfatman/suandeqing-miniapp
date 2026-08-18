@@ -7,7 +7,7 @@ import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CategorySheet, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
+import { CategorySheet, getHomeAttentionItems, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
 import { INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -31,6 +31,21 @@ describe("ProfileView industry template interactions", () => {
     expect(onIndustryChange).toHaveBeenCalledWith("retail");
     fireEvent.click(screen.getByRole("button", { name: /停用食材采购/ }));
     expect(onToggleCategory).toHaveBeenCalledWith("食材采购");
+  });
+});
+
+describe("Home conclusion attention priority", () => {
+  it("puts missing cost and pricing blockers before cash pressure and caps the list", () => {
+    const items = getHomeAttentionItems({ missingCostProductCount: 1, unpricedProductCount: 2, cashBalance: -30 });
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => item.action)).toEqual(["products", "products"]);
+    expect(items[0].title).toContain("待补成本");
+    expect(items[1].title).toContain("未定价");
+  });
+
+  it("shows cash pressure when product setup does not block accounting", () => {
+    const items = getHomeAttentionItems({ missingCostProductCount: 0, unpricedProductCount: 0, cashBalance: -1 });
+    expect(items).toEqual([expect.objectContaining({ tone: "cash", action: "business" })]);
   });
 });
 
