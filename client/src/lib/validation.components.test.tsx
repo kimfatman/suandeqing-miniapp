@@ -7,7 +7,7 @@ import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CategorySheet, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
+import { CategorySheet, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SalesRecordSheet } from "@/pages/Home";
 import { INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -35,14 +35,22 @@ describe("ProfileView industry template interactions", () => {
 });
 
 describe("MessageInboxSheet interactions", () => {
-  it("marks an unread message as read and uses its app action", () => {
+  it("opens complete content, marks an unread message as read and uses its app action", () => {
     const onMarkRead = vi.fn();
     const onAction = vi.fn();
-    render(<MessageInboxSheet isAuthenticated loading={false} unreadCount={1} onClose={vi.fn()} onLogin={vi.fn()} onMarkRead={onMarkRead} onMarkAll={vi.fn()} onAction={onAction} messages={[{ id: 9, title: "请及时备份账本", summary: "换设备前先创建一份云端备份。", body: null, level: "safety", actionLabel: "打开我的", actionPath: "/?tab=profile", publishedAt: new Date("2026-08-18T01:00:00.000Z"), readAt: null, createdAt: new Date("2026-08-18T01:00:00.000Z") }]} />);
+    render(<MessageInboxSheet isAuthenticated loading={false} unreadCount={1} onClose={vi.fn()} onLogin={vi.fn()} onMarkRead={onMarkRead} onMarkAll={vi.fn()} onAction={onAction} messages={[{ id: 9, title: "请及时备份账本", summary: "换设备前先创建一份云端备份。", body: "完整说明：恢复前确认账本来源。", level: "safety", actionLabel: "打开我的", actionPath: "/?tab=profile", publishedAt: new Date("2026-08-18T01:00:00.000Z"), readAt: null, createdAt: new Date("2026-08-18T01:00:00.000Z") }]} />);
     fireEvent.click(screen.getByRole("button", { name: /请及时备份账本/ }));
     expect(onMarkRead).toHaveBeenCalledWith(9);
+    expect(screen.getByText("完整说明：恢复前确认账本来源。")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /打开我的/ }));
     expect(onAction).toHaveBeenCalledWith("/?tab=profile");
+  });
+
+  it("lets a user close the one-time important announcement prompt", () => {
+    const onDismiss = vi.fn();
+    render(<ImportantMessageBanner message={{ id: 10, title: "服务规则更新", summary: "请在本月内查看说明。", body: null, level: "important", actionLabel: null, actionPath: null, publishedAt: new Date(), readAt: null, createdAt: new Date() }} onDismiss={onDismiss} onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "关闭重要公告" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });
 

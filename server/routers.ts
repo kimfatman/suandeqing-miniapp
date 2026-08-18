@@ -44,7 +44,9 @@ export const appRouter = router({
   }),
   messages: router({
     unreadCount: protectedProcedure.query(async ({ ctx }) => ({ count: await db.getUnreadMessageCount(ctx.user.id) })),
+    importantBanner: protectedProcedure.query(({ ctx }) => db.getImportantMessageBanner(ctx.user.id)),
     list: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(50).default(30) }).default({ limit: 30 })).query(({ ctx, input }) => db.listUserMessages(ctx.user.id, input.limit)),
+    markDisplayed: protectedProcedure.input(z.object({ userMessageId: z.number().int().positive() })).mutation(async ({ ctx, input }) => ({ updated: await db.markUserMessageDisplayed(ctx.user.id, input.userMessageId) })),
     markRead: protectedProcedure.input(z.object({ userMessageId: z.number().int().positive() })).mutation(async ({ ctx, input }) => ({ updated: await db.markUserMessageRead(ctx.user.id, input.userMessageId) })),
     markAllRead: protectedProcedure.mutation(async ({ ctx }) => ({ updated: await db.markAllUserMessagesRead(ctx.user.id) })),
   }),

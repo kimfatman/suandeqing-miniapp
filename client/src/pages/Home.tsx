@@ -110,16 +110,28 @@ export default function Home() {
   const [showDataManagement, setShowDataManagement] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showAdminMessages, setShowAdminMessages] = useState(false);
+  const [dismissedBannerId, setDismissedBannerId] = useState<number | null>(null);
+  const [initialMessageDetail, setInitialMessageDetail] = useState<InboxMessage | null>(null);
+  const displayedBannerRef = useRef<number | null>(null);
   const [pendingIndustry, setPendingIndustry] = useState<IndustryKey | null>(null);
   const { user, loading: authLoading, isAuthenticated, logout, isLoggingOut } = useAuth();
   const cloudLedger = trpc.ledger.get.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const backupLedger = trpc.ledger.backup.useMutation();
   const messageUnread = trpc.messages.unreadCount.useQuery(undefined, { enabled: isAuthenticated, retry: false, refetchOnWindowFocus: true });
+  const importantBanner = trpc.messages.importantBanner.useQuery(undefined, { enabled: isAuthenticated, retry: false });
   const inbox = trpc.messages.list.useQuery({ limit: 30 }, { enabled: isAuthenticated && showMessages, retry: false });
   const trpcUtils = trpc.useUtils();
-  const markMessageRead = trpc.messages.markRead.useMutation({ onSuccess: async () => { await Promise.all([trpcUtils.messages.unreadCount.invalidate(), trpcUtils.messages.list.invalidate()]); } });
+  const markMessageRead = trpc.messages.markRead.useMutation({ onSuccess: async () => { await Promise.all([trpcUtils.messages.unreadCount.invalidate(), trpcUtils.messages.list.invalidate(), trpcUtils.messages.importantBanner.invalidate()]); } });
+  const markMessageDisplayed = trpc.messages.markDisplayed.useMutation({ onSuccess: async () => { await trpcUtils.messages.importantBanner.invalidate(); } });
   const markAllMessagesRead = trpc.messages.markAllRead.useMutation({ onSuccess: async () => { await Promise.all([trpcUtils.messages.unreadCount.invalidate(), trpcUtils.messages.list.invalidate()]); } });
   const unreadCount = messageUnread.data?.count ?? 0;
+  const visibleImportantBanner = importantBanner.data && importantBanner.data.id !== dismissedBannerId ? importantBanner.data : null;
+
+  useEffect(() => {
+    if (!visibleImportantBanner || displayedBannerRef.current === visibleImportantBanner.id) return;
+    displayedBannerRef.current = visibleImportantBanner.id;
+    markMessageDisplayed.mutate({ userMessageId: visibleImportantBanner.id });
+  }, [visibleImportantBanner?.id]);
   const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
   const [selectedPeriod, setSelectedPeriod] = useState(() => getBusinessPeriod());
@@ -239,6 +251,8 @@ export default function Home() {
           </button>
         </header>
 
+        {visibleImportantBanner && <ImportantMessageBanner message={visibleImportantBanner} onDismiss={() => setDismissedBannerId(visibleImportantBanner.id)} onOpen={() => { if (!visibleImportantBanner.readAt) markMessageRead.mutate({ userMessageId: visibleImportantBanner.id }); setInitialMessageDetail({ ...visibleImportantBanner, readAt: visibleImportantBanner.readAt ?? new Date() }); setDismissedBannerId(visibleImportantBanner.id); setShowMessages(true); }} />}
+
         {activeTab === "home" && (
           <HomeView
             product={selectedProduct}
@@ -308,7 +322,7 @@ export default function Home() {
       {showBomEditor && <BomEditorSheet product={selectedProduct} materials={ledger.materials} categories={getActiveCategories(ledger)} costLabel={currentTemplate.productCostLabel} costAction={currentTemplate.productCostAction} costEmpty={currentTemplate.productCostEmpty} onClose={() => setShowBomEditor(false)} onSave={(items, settings) => { setLedger((current) => { const products = current.products.map((item) => { if (item.id !== selectedProduct.id) return item; const draftProduct = { ...item, bom: items, costCategory: settings.costCategory, lossRate: settings.lossRate, batchYield: settings.batchYield, materialUnitCosts: settings.costSnapshot?.materialUnitCosts, packaging: settings.costSnapshot?.packaging ?? item.packaging, directLabor: settings.costSnapshot?.directLabor ?? item.directLabor }; const recalculated = recalculateProduct(draftProduct, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost); const nextVersion = makeBomVersionSnapshot(draftProduct, current.materials, settings, new Date().toISOString().slice(0, 10)); return { ...recalculated, category: items.length || recalculated.direct > 0 ? "已补齐成本" : getProductPendingLabel(currentTemplate.productCostLabel), bomVersions: [...(item.bomVersions ?? []), nextVersion] }; }); const next = { ...current, products }; persistLedger(next); return next; }); setShowBomEditor(false); notify(`已保存${currentTemplate.productCostLabel}，并生成新的成本版本`); }} />}
       {costEditor && <CostSettingsSheet type={costEditor} value={costEditor === "hidden" ? currentCosts.hiddenCost : currentCosts.fundingCost} onClose={() => setCostEditor(null)} onSave={(value) => { const nextCosts = { ...currentCosts, [costEditor === "hidden" ? "hiddenCost" : "fundingCost"]: value }; setCurrentCosts(nextCosts); setLedger((current) => { const next = { ...current, costs: nextCosts, products: costEditor === "hidden" ? current.products.map((product) => recalculateProduct(product, current.materials, nextCosts.hiddenCost, nextCosts.fixedCost)) : current.products }; persistLedger(next); return next; }); setCostEditor(null); notify(costEditor === "hidden" ? "已更新隐形成本，经营成本已重新计算" : "已更新资金成本，完整成本已重新计算"); }} />}
       {showDataManagement && <DataManagementSheet isAuthenticated={isAuthenticated} cloudAvailable={Boolean(cloudLedger.data)} backupAt={cloudLedger.data?.backedUpAt} isBackingUp={backupLedger.isPending} onClose={() => setShowDataManagement(false)} onLogin={startLogin} onBackup={backupCurrentLedger} onRestoreCloud={() => { if (!cloudLedger.data) return; restoreLedger(cloudLedger.data.ledgerJson, "云端"); setShowDataManagement(false); }} onExport={exportLedger} onImport={(content) => { restoreLedger(content, "导入文件"); setShowDataManagement(false); }} />}
-      {showMessages && <MessageInboxSheet isAuthenticated={isAuthenticated} loading={inbox.isLoading} messages={inbox.data ?? []} unreadCount={messageUnread.data?.count ?? 0} onClose={() => setShowMessages(false)} onLogin={startLogin} onMarkRead={(id) => markMessageRead.mutate({ userMessageId: id })} onMarkAll={() => markAllMessagesRead.mutate()} onAction={handleMessageAction} />}
+      {showMessages && <MessageInboxSheet isAuthenticated={isAuthenticated} loading={inbox.isLoading} messages={inbox.data ?? []} unreadCount={messageUnread.data?.count ?? 0} initialMessage={initialMessageDetail} onClose={() => { setShowMessages(false); setInitialMessageDetail(null); }} onLogin={startLogin} onMarkRead={(id) => markMessageRead.mutate({ userMessageId: id })} onMarkAll={() => markAllMessagesRead.mutate()} onAction={handleMessageAction} />}
       {showAdminMessages && user?.role === "admin" && <AdminMessageSheet onClose={() => setShowAdminMessages(false)} onNotice={notify} />}
       {pendingIndustry && <IndustryChangeSheet current={ledger.profile.industry} next={pendingIndustry} onClose={() => setPendingIndustry(null)} onConfirm={confirmIndustryChange} />}
       {toast && <div className="app-toast"><CheckBadge />{toast}</div>}
@@ -533,8 +547,19 @@ function IndustryChangeSheet({ current, next, onClose, onConfirm }: { current: I
 
 type InboxMessage = { id: number; title: string; summary: string; body: string | null; level: MessageLevel; actionLabel: string | null; actionPath: string | null; publishedAt: Date | null; readAt: Date | null; createdAt: Date };
 
-export function MessageInboxSheet({ isAuthenticated, loading, messages, unreadCount, onClose, onLogin, onMarkRead, onMarkAll, onAction }: { isAuthenticated: boolean; loading: boolean; messages: InboxMessage[]; unreadCount: number; onClose: () => void; onLogin: () => void; onMarkRead: (id: number) => void; onMarkAll: () => void; onAction: (path?: string | null) => void }) {
-  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet message-inbox-sheet" role="dialog" aria-modal="true" aria-label="消息中心" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">服务与提醒</span><h2>消息中心</h2></div><button className="icon-button" onClick={onClose}>×</button></header>{!isAuthenticated ? <div className="message-empty"><BellRing size={22} /><b>登录后查看服务消息</b><small>运营通知只会展示给对应的已登录商户。</small><button className="primary-action" onClick={onLogin}><LogIn size={16} />登录查看</button></div> : loading ? <div className="message-empty"><span className="loading-sweep" />正在加载消息</div> : !messages.length ? <div className="message-empty"><BellRing size={22} /><b>暂时没有新消息</b><small>账本安全和产品更新会在这里保留。</small></div> : <><div className="message-inbox-meta"><span>{unreadCount ? `${unreadCount} 条未读` : "已全部读完"}</span>{unreadCount > 0 && <button onClick={onMarkAll}>全部已读</button>}</div><div className="message-list">{messages.map((message) => <article className={message.readAt ? "message-card" : "message-card unread"} key={message.id}><button className="message-copy" onClick={() => !message.readAt && onMarkRead(message.id)}><span className={`message-level ${message.level}`}>{getMessageLevelLabel(message.level)}</span><b>{message.title}</b><p>{message.summary}</p><small>{new Date(message.publishedAt ?? message.createdAt).toLocaleString("zh-CN")}</small></button>{message.actionLabel && <button className="message-action" onClick={() => { if (!message.readAt) onMarkRead(message.id); onAction(message.actionPath); }}>{message.actionLabel}<ChevronRight size={14} /></button>}</article>)}</div></>}</section></div>;
+export function ImportantMessageBanner({ message, onDismiss, onOpen }: { message: InboxMessage; onDismiss: () => void; onOpen: () => void }) {
+  return <aside className="important-message-banner" aria-label="重要公告"><span className="message-level important">重要公告</span><div><b>{message.title}</b><p>{message.summary}</p></div><button onClick={onOpen}>查看</button><button className="banner-dismiss" aria-label="关闭重要公告" onClick={onDismiss}>×</button></aside>;
+}
+
+export function MessageInboxSheet({ isAuthenticated, loading, messages, unreadCount, initialMessage, onClose, onLogin, onMarkRead, onMarkAll, onAction }: { isAuthenticated: boolean; loading: boolean; messages: InboxMessage[]; unreadCount: number; initialMessage?: InboxMessage | null; onClose: () => void; onLogin: () => void; onMarkRead: (id: number) => void; onMarkAll: () => void; onAction: (path?: string | null) => void }) {
+  const [activeMessage, setActiveMessage] = useState<InboxMessage | null>(initialMessage ?? null);
+  useEffect(() => { if (initialMessage) setActiveMessage(initialMessage); }, [initialMessage?.id]);
+  const openMessage = (message: InboxMessage) => {
+    if (!message.readAt) onMarkRead(message.id);
+    setActiveMessage({ ...message, readAt: message.readAt ?? new Date() });
+  };
+  const content = !isAuthenticated ? <div className="message-empty"><BellRing size={22} /><b>登录后查看服务消息</b><small>运营通知只会展示给对应的已登录商户。</small><button className="primary-action" onClick={onLogin}><LogIn size={16} />登录查看</button></div> : activeMessage ? <article className="message-detail"><button className="message-back" onClick={() => setActiveMessage(null)}>‹ 返回消息列表</button><span className={`message-level ${activeMessage.level}`}>{getMessageLevelLabel(activeMessage.level)}</span><h3>{activeMessage.title}</h3><time>{new Date(activeMessage.publishedAt ?? activeMessage.createdAt).toLocaleString("zh-CN")}</time><p className="message-detail-summary">{activeMessage.summary}</p><div className="message-detail-body">{activeMessage.body?.trim() || "暂无更多说明。"}</div>{activeMessage.actionLabel && <button className="primary-action message-detail-action" onClick={() => onAction(activeMessage.actionPath)}>{activeMessage.actionLabel}<ChevronRight size={16} /></button>}</article> : loading ? <div className="message-empty"><span className="loading-sweep" />正在加载消息</div> : !messages.length ? <div className="message-empty"><BellRing size={22} /><b>暂时没有新消息</b><small>账本安全和产品更新会在这里保留。</small></div> : <><div className="message-inbox-meta"><span>{unreadCount ? `${unreadCount} 条未读` : "已全部读完"}</span>{unreadCount > 0 && <button onClick={onMarkAll}>全部已读</button>}</div><div className="message-list">{messages.map((message) => <article className={message.readAt ? "message-card" : "message-card unread"} key={message.id}><button className="message-copy" onClick={() => openMessage(message)}><span className={`message-level ${message.level}`}>{getMessageLevelLabel(message.level)}</span><b>{message.title}</b><p>{message.summary}</p><small>{new Date(message.publishedAt ?? message.createdAt).toLocaleString("zh-CN")}</small></button><button className="message-action" onClick={() => openMessage(message)}>详情<ChevronRight size={14} /></button></article>)}</div></>;
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet message-inbox-sheet" role="dialog" aria-modal="true" aria-label="消息中心" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">服务与提醒</span><h2>消息中心</h2></div><button className="icon-button" onClick={onClose}>×</button></header>{content}</section></div>;
 }
 
 const messageActionOptions = [

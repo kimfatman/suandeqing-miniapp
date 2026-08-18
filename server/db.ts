@@ -130,6 +130,12 @@ export async function listUserMessages(userId: number, limit = 30) {
   return db.select({ id: userMessages.id, campaignId: messageCampaigns.id, title: messageCampaigns.title, summary: messageCampaigns.summary, body: messageCampaigns.body, level: messageCampaigns.level, actionLabel: messageCampaigns.actionLabel, actionPath: messageCampaigns.actionPath, publishedAt: messageCampaigns.publishedAt, readAt: userMessages.readAt, createdAt: userMessages.createdAt }).from(userMessages).innerJoin(messageCampaigns, eq(userMessages.campaignId, messageCampaigns.id)).where(activeMessageWhere(userId, new Date())).orderBy(desc(messageCampaigns.publishedAt), desc(userMessages.createdAt)).limit(limit);
 }
 
+export async function getImportantMessageBanner(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("数据库暂不可用，请稍后重试。");
+  return (await db.select({ id: userMessages.id, campaignId: messageCampaigns.id, title: messageCampaigns.title, summary: messageCampaigns.summary, body: messageCampaigns.body, level: messageCampaigns.level, actionLabel: messageCampaigns.actionLabel, actionPath: messageCampaigns.actionPath, publishedAt: messageCampaigns.publishedAt, readAt: userMessages.readAt, createdAt: userMessages.createdAt }).from(userMessages).innerJoin(messageCampaigns, eq(userMessages.campaignId, messageCampaigns.id)).where(and(activeMessageWhere(userId, new Date()), eq(messageCampaigns.level, "important"), isNull(userMessages.displayedAt))).orderBy(desc(messageCampaigns.publishedAt), desc(userMessages.createdAt)).limit(1))[0];
+}
+
 export async function getUnreadMessageCount(userId: number) {
   const db = await getDb();
   if (!db) throw new Error("数据库暂不可用，请稍后重试。");
@@ -141,6 +147,13 @@ export async function markUserMessageRead(userId: number, userMessageId: number)
   const db = await getDb();
   if (!db) throw new Error("数据库暂不可用，请稍后重试。");
   const result = await db.update(userMessages).set({ readAt: new Date() }).where(and(eq(userMessages.id, userMessageId), eq(userMessages.userId, userId), isNull(userMessages.readAt)));
+  return result[0].affectedRows > 0;
+}
+
+export async function markUserMessageDisplayed(userId: number, userMessageId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) throw new Error("数据库暂不可用，请稍后重试。");
+  const result = await db.update(userMessages).set({ displayedAt: new Date() }).where(and(eq(userMessages.id, userMessageId), eq(userMessages.userId, userId), isNull(userMessages.displayedAt)));
   return result[0].affectedRows > 0;
 }
 
