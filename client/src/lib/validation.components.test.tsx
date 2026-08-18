@@ -8,8 +8,8 @@ import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CategorySheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
-import { INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
+import { CashRecordsSheet, CategorySheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
   it("submits a non-catering industry with the store name", () => {
@@ -101,6 +101,31 @@ describe("Monthly indirect-cost allocation", () => {
     fireEvent.change(screen.getByLabelText(`${product.name}月产量`), { target: { value: "100" } });
     fireEvent.click(screen.getByRole("button", { name: /保存本月分摊/ }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ period: "2026-08", method: "output", fixedCosts: expect.objectContaining({ rent: 900 }), products: [expect.objectContaining({ outputQuantity: 100 })] }));
+  });
+
+  it("requires confirmation before deleting a saved monthly allocation plan", () => {
+    const onDelete = vi.fn();
+    const product = { ...seedLedger().products[0], bom: [] };
+    const plan = { id: "plan-2026-08", period: "2026-08", method: "output" as const, totalProductionHours: 0, fixedCosts: { ...emptyMonthlyFixedCosts(), rent: 100 }, products: [{ productId: product.id, outputQuantity: 10, unitHours: 0, salesAmount: 0, weight: 1 }], updatedAt: "2026-08-18T00:00:00.000Z" };
+    render(<MonthlyAllocationSheet period="2026-08" products={[product]} initialPlan={plan} onClose={vi.fn()} onSave={vi.fn()} onDelete={onDelete} />);
+    fireEvent.click(screen.getByRole("button", { name: "删除本月分摊" }));
+    expect(screen.getByText("删除本月分摊？")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+    expect(onDelete).toHaveBeenCalledOnce();
+  });
+});
+
+describe("CashRecordsSheet corrections", () => {
+  it("deletes manual cash records after confirmation and keeps sale-generated records on the sales correction path", () => {
+    const onDelete = vi.fn();
+    render(<CashRecordsSheet period="2026-08" records={[
+      { id: "manual", type: "expense", amount: 88, category: "物流配送", note: "手工补录", date: "2026-08-18", source: "manual" },
+      { id: "sale", type: "income", amount: 120, category: "销售收入", note: "商品销售", date: "2026-08-18", source: "sale", sourceId: "sale-1" },
+    ]} onClose={vi.fn()} onDelete={onDelete} />);
+    fireEvent.click(screen.getByRole("button", { name: "删除物流配送流水" }));
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    expect(onDelete).toHaveBeenCalledWith("manual");
+    expect(screen.getByText("请在销售记录中更正")).toBeTruthy();
   });
 });
 

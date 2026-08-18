@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, createEmptyLedger, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -63,6 +63,28 @@ describe("summarizeLedger", () => {
     expect(august).toMatchObject({ income: 120, expenses: 20, cashBalance: 100, incomeCount: 1, expenseCount: 1, salesCount: 1, salesRevenue: 20, costOfSales: 8 });
     expect(august.dailySeries).toEqual([{ label: "08/02", income: 120, expenses: 20 }]);
     expect(summarizeLedger(ledger, "2026-07")).toMatchObject({ income: 900, salesCount: 1, salesRevenue: 30, costOfSales: 12 });
+  });
+});
+
+describe("formal ledger data boundary", () => {
+  it("starts a new formal ledger without generated cash, costs, products, or materials", () => {
+    const ledger = createEmptyLedger();
+    expect(ledger.profile.onboarded).toBe(false);
+    expect(ledger.records).toEqual([]);
+    expect(ledger.materials).toEqual([]);
+    expect(ledger.products).toEqual([]);
+    expect(ledger.costs).toMatchObject({ fixedCost: 0, hiddenCost: 0, fundingCost: 0 });
+  });
+
+  it("removes recognizable legacy sample data without touching a real user record", () => {
+    const ledger = seedLedger();
+    ledger.profile = { ...ledger.profile, storeName: "用户店铺", onboarded: true };
+    ledger.records.push({ id: "user-record", type: "expense", amount: 88, category: "用户自录", note: "真实支出", date: "2026-08-18" });
+    const cleaned = removeLegacyDemoData(ledger);
+    expect(cleaned.records).toEqual([{ id: "user-record", type: "expense", amount: 88, category: "用户自录", note: "真实支出", date: "2026-08-18" }]);
+    expect(cleaned.materials).toEqual([]);
+    expect(cleaned.products).toEqual([]);
+    expect(cleaned.costs).toMatchObject({ fixedCost: 0, hiddenCost: 0, fundingCost: 0 });
   });
 });
 

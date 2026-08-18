@@ -118,6 +118,9 @@ export type LedgerRecord = {
   category: string;
   note: string;
   date: string;
+  /** 新流水的业务来源；销售与退款必须通过对应销售记录更正，避免现金与成本快照脱节。 */
+  source?: "manual" | "purchase" | "sale" | "refund";
+  sourceId?: string;
 };
 
 export type SalesRecord = {
@@ -397,13 +400,56 @@ export const seedLedger = (): LedgerData => ({
   sales: [],
 });
 
+/** 首次打开只展示行业选择，正式账本不会自动带入任何商品、流水或成本金额。 */
+export const createEmptyLedger = (): LedgerData => ({
+  profile: { storeName: "", industry: "catering", onboarded: false, monthlyBudget: 0 },
+  costs: { fixedCost: 0, hiddenCost: 0, hiddenCostBasis: "perUnit", hiddenCostSource: "manual", hiddenCostCategory: INDUSTRY_TEMPLATES[0].hiddenCostCategory, hiddenCostCategorySource: "template", allocationPeriod: getBusinessPeriod(), fundingCost: 0, fundingSource: "manual", feeRate: 0, monthlyIndirectPlans: [] },
+  categories: INDUSTRY_TEMPLATES[0].categories,
+  categoryStatus: Object.fromEntries(INDUSTRY_TEMPLATES[0].categories.map((category) => [category, true])),
+  materials: [],
+  products: [],
+  records: [],
+  sales: [],
+});
+
+const legacySeedRecordIds = new Set(["rec-1", "rec-2"]);
+const legacySeedMaterialIds = new Set(["mat-tea", "mat-milk", "mat-sugar", "mat-cup"]);
+const legacySeedProducts = new Map([[1, "招牌奶茶"], [2, "芝士热狗"], [3, "手冲柠檬茶"]]);
+
+/**
+ * 早期版本曾使用演示账本作为启动回退。仅移除带固定演示 ID 的数据，
+ * 不触碰用户后来录入的流水，也不删除已有销售快照引用的商品。
+ */
+export const removeLegacyDemoData = (ledger: LedgerData): LedgerData => {
+  const hasLegacySeedRecord = ledger.records.some((record) => legacySeedRecordIds.has(record.id));
+  const hasLegacySeedMaterial = ledger.materials.some((material) => legacySeedMaterialIds.has(material.id));
+  const hasLegacySeedProduct = ledger.products.some((product) => legacySeedProducts.get(product.id) === product.name);
+  const hasOnlyLegacyManualCosts = ledger.costs.fixedCost === 0.92
+    && ledger.costs.hiddenCost === 1.3
+    && ledger.costs.fundingCost === 0.28
+    && !(ledger.costs.hiddenCostItems?.length)
+    && !(ledger.costs.monthlyIndirectPlans?.length);
+  if (!hasLegacySeedRecord && !hasLegacySeedMaterial && !hasLegacySeedProduct && !hasOnlyLegacyManualCosts) return ledger;
+
+  const salesProductIds = new Set((ledger.sales ?? []).map((sale) => sale.productId));
+  return {
+    ...ledger,
+    records: ledger.records.filter((record) => !legacySeedRecordIds.has(record.id)),
+    materials: ledger.materials.filter((material) => !legacySeedMaterialIds.has(material.id)),
+    products: ledger.products.filter((product) => salesProductIds.has(product.id) || legacySeedProducts.get(product.id) !== product.name),
+    costs: hasOnlyLegacyManualCosts
+      ? { ...ledger.costs, fixedCost: 0, hiddenCost: 0, fundingCost: 0, hiddenCostItems: [], hiddenCostAllocationUnits: 0 }
+      : ledger.costs,
+  };
+};
+
 export const loadLedger = (): LedgerData => {
-  const fallback = seedLedger();
+  const fallback = createEmptyLedger();
   try {
     const data = window.localStorage.getItem(STORAGE_KEY);
     if (data) {
       const saved = JSON.parse(data) as Partial<LedgerData>;
-      return {
+      const merged = {
         ...fallback,
         ...saved,
         profile: { ...fallback.profile, ...(saved.profile ?? {}) },
@@ -415,9 +461,12 @@ export const loadLedger = (): LedgerData => {
         records: saved.records ?? fallback.records,
         sales: saved.sales ?? fallback.sales,
       };
+      const cleaned = removeLegacyDemoData(merged);
+      if (JSON.stringify(cleaned) !== JSON.stringify(merged)) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+      return cleaned;
     }
   } catch {
-    // 浏览器存储不可用时退回可演示的初始账本。
+    // 浏览器存储不可用时保持空白开账，不虚构经营数据。
   }
   return fallback;
 };
