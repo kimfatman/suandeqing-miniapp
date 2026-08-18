@@ -96,6 +96,11 @@ export type ProductAllocationInput = {
 export type MonthlyIndirectCostPlan = {
   id: string;
   period: string;
+  /** 费用在本月开始与结束生效的业务日期；旧计划缺失时兼容为整月。 */
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  /** 整月金额可作为预算全额使用，或按有效天数折算为本期实际计入金额。 */
+  costTiming?: "fullMonth" | "prorated";
   method: AllocationMethod;
   totalProductionHours: number;
   fixedCosts: MonthlyFixedCosts;
@@ -112,6 +117,9 @@ export type ProductIndirectAllocation = {
   allocationShare: number;
   outputQuantity: number;
   salesAmount: number;
+  effectiveDays: number;
+  daysInPeriod: number;
+  timeFactor: number;
 };
 
 export type UnitIndirectCostDetail = {
@@ -233,10 +241,39 @@ export const calculateMonthlyIndirectTotal = (fixedCosts: MonthlyFixedCosts) => 
   + (fixedCosts.equipment ?? []).reduce((sum, item) => sum + calculateEquipmentDepreciation(item), 0),
 );
 
-export const getMonthlyIndirectPlan = (ledger: LedgerData, period: string) => (ledger.costs.monthlyIndirectPlans ?? []).find((plan) => plan.period === period);
+const dateForPeriodDay = (period: string, day: number) => `${period}-${String(day).padStart(2, "0")}`;
+
+export const getMonthlyIndirectPlanTiming = (plan: MonthlyIndirectCostPlan) => {
+  const [year, month] = plan.period.split("-").map(Number);
+  const daysInPeriod = Number.isFinite(year) && Number.isFinite(month) ? new Date(year, month, 0).getDate() : 30;
+  const periodStart = dateForPeriodDay(plan.period, 1);
+  const periodEnd = dateForPeriodDay(plan.period, daysInPeriod);
+  const candidateFrom = plan.effectiveFrom?.startsWith(`${plan.period}-`) ? plan.effectiveFrom : periodStart;
+  const candidateTo = plan.effectiveTo?.startsWith(`${plan.period}-`) ? plan.effectiveTo : periodEnd;
+  const effectiveFrom = candidateFrom < periodStart ? periodStart : candidateFrom > periodEnd ? periodEnd : candidateFrom;
+  const effectiveTo = candidateTo < periodStart ? periodStart : candidateTo > periodEnd ? periodEnd : candidateTo;
+  const startDay = Number(effectiveFrom.slice(-2));
+  const endDay = Number(effectiveTo.slice(-2));
+  const effectiveDays = endDay >= startDay ? endDay - startDay + 1 : 0;
+  const timeFactor = plan.costTiming === "prorated" ? effectiveDays / daysInPeriod : 1;
+  return { periodStart, periodEnd, effectiveFrom, effectiveTo, daysInPeriod, effectiveDays, timeFactor };
+};
+
+export const calculateMonthlyIndirectPlanTotal = (plan: MonthlyIndirectCostPlan) => money(calculateMonthlyIndirectTotal(plan.fixedCosts) * getMonthlyIndirectPlanTiming(plan).timeFactor);
+
+export const isMonthlyIndirectPlanActiveOn = (plan: MonthlyIndirectCostPlan, businessDate: string) => {
+  const timing = getMonthlyIndirectPlanTiming(plan);
+  return businessDate.startsWith(`${plan.period}-`) && businessDate >= timing.effectiveFrom && businessDate <= timing.effectiveTo;
+};
+
+export const getMonthlyIndirectPlan = (ledger: LedgerData, period: string, businessDate?: string) => {
+  const plan = (ledger.costs.monthlyIndirectPlans ?? []).find((item) => item.period === period);
+  return plan && (!businessDate || isMonthlyIndirectPlanActiveOn(plan, businessDate)) ? plan : undefined;
+};
 
 export const calculateProductIndirectAllocations = (plan: MonthlyIndirectCostPlan): Record<number, ProductIndirectAllocation> => {
-  const total = calculateMonthlyIndirectTotal(plan.fixedCosts);
+  const timing = getMonthlyIndirectPlanTiming(plan);
+  const total = calculateMonthlyIndirectPlanTotal(plan);
   const basisFor = (input: ProductAllocationInput) => {
     const weight = Math.max(Number(input.weight) || 0, 0);
     if (plan.method === "hours") return Math.max(Number(input.outputQuantity) || 0, 0) * Math.max(Number(input.unitHours) || 0, 0) * weight;
@@ -244,23 +281,23 @@ export const calculateProductIndirectAllocations = (plan: MonthlyIndirectCostPla
     return Math.max(Number(input.outputQuantity) || 0, 0) * weight;
   };
   const totalBasis = plan.products.reduce((sum, input) => sum + basisFor(input), 0);
+  const roundUnitCost = (value: number) => Math.round(value * 10_000) / 10_000;
   return Object.fromEntries(plan.products.map((input) => {
     const allocationBasis = basisFor(input);
     const outputQuantity = Math.max(Number(input.outputQuantity) || 0, 0);
     const salesAmount = Math.max(Number(input.salesAmount) || 0, 0);
     const allocationShare = totalBasis > 0 ? allocationBasis / totalBasis : 0;
-    const unitIndirectCost = totalBasis > 0 && outputQuantity > 0
-      ? money(total * allocationBasis / totalBasis / outputQuantity)
-      : 0;
-    const totalIndirectCost = money(unitIndirectCost * outputQuantity);
-    return [input.productId, { productId: input.productId, totalIndirectCost, unitIndirectCost, allocationBasis, totalBasis, allocationShare, outputQuantity, salesAmount }];
+    const totalIndirectCost = totalBasis > 0 && outputQuantity > 0 ? money(total * allocationShare) : 0;
+    const unitIndirectCost = outputQuantity > 0 ? roundUnitCost(totalIndirectCost / outputQuantity) : 0;
+    return [input.productId, { productId: input.productId, totalIndirectCost, unitIndirectCost, allocationBasis, totalBasis, allocationShare, outputQuantity, salesAmount, effectiveDays: timing.effectiveDays, daysInPeriod: timing.daysInPeriod, timeFactor: timing.timeFactor }];
   }));
 };
 
 /** 将已算出的单品月度分摊，按固定费用项目拆分为每件成本，拆分合计严格等于该商品的单位间接成本。 */
 export const calculateUnitIndirectCostDetails = (plan: MonthlyIndirectCostPlan, productId: number): UnitIndirectCostDetail[] => {
   const allocation = calculateProductIndirectAllocations(plan)[productId];
-  const total = calculateMonthlyIndirectTotal(plan.fixedCosts);
+  const total = calculateMonthlyIndirectPlanTotal(plan);
+  const timing = getMonthlyIndirectPlanTiming(plan);
   if (!allocation || allocation.outputQuantity <= 0 || total <= 0 || allocation.unitIndirectCost <= 0) return [];
   const monthlyItems: Array<{ label: string; amount: number }> = [
     { label: "房租", amount: plan.fixedCosts.rent },
@@ -271,12 +308,13 @@ export const calculateUnitIndirectCostDetails = (plan: MonthlyIndirectCostPlan, 
     { label: "办公杂费", amount: plan.fixedCosts.officeMisc },
     { label: "其他固定费用", amount: plan.fixedCosts.other },
     ...(plan.fixedCosts.equipment ?? []).map((item) => ({ label: `${item.name || "设备"}月折旧`, amount: calculateEquipmentDepreciation(item) })),
-  ].map((item) => ({ ...item, amount: Math.max(Number(item.amount) || 0, 0) })).filter((item) => item.amount > 0);
+  ].map((item) => ({ ...item, amount: money(Math.max(Number(item.amount) || 0, 0) * timing.timeFactor) })).filter((item) => item.amount > 0);
   const share = allocation.totalIndirectCost / total;
-  const details = monthlyItems.map((item) => ({ label: item.label, monthlyAmount: money(item.amount), unitAmount: money(item.amount * share / allocation.outputQuantity) }));
+  const roundUnitDetail = (value: number) => Math.round(value * 10_000) / 10_000;
+  const details = monthlyItems.map((item) => ({ label: item.label, monthlyAmount: money(item.amount), unitAmount: roundUnitDetail(item.amount * share / allocation.outputQuantity) }));
   const detailsTotal = details.reduce((sum, item) => sum + item.unitAmount, 0);
-  const roundingDifference = money(allocation.unitIndirectCost - detailsTotal);
-  if (details.length && Math.abs(roundingDifference) >= 0.01) details[details.length - 1].unitAmount = money(details[details.length - 1].unitAmount + roundingDifference);
+  const roundingDifference = roundUnitDetail(allocation.unitIndirectCost - detailsTotal);
+  if (details.length && Math.abs(roundingDifference) >= 0.0001) details[details.length - 1].unitAmount = roundUnitDetail(details[details.length - 1].unitAmount + roundingDifference);
   return details;
 };
 

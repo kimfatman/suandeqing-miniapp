@@ -78,7 +78,7 @@ describe("PricingPanel cost traceability", () => {
 
   it("shows revenue-share evidence and warns when one unit bears the entire monthly allocation", () => {
     const onAdjustAllocation = vi.fn();
-    render(<PricingPanel productName="手作挂饰" costs={{ directCost: 8.5, fixedCost: 470, hiddenCost: 0, fundingCost: 0, feeRate: 0 }} costLines={[{ label: "拿货价", amount: 8.5, source: "商品成本", layer: "direct" }, { label: "房租", amount: 150, source: "2026年8月 · 按销售额分摊", layer: "operating" }, { label: "人工", amount: 300, source: "2026年8月 · 按销售额分摊", layer: "operating" }, { label: "水电", amount: 20, source: "2026年8月 · 按销售额分摊", layer: "operating" }]} allocationContext={{ periodLabel: "2026年8月", method: "revenue", monthlyIndirectTotal: 470, productIndirectTotal: 470, unitIndirectCost: 470, allocationShare: 1, outputQuantity: 1, productSalesAmount: 1000, totalSalesAmount: 1000 }} onClose={vi.fn()} onAdjustAllocation={onAdjustAllocation} />);
+    render(<PricingPanel productName="手作挂饰" costs={{ directCost: 8.5, fixedCost: 470, hiddenCost: 0, fundingCost: 0, feeRate: 0 }} costLines={[{ label: "拿货价", amount: 8.5, source: "商品成本", layer: "direct" }, { label: "房租", amount: 150, source: "2026年8月 · 按销售额分摊", layer: "operating" }, { label: "人工", amount: 300, source: "2026年8月 · 按销售额分摊", layer: "operating" }, { label: "水电", amount: 20, source: "2026年8月 · 按销售额分摊", layer: "operating" }]} allocationContext={{ periodLabel: "2026年8月", method: "revenue", monthlyIndirectTotal: 470, productIndirectTotal: 470, unitIndirectCost: 470, allocationShare: 1, outputQuantity: 1, productSalesAmount: 1000, totalSalesAmount: 1000, effectiveFrom: "2026-08-01", effectiveTo: "2026-08-31", effectiveDays: 31, daysInPeriod: 31, timeFactor: 1 }} onClose={vi.fn()} onAdjustAllocation={onAdjustAllocation} />);
     expect(screen.getByText("本月分摊依据")).toBeTruthy();
     expect(screen.getByText("销售额占比")).toBeTruthy();
     expect(screen.getByText("100.0%")).toBeTruthy();
@@ -121,9 +121,22 @@ describe("Monthly indirect-cost allocation", () => {
     fireEvent.click(screen.getByRole("button", { name: /新增设备/ }));
     fireEvent.change(screen.getByLabelText("设备采购价"), { target: { value: "3600" } });
     fireEvent.change(screen.getByLabelText("设备使用月数"), { target: { value: "36" } });
-    fireEvent.change(screen.getByLabelText(`${product.name}月产量`), { target: { value: "100" } });
-    fireEvent.click(screen.getByRole("button", { name: /保存本月分摊/ }));
+    fireEvent.change(screen.getByLabelText(`${product.name}本期产量`), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存本期分摊/ }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ period: "2026-08", method: "output", fixedCosts: expect.objectContaining({ rent: 900 }), products: [expect.objectContaining({ outputQuantity: 100 })] }));
+  });
+
+  it("saves an effective date range and prorated-month setting with the allocation plan", () => {
+    const onSave = vi.fn();
+    const product = { ...seedLedger().products[0], bom: [] };
+    render(<MonthlyAllocationSheet period="2026-08" products={[product]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByLabelText("分摊开始日期"), { target: { value: "2026-08-17" } });
+    fireEvent.change(screen.getByLabelText("分摊结束日期"), { target: { value: "2026-08-31" } });
+    fireEvent.click(screen.getByRole("button", { name: /整月预算按天折算/ }));
+    fireEvent.change(screen.getByLabelText("房租月费"), { target: { value: "310" } });
+    fireEvent.change(screen.getByLabelText(`${product.name}本期产量`), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存本期分摊/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ effectiveFrom: "2026-08-17", effectiveTo: "2026-08-31", costTiming: "prorated" }));
   });
 
   it("requires confirmation before deleting a saved monthly allocation plan", () => {

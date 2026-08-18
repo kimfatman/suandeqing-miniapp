@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -284,12 +284,30 @@ describe("monthly indirect-cost allocation", () => {
     expect(hours[1].totalIndirectCost + hours[2].totalIndirectCost).toBe(1300);
   });
 
+  it("prorates a month plan by its effective days and only matches sales within that date range", () => {
+    const plan = { ...makePlan("output"), effectiveFrom: "2026-08-17", effectiveTo: "2026-08-31", costTiming: "prorated" as const };
+    const timing = getMonthlyIndirectPlanTiming(plan);
+    expect(timing).toMatchObject({ effectiveDays: 15, daysInPeriod: 31 });
+    expect(calculateMonthlyIndirectPlanTotal(plan)).toBe(629.03);
+    const allocations = calculateProductIndirectAllocations(plan);
+    expect(allocations[1].effectiveDays).toBe(15);
+    expect(allocations[1].daysInPeriod).toBe(31);
+    expect(allocations[1].timeFactor).toBeCloseTo(15 / 31, 6);
+    expect(allocations[1].totalIndirectCost + allocations[2].totalIndirectCost).toBe(629.03);
+    const ledger = seedLedger();
+    ledger.costs.monthlyIndirectPlans = [plan];
+    expect(isMonthlyIndirectPlanActiveOn(plan, "2026-08-16")).toBe(false);
+    expect(isMonthlyIndirectPlanActiveOn(plan, "2026-08-17")).toBe(true);
+    expect(getMonthlyIndirectPlan(ledger, "2026-08", "2026-08-16")).toBeUndefined();
+    expect(getMonthlyIndirectPlan(ledger, "2026-08", "2026-08-17")?.id).toBe(plan.id);
+  });
+
   it("splits the unit allocation into rent, labor and equipment depreciation without changing the unit total", () => {
     const plan = makePlan("output");
     const allocation = calculateProductIndirectAllocations(plan)[1];
     const details = calculateUnitIndirectCostDetails(plan, 1);
     expect(details.map((item) => item.label)).toEqual(["房租", "全职人工及社保", "封口机月折旧"]);
-    expect(details.reduce((sum, item) => sum + item.unitAmount, 0)).toBe(allocation.unitIndirectCost);
+    expect(details.reduce((sum, item) => sum + item.unitAmount, 0)).toBeCloseTo(allocation.unitIndirectCost, 4);
   });
 
   it("breaks material, packaging and labor into a direct-cost ledger that matches the product direct cost", () => {

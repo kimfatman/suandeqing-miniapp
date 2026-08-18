@@ -26,6 +26,11 @@ export type PricingAllocationContext = {
   outputQuantity: number;
   productSalesAmount: number;
   totalSalesAmount: number;
+  effectiveFrom: string;
+  effectiveTo: string;
+  effectiveDays: number;
+  daysInPeriod: number;
+  timeFactor: number;
 };
 
 type PricingPanelProps = {
@@ -157,11 +162,14 @@ export function PricingPanel({ costs, productName = "当前商品", costLines = 
             <section className="allocation-evidence" aria-label="本月分摊依据">
               <div className="allocation-evidence-heading"><b>本月分摊依据</b><span>{allocationContext.periodLabel} · {methodName}（预计口径）</span></div>
               <div className="allocation-evidence-grid">
+                <span><small>成本生效日期</small><b>{allocationContext.effectiveFrom.slice(5)} ～ {allocationContext.effectiveTo.slice(5)}</b></span>
+                <span><small>有效天数</small><b>{allocationContext.effectiveDays} / {allocationContext.daysInPeriod} 天</b></span>
                 {allocationContext.method === "revenue" && <><span><small>本商品预计销售额</small><b>{formatCurrency(allocationContext.productSalesAmount)}</b></span><span><small>全部商品预计销售额</small><b>{formatCurrency(allocationContext.totalSalesAmount)}</b></span><span><small>销售额占比</small><b>{(allocationContext.allocationShare * 100).toFixed(1)}%</b></span></>}
                 {allocationContext.method !== "revenue" && <span><small>加权分摊占比</small><b>{(allocationContext.allocationShare * 100).toFixed(1)}%</b></span>}
                 <span><small>预计产量</small><b>{allocationContext.outputQuantity} 件</b></span>
                 <span><small>本商品月度分摊</small><b>{formatCurrency(allocationContext.productIndirectTotal)}</b></span>
               </div>
+              {allocationContext.timeFactor < 0.999 && <p className="allocation-time-note">本月费用按有效天数计入：{allocationContext.effectiveDays} ÷ {allocationContext.daysInPeriod} = {(allocationContext.timeFactor * 100).toFixed(1)}%</p>}
               <p className="allocation-evidence-formula">单件分摊 = {formatCurrency(allocationContext.monthlyIndirectTotal)} × {(allocationContext.allocationShare * 100).toFixed(1)}% ÷ {allocationContext.outputQuantity || 0} 件 = {formatCurrency(allocationContext.unitIndirectCost)}/件</p>
               {(fullShare || lowOutput) && <div className="allocation-evidence-warning"><Info size={15} /><div><b>{fullShare ? "当前商品承担了本月全部间接费用" : "当前预计产量仅为 1 件"}</b><p>{fullShare && lowOutput ? "全部间接费用会集中到这一件商品。若本月不止卖这一件或不止这一款商品，请补齐预计销售额和产量后再参考建议价。" : fullShare ? "若本月不止这一款商品，请补齐其他商品的预计销售额或分摊数据。" : "本月间接费用会集中到这一件；请确认预计产量是否符合实际。"}</p>{onAdjustAllocation && <button type="button" onClick={onAdjustAllocation}>检查并调整本月分摊</button>}</div></div>}
             </section>
