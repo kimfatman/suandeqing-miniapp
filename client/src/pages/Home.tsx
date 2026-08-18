@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
 import { MetricCard } from "@/components/MetricCard";
-import { PricingPanel } from "@/components/PricingPanel";
+import { PricingPanel, type PricingCostLine } from "@/components/PricingPanel";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { BomEditorSheet } from "@/components/BomEditorSheet";
@@ -43,7 +43,7 @@ import { MonthlyAllocationSheet, MonthlyCostReportSheet } from "@/components/Mon
 import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
 import * as XLSX from "xlsx";
 import {   applyIndustryTemplate, applyQuickCost,
-  applyMonthlyIndirectPlan, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, emptyMonthlyFixedCosts,
+  applyMonthlyIndirectPlan, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, emptyMonthlyFixedCosts,
   formatBusinessPeriod, getActiveCategories, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, INDUSTRY_TEMPLATES, AllocationMethod, HiddenCostItem, IndustryKey, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
 import { startLogin } from "@/const";
@@ -158,7 +158,23 @@ export default function Home() {
   const readiness = getReadiness(ledger, summary, currentTemplate.productCostLabel);
   const operatingCost = selectedProduct.operating;
   const fullCost = operatingCost + currentCosts.fundingCost;
-  const pricingCosts = { ...currentCosts, directCost: selectedProduct.direct, fixedCost: Math.max(selectedProduct.operating - selectedProduct.direct, 0), hiddenCost: 0 };
+  const pricingPlan = getMonthlyIndirectPlan(ledger, selectedPeriod);
+  const pricingAllocation = pricingPlan ? calculateProductIndirectAllocations(pricingPlan)[selectedProduct.id] : undefined;
+  const pricingDirectCost = calculateDirectCost(selectedProduct, ledger.materials);
+  const pricingIndirectCost = pricingAllocation?.unitIndirectCost ?? Math.max(selectedProduct.operating - pricingDirectCost, 0);
+  const pricingCosts = { ...currentCosts, directCost: pricingDirectCost, fixedCost: pricingIndirectCost, hiddenCost: pricingPlan ? 0 : currentCosts.hiddenCost };
+  const methodLabel: Record<AllocationMethod, string> = { output: "按产量", hours: "按工时", revenue: "按销售额" };
+  const directPricingLines: PricingCostLine[] = calculateUnitDirectCostDetails(selectedProduct, ledger.materials).map((item) => ({ label: item.label, amount: item.unitAmount, source: item.source, layer: "direct" }));
+  const indirectPricingLines: PricingCostLine[] = pricingPlan
+    ? calculateUnitIndirectCostDetails(pricingPlan, selectedProduct.id).map((item) => ({ label: item.label, amount: item.unitAmount, source: `${formatBusinessPeriod(pricingPlan.period)} · ${methodLabel[pricingPlan.method]}分摊`, layer: "operating" }))
+    : [
+      ...(currentCosts.fixedCost > 0 ? [{ label: "固定成本分摊", amount: currentCosts.fixedCost, source: "商品成本设置", layer: "operating" as const }] : []),
+      ...((ledger.costs.hiddenCostItems?.length && ledger.costs.hiddenCostAllocationUnits && ledger.costs.hiddenCostAllocationUnits > 0)
+        ? ledger.costs.hiddenCostItems.filter((item) => item.amount > 0).map((item) => ({ label: item.label, amount: item.amount / ledger.costs.hiddenCostAllocationUnits!, source: `按 ${ledger.costs.hiddenCostAllocationUnits} 件分摊`, layer: "operating" as const }))
+        : (currentCosts.hiddenCost > 0 ? [{ label: "隐形成本分摊", amount: currentCosts.hiddenCost, source: "隐形成本设置", layer: "operating" as const }] : [])),
+    ];
+  if (pricingPlan && pricingAllocation && !indirectPricingLines.length && pricingAllocation.unitIndirectCost > 0) indirectPricingLines.push({ label: "月度间接成本分摊", amount: pricingAllocation.unitIndirectCost, source: `${formatBusinessPeriod(pricingPlan.period)} · ${methodLabel[pricingPlan.method]}分摊`, layer: "operating" });
+  const pricingCostLines: PricingCostLine[] = [...directPricingLines, ...indirectPricingLines, ...(currentCosts.fundingCost > 0 ? [{ label: "利息及融资费用", amount: currentCosts.fundingCost, source: "资金成本设置", layer: "funding" as const }] : [])];
 
   const notify = (message: string) => {
     setToast(message);
@@ -338,7 +354,7 @@ export default function Home() {
         ))}
       </nav>
 
-      {showPricing && <PricingPanel costs={pricingCosts} onClose={() => setShowPricing(false)} onSave={saveSuggestedPrice} />}
+      {showPricing && <PricingPanel costs={pricingCosts} productName={selectedProduct.name} costLines={pricingCostLines} onClose={() => setShowPricing(false)} onSave={saveSuggestedPrice} />}
       {showProductNameSheet && <ProductNameSheet onClose={() => setShowProductNameSheet(false)} onSave={(name) => {
         const nextId = Math.max(0, ...ledger.products.map((item) => item.id)) + 1;
         const nextProduct: LedgerProduct = { id: nextId, name, category: getProductPendingLabel(currentTemplate.productCostLabel), price: 0, direct: 0, operating: 0, change: `先补充${currentTemplate.productCostLabel}`, packaging: 0, directLabor: 0, bom: [] };

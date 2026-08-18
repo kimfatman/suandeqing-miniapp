@@ -9,8 +9,17 @@ import {
   PricingMode,
 } from "@/lib/costEngine";
 
+export type PricingCostLine = {
+  label: string;
+  amount: number;
+  source: string;
+  layer: "direct" | "operating" | "funding";
+};
+
 type PricingPanelProps = {
   costs: CostInputs;
+  productName?: string;
+  costLines?: PricingCostLine[];
   onClose: () => void;
   onSave?: (price: number) => void;
 };
@@ -21,7 +30,7 @@ const scopeNames: Record<CostScope, string> = {
   full: "完整成本",
 };
 
-export function PricingPanel({ costs, onClose, onSave }: PricingPanelProps) {
+export function PricingPanel({ costs, productName = "当前商品", costLines = [], onClose, onSave }: PricingPanelProps) {
   const [scope, setScope] = useState<CostScope>("operating");
   const [mode, setMode] = useState<PricingMode>("margin");
   const [target, setTarget] = useState(30);
@@ -30,6 +39,10 @@ export function PricingPanel({ costs, onClose, onSave }: PricingPanelProps) {
     () => calculatePricing({ inputs: costs, scope, mode, target, fixedFee }),
     [costs, fixedFee, mode, scope, target],
   );
+  const visibleCostLines = costLines.filter((line) => scope === "direct" ? line.layer === "direct" : scope === "operating" ? line.layer !== "funding" : true);
+  const visibleCostTotal = visibleCostLines.reduce((total, line) => total + line.amount, 0);
+  const scopeDifference = result.cost - visibleCostTotal;
+  const formulaDenominator = mode === "margin" ? 1 - costs.feeRate / 100 - target / 100 : 1 - costs.feeRate / 100;
 
   return (
     <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}>
@@ -44,7 +57,7 @@ export function PricingPanel({ costs, onClose, onSave }: PricingPanelProps) {
         <header className="sheet-header">
           <div>
             <span className="eyebrow">商品定价建议</span>
-            <h2>给“招牌奶茶”算个更稳的价格</h2>
+            <h2>给“{productName}”算个更稳的价格</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="关闭定价建议">
             <X size={20} />
@@ -121,13 +134,25 @@ export function PricingPanel({ costs, onClose, onSave }: PricingPanelProps) {
           <div className="invalid-note">目标利润率过高或费率设置无效，请调整后再计算。</div>
         )}
 
+        <details className="pricing-cost-details" open>
+          <summary>成本与分摊明细 <ChevronDown size={16} /></summary>
+          <div className="pricing-cost-list">
+            {visibleCostLines.length ? visibleCostLines.map((line, index) => <div className="pricing-cost-line" key={`${line.label}-${index}`}><div><b>{line.label}</b><small>{line.source}</small></div><strong>{formatCurrency(line.amount)}</strong></div>) : <p className="pricing-cost-empty">当前口径还没有可分拆的成本项目。</p>}
+            {Math.abs(scopeDifference) >= 0.005 && <div className="pricing-cost-line adjustment"><div><b>分摊与取整调整</b><small>保证与本次成本一致</small></div><strong>{formatCurrency(scopeDifference)}</strong></div>}
+            <div className="pricing-cost-total"><span>{scopeNames[scope]}合计</span><b>{formatCurrency(result.cost)}</b></div>
+          </div>
+        </details>
+
         <details className="calculation-details">
-          <summary>为什么是这个价格？ <ChevronDown size={16} /></summary>
-          <p>
-            以{scopeNames[scope]} {formatCurrency(result.cost)} 为基础，计入{costs.feeRate}%平台及支付费率，
-            按{mode === "margin" ? `目标利润率 ${target}%` : `目标单份利润 ${formatCurrency(target)}`}反推，
-            再向上取整至0.5元。
-          </p>
+          <summary>价格怎么推出来？ <ChevronDown size={16} /></summary>
+          <div className="pricing-formula">
+            <span><b>本次成本</b><em>{formatCurrency(result.cost)}</em></span>
+            <span><b>每单固定费用</b><em>+ {formatCurrency(fixedFee)}</em></span>
+            {mode === "profit" && <span><b>目标单份利润</b><em>+ {formatCurrency(target)}</em></span>}
+            <span><b>反推分母</b><em>÷ (1 − {costs.feeRate}%{mode === "margin" ? ` − ${target}%` : ""}) = {formulaDenominator.toFixed(3)}</em></span>
+            <span><b>未取整价格</b><em>{formatCurrency(result.rawPrice)}</em></span>
+            <span><b>建议售价</b><em>向上取整至 0.5 元：{formatCurrency(result.suggestedPrice)}</em></span>
+          </div>
         </details>
         <button
           className="primary-action sheet-action"

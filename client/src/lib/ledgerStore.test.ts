@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -273,10 +273,27 @@ describe("monthly indirect-cost allocation", () => {
     expect(revenue[2].unitIndirectCost).toBeCloseTo(19.5, 2);
   });
 
-  it("uses the monthly total production hours for hours allocation", () => {
+  it("uses weighted production hours and allocates the full monthly total exactly once", () => {
     const hours = calculateProductIndirectAllocations(makePlan("hours"));
-    expect(hours[1].unitIndirectCost).toBe(6.5);
-    expect(hours[2].unitIndirectCost).toBe(19.5);
+    expect(hours[1].unitIndirectCost).toBe(5.2);
+    expect(hours[2].unitIndirectCost).toBe(15.6);
+    expect(hours[1].totalIndirectCost + hours[2].totalIndirectCost).toBe(1300);
+  });
+
+  it("splits the unit allocation into rent, labor and equipment depreciation without changing the unit total", () => {
+    const plan = makePlan("output");
+    const allocation = calculateProductIndirectAllocations(plan)[1];
+    const details = calculateUnitIndirectCostDetails(plan, 1);
+    expect(details.map((item) => item.label)).toEqual(["房租", "全职人工及社保", "封口机月折旧"]);
+    expect(details.reduce((sum, item) => sum + item.unitAmount, 0)).toBe(allocation.unitIndirectCost);
+  });
+
+  it("breaks material, packaging and labor into a direct-cost ledger that matches the product direct cost", () => {
+    const ledger = seedLedger();
+    const product = ledger.products[0];
+    const details = calculateUnitDirectCostDetails(product, ledger.materials);
+    expect(details.reduce((sum, item) => sum + item.unitAmount, 0)).toBe(calculateDirectCost(product, ledger.materials));
+    expect(details.map((item) => item.label)).toContain("包装");
   });
 
   it("uses a frozen monthly allocation snapshot in later sales summaries", () => {

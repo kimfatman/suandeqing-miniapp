@@ -111,6 +111,18 @@ export type ProductIndirectAllocation = {
   outputQuantity: number;
 };
 
+export type UnitIndirectCostDetail = {
+  label: string;
+  monthlyAmount: number;
+  unitAmount: number;
+};
+
+export type UnitCostDetail = {
+  label: string;
+  unitAmount: number;
+  source: string;
+};
+
 export type LedgerRecord = {
   id: string;
   type: "income" | "expense";
@@ -232,12 +244,53 @@ export const calculateProductIndirectAllocations = (plan: MonthlyIndirectCostPla
   return Object.fromEntries(plan.products.map((input) => {
     const allocationBasis = basisFor(input);
     const outputQuantity = Math.max(Number(input.outputQuantity) || 0, 0);
-    const unitIndirectCost = plan.method === "hours"
-      ? (plan.totalProductionHours > 0 ? money(total / plan.totalProductionHours * Math.max(Number(input.unitHours) || 0, 0) * Math.max(Number(input.weight) || 0, 0)) : 0)
-      : (totalBasis > 0 && outputQuantity > 0 ? money(total * allocationBasis / totalBasis / outputQuantity) : 0);
+    const unitIndirectCost = totalBasis > 0 && outputQuantity > 0
+      ? money(total * allocationBasis / totalBasis / outputQuantity)
+      : 0;
     const totalIndirectCost = money(unitIndirectCost * outputQuantity);
     return [input.productId, { productId: input.productId, totalIndirectCost, unitIndirectCost, allocationBasis, outputQuantity }];
   }));
+};
+
+/** 将已算出的单品月度分摊，按固定费用项目拆分为每件成本，拆分合计严格等于该商品的单位间接成本。 */
+export const calculateUnitIndirectCostDetails = (plan: MonthlyIndirectCostPlan, productId: number): UnitIndirectCostDetail[] => {
+  const allocation = calculateProductIndirectAllocations(plan)[productId];
+  const total = calculateMonthlyIndirectTotal(plan.fixedCosts);
+  if (!allocation || allocation.outputQuantity <= 0 || total <= 0 || allocation.unitIndirectCost <= 0) return [];
+  const monthlyItems: Array<{ label: string; amount: number }> = [
+    { label: "房租", amount: plan.fixedCosts.rent },
+    { label: "全职人工及社保", amount: plan.fixedCosts.fullTimeLabor },
+    { label: "水电", amount: plan.fixedCosts.utilities },
+    { label: "物业宽带", amount: plan.fixedCosts.propertyInternet },
+    { label: "软件服务器", amount: plan.fixedCosts.softwareServer },
+    { label: "办公杂费", amount: plan.fixedCosts.officeMisc },
+    { label: "其他固定费用", amount: plan.fixedCosts.other },
+    ...(plan.fixedCosts.equipment ?? []).map((item) => ({ label: `${item.name || "设备"}月折旧`, amount: calculateEquipmentDepreciation(item) })),
+  ].map((item) => ({ ...item, amount: Math.max(Number(item.amount) || 0, 0) })).filter((item) => item.amount > 0);
+  const share = allocation.totalIndirectCost / total;
+  const details = monthlyItems.map((item) => ({ label: item.label, monthlyAmount: money(item.amount), unitAmount: money(item.amount * share / allocation.outputQuantity) }));
+  const detailsTotal = details.reduce((sum, item) => sum + item.unitAmount, 0);
+  const roundingDifference = money(allocation.unitIndirectCost - detailsTotal);
+  if (details.length && Math.abs(roundingDifference) >= 0.01) details[details.length - 1].unitAmount = money(details[details.length - 1].unitAmount + roundingDifference);
+  return details;
+};
+
+/** 将材料、包装、直接人工、损耗及出成量拆为与直接成本完全对账的单件项目。 */
+export const calculateUnitDirectCostDetails = (product: LedgerProduct, materials: Material[]): UnitCostDetail[] => {
+  const rawItems: UnitCostDetail[] = product.bom.map((item) => {
+    if (item.customName !== undefined) return { label: item.customName || "自定义成本", unitAmount: money(Math.max(item.customUnitCost ?? 0, 0) * item.quantity), source: item.customUnit || "自定义明细" };
+    const material = materials.find((entry) => entry.id === item.materialId);
+    const unitCost = material ? (product.materialUnitCosts?.[material.id] ?? material.unitCost) : 0;
+    return { label: material?.name ?? "已删除材料", unitAmount: money(Math.max(unitCost, 0) * item.quantity), source: material?.source || "材料明细" };
+  }).filter((item) => item.unitAmount > 0);
+  if (product.packaging > 0) rawItems.push({ label: "包装", unitAmount: money(product.packaging), source: "商品成本" });
+  if (product.directLabor > 0) rawItems.push({ label: "直接人工", unitAmount: money(product.directLabor), source: "商品成本" });
+  const directCost = calculateDirectCost(product, materials);
+  if (!rawItems.length && directCost > 0) return [{ label: "主成本", unitAmount: directCost, source: "商品成本" }];
+  const rawTotal = rawItems.reduce((sum, item) => sum + item.unitAmount, 0);
+  const adjustment = money(directCost - rawTotal);
+  if (Math.abs(adjustment) >= 0.01) rawItems.push({ label: adjustment > 0 ? "损耗与出成调整" : "成本调整", unitAmount: adjustment, source: "损耗率/出成量" });
+  return rawItems;
 };
 
 export const applyMonthlyIndirectPlan = (products: LedgerProduct[], plan: MonthlyIndirectCostPlan, materials: Material[]) => {

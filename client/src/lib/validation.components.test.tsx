@@ -8,6 +8,7 @@ import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
+import { PricingPanel } from "@/components/PricingPanel";
 import { CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
@@ -62,6 +63,17 @@ describe("Product archive and hidden-cost allocation", () => {
   it("allocates rent, utilities and labor across the entered period quantity", () => {
     expect(getHiddenCostAllocation([{ id: "rent", label: "房租", amount: 900 }, { id: "water", label: "水电", amount: 90 }, { id: "labor", label: "人工", amount: 210 }], 300, 0)).toBe(4);
     expect(getHiddenCostAllocation([], 0, 1.2)).toBe(1.2);
+  });
+});
+
+describe("PricingPanel cost traceability", () => {
+  it("lists direct costs, indirect allocations and funding costs with their sources", () => {
+    render(<PricingPanel productName="手作挂饰" costs={{ directCost: 8, fixedCost: 2, hiddenCost: 0, fundingCost: 0.5, feeRate: 3 }} costLines={[{ label: "材料", amount: 6, source: "材料明细", layer: "direct" }, { label: "包装", amount: 2, source: "商品成本", layer: "direct" }, { label: "房租", amount: 2, source: "2026年8月 · 按产量分摊", layer: "operating" }, { label: "利息及融资费用", amount: 0.5, source: "资金成本设置", layer: "funding" }]} onClose={vi.fn()} />);
+    expect(screen.getByText("成本与分摊明细")).toBeTruthy();
+    expect(screen.getByText("材料明细")).toBeTruthy();
+    expect(screen.getByText("2026年8月 · 按产量分摊")).toBeTruthy();
+    fireEvent.click(screen.getByText("价格怎么推出来？"));
+    expect(screen.getByText("反推分母")).toBeTruthy();
   });
 });
 
