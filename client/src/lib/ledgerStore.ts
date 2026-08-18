@@ -65,6 +65,52 @@ export type LedgerProduct = {
   stockQuantity?: number;
 };
 
+export type AllocationMethod = "output" | "hours" | "revenue";
+
+export type EquipmentDepreciation = {
+  id: string;
+  name: string;
+  purchasePrice: number;
+  usefulLifeMonths: number;
+};
+
+export type MonthlyFixedCosts = {
+  rent: number;
+  fullTimeLabor: number;
+  utilities: number;
+  propertyInternet: number;
+  softwareServer: number;
+  officeMisc: number;
+  other: number;
+  equipment: EquipmentDepreciation[];
+};
+
+export type ProductAllocationInput = {
+  productId: number;
+  outputQuantity: number;
+  unitHours: number;
+  salesAmount: number;
+  weight: number;
+};
+
+export type MonthlyIndirectCostPlan = {
+  id: string;
+  period: string;
+  method: AllocationMethod;
+  totalProductionHours: number;
+  fixedCosts: MonthlyFixedCosts;
+  products: ProductAllocationInput[];
+  updatedAt: string;
+};
+
+export type ProductIndirectAllocation = {
+  productId: number;
+  totalIndirectCost: number;
+  unitIndirectCost: number;
+  allocationBasis: number;
+  outputQuantity: number;
+};
+
 export type LedgerRecord = {
   id: string;
   type: "income" | "expense";
@@ -91,6 +137,10 @@ export type SalesRecord = {
   fundingCostSnapshot?: number;
   fundingSourceSnapshot?: "manual" | "ledger";
   costPeriod?: string;
+  /** 月度分摊功能启用后冻结的每件间接成本；存在时优先于旧固定/隐形成本快照。 */
+  allocatedIndirectCostSnapshot?: number;
+  allocationMethodSnapshot?: AllocationMethod;
+  allocationPlanPeriod?: string;
   status?: "completed" | "voided";
   voidedAt?: string;
   voidedDate?: string;
@@ -136,12 +186,64 @@ export type LedgerCosts = {
   fundingCost: number;
   fundingSource?: "manual" | "ledger";
   feeRate: number;
+  /** 按月份保存的间接成本与分摊输入，修改新月份不会改写已发生销售的快照。 */
+  monthlyIndirectPlans?: MonthlyIndirectCostPlan[];
 };
 
 export type HiddenCostItem = {
   id: string;
   label: string;
   amount: number;
+};
+
+export const emptyMonthlyFixedCosts = (): MonthlyFixedCosts => ({ rent: 0, fullTimeLabor: 0, utilities: 0, propertyInternet: 0, softwareServer: 0, officeMisc: 0, other: 0, equipment: [] });
+
+export const calculateEquipmentDepreciation = (equipment: EquipmentDepreciation) => {
+  const price = Math.max(Number(equipment.purchasePrice) || 0, 0);
+  const life = Math.max(Number(equipment.usefulLifeMonths) || 0, 0);
+  return life > 0 ? money(price / life) : 0;
+};
+
+export const calculateMonthlyIndirectTotal = (fixedCosts: MonthlyFixedCosts) => money(
+  Math.max(fixedCosts.rent || 0, 0)
+  + Math.max(fixedCosts.fullTimeLabor || 0, 0)
+  + Math.max(fixedCosts.utilities || 0, 0)
+  + Math.max(fixedCosts.propertyInternet || 0, 0)
+  + Math.max(fixedCosts.softwareServer || 0, 0)
+  + Math.max(fixedCosts.officeMisc || 0, 0)
+  + Math.max(fixedCosts.other || 0, 0)
+  + (fixedCosts.equipment ?? []).reduce((sum, item) => sum + calculateEquipmentDepreciation(item), 0),
+);
+
+export const getMonthlyIndirectPlan = (ledger: LedgerData, period: string) => (ledger.costs.monthlyIndirectPlans ?? []).find((plan) => plan.period === period);
+
+export const calculateProductIndirectAllocations = (plan: MonthlyIndirectCostPlan): Record<number, ProductIndirectAllocation> => {
+  const total = calculateMonthlyIndirectTotal(plan.fixedCosts);
+  const basisFor = (input: ProductAllocationInput) => {
+    const weight = Math.max(Number(input.weight) || 0, 0);
+    if (plan.method === "hours") return Math.max(Number(input.outputQuantity) || 0, 0) * Math.max(Number(input.unitHours) || 0, 0) * weight;
+    if (plan.method === "revenue") return Math.max(Number(input.salesAmount) || 0, 0) * weight;
+    return Math.max(Number(input.outputQuantity) || 0, 0) * weight;
+  };
+  const totalBasis = plan.products.reduce((sum, input) => sum + basisFor(input), 0);
+  return Object.fromEntries(plan.products.map((input) => {
+    const allocationBasis = basisFor(input);
+    const outputQuantity = Math.max(Number(input.outputQuantity) || 0, 0);
+    const unitIndirectCost = plan.method === "hours"
+      ? (plan.totalProductionHours > 0 ? money(total / plan.totalProductionHours * Math.max(Number(input.unitHours) || 0, 0) * Math.max(Number(input.weight) || 0, 0)) : 0)
+      : (totalBasis > 0 && outputQuantity > 0 ? money(total * allocationBasis / totalBasis / outputQuantity) : 0);
+    const totalIndirectCost = money(unitIndirectCost * outputQuantity);
+    return [input.productId, { productId: input.productId, totalIndirectCost, unitIndirectCost, allocationBasis, outputQuantity }];
+  }));
+};
+
+export const applyMonthlyIndirectPlan = (products: LedgerProduct[], plan: MonthlyIndirectCostPlan, materials: Material[]) => {
+  const allocations = calculateProductIndirectAllocations(plan);
+  return products.map((product) => {
+    const direct = calculateDirectCost(product, materials);
+    const allocation = allocations[product.id];
+    return { ...product, direct, operating: money(direct + (allocation?.unitIndirectCost ?? 0)) };
+  });
 };
 
 export type LedgerData = {
@@ -323,6 +425,13 @@ export const normalizeLedger = (ledger: LedgerData): LedgerData => {
   const template = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
   const categorySource = ledger.costs.hiddenCostCategorySource
     ?? (ledger.costs.hiddenCostCategory && ledger.costs.hiddenCostCategory !== template.hiddenCostCategory ? "custom" : "template");
+  const monthlyIndirectPlans = (ledger.costs.monthlyIndirectPlans ?? []).map((plan) => ({
+    ...plan,
+    totalProductionHours: Math.max(Number(plan.totalProductionHours) || 0, 0),
+    fixedCosts: { ...emptyMonthlyFixedCosts(), ...(plan.fixedCosts ?? {}), equipment: (plan.fixedCosts?.equipment ?? []).map((item) => ({ ...item, purchasePrice: Math.max(Number(item.purchasePrice) || 0, 0), usefulLifeMonths: Math.max(Number(item.usefulLifeMonths) || 0, 0) })) },
+    products: (plan.products ?? []).map((item) => ({ ...item, outputQuantity: Math.max(Number(item.outputQuantity) || 0, 0), unitHours: Math.max(Number(item.unitHours) || 0, 0), salesAmount: Math.max(Number(item.salesAmount) || 0, 0), weight: Math.max(Number(item.weight) || 0, 0) })),
+  }));
+  const activePlan = monthlyIndirectPlans.find((plan) => plan.period === (ledger.costs.allocationPeriod ?? getBusinessPeriod()));
   return {
     ...ledger,
     costs: {
@@ -331,8 +440,9 @@ export const normalizeLedger = (ledger: LedgerData): LedgerData => {
       hiddenCostItems: (ledger.costs.hiddenCostItems ?? []).map((item) => ({ ...item, label: item.label.trim(), amount: Math.max(Number(item.amount) || 0, 0) })).filter((item) => item.label),
       hiddenCostAllocationUnits: Math.max(Number(ledger.costs.hiddenCostAllocationUnits) || 0, 0),
       hiddenCostCategorySource: categorySource,
+      monthlyIndirectPlans,
     },
-    products: ledger.products.map((product) => product.bom.length
+    products: activePlan ? applyMonthlyIndirectPlan(ledger.products, activePlan, ledger.materials) : ledger.products.map((product) => product.bom.length
       ? recalculateProduct(product, ledger.materials, ledger.costs.hiddenCost, ledger.costs.fixedCost)
       : product),
     sales: (ledger.sales ?? []).map((sale) => ({
@@ -395,6 +505,7 @@ export const persistLedger = (ledger: LedgerData) => {
 export const makeId = uid;
 
 export const calculateDirectCost = (product: LedgerProduct, materials: Material[]) => {
+  if (!product.bom.length && product.packaging <= 0 && product.directLabor <= 0 && product.direct > 0) return money(product.direct);
   const bomCost = product.bom.reduce((sum, item) => {
     if (item.customName !== undefined) return sum + Math.max(item.customUnitCost ?? 0, 0) * item.quantity;
     const material = materials.find((entry) => entry.id === item.materialId);
@@ -486,6 +597,7 @@ export const summarizeSales = (ledger: LedgerData, selectedPeriod = ledger.costs
     const direct = sale.unitDirectCostSnapshot ?? calculateDirectCost(product, ledger.materials);
     const fixedCost = sale.fixedCostSnapshot ?? ledger.costs.fixedCost;
     const hiddenCost = sale.hiddenCostSnapshot ?? configuredHiddenCost;
+    const monthlyIndirectCost = sale.allocatedIndirectCostSnapshot;
     const hiddenSource = sale.hiddenCostSourceSnapshot ?? ledger.costs.hiddenCostSource ?? "manual";
     const hiddenBasis = sale.hiddenCostBasisSnapshot ?? ledger.costs.hiddenCostBasis ?? "perUnit";
     const fundingSource = sale.fundingSourceSnapshot ?? ledger.costs.fundingSource ?? "manual";
@@ -493,11 +605,15 @@ export const summarizeSales = (ledger: LedgerData, selectedPeriod = ledger.costs
     salesQuantity += netQuantity;
     if (saleInPeriod && netQuantity > 0) effectiveSalesCount += 1;
     costOfSales += direct * netQuantity;
-    allocatedIndirectCosts += fixedCost * netQuantity;
-    if (hiddenSource === "ledger") {
-      if (saleInPeriod && netQuantity > 0) needsLedgerHiddenCost = true;
+    if (monthlyIndirectCost !== undefined) {
+      allocatedIndirectCosts += monthlyIndirectCost * netQuantity;
     } else {
-      allocatedIndirectCosts += hiddenBasis === "perSale" ? hiddenCost * (netQuantity / quantity) : hiddenCost * netQuantity;
+      allocatedIndirectCosts += fixedCost * netQuantity;
+      if (hiddenSource === "ledger") {
+        if (saleInPeriod && netQuantity > 0) needsLedgerHiddenCost = true;
+      } else {
+        allocatedIndirectCosts += hiddenBasis === "perSale" ? hiddenCost * (netQuantity / quantity) : hiddenCost * netQuantity;
+      }
     }
     if (fundingSource === "ledger") {
       if (saleInPeriod && netQuantity > 0) needsLedgerFunding = true;

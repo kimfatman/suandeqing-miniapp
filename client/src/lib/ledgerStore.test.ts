@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateUnitCost, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -83,6 +83,11 @@ describe("unit cost and BOM normalization", () => {
     const ledger = seedLedger();
     const product = { ...ledger.products[0], lossRate: 10, batchYield: 2 };
     expect(calculateDirectCost(product, ledger.materials)).toBe(2.99);
+  });
+
+  it("keeps an existing manual direct cost for a legacy product without BOM rows", () => {
+    const product = { ...seedLedger().products[1], bom: [], packaging: 0, directLabor: 0, direct: 6.8 };
+    expect(calculateDirectCost(product, [])).toBe(6.8);
   });
 
   it("includes custom cost details in product cost and historical snapshots", () => {
@@ -195,6 +200,54 @@ describe("summarizeSales", () => {
     ledger.costs.hiddenCostCategory = "交通配送";
     ledger.records.push({ id: "delivery", type: "expense", amount: 8, category: "交通配送", note: "", date: "2026-08-17" });
     expect(summarizeSales(ledger).allocatedIndirectCosts).toBe(9.84);
+  });
+});
+
+describe("monthly indirect-cost allocation", () => {
+  const makePlan = (method: "output" | "hours" | "revenue") => ({
+    id: "plan-2026-08",
+    period: "2026-08",
+    method,
+    totalProductionHours: 100,
+    fixedCosts: { ...emptyMonthlyFixedCosts(), rent: 900, fullTimeLabor: 300, equipment: [{ id: "machine", name: "封口机", purchasePrice: 3600, usefulLifeMonths: 36 }] },
+    products: [
+      { productId: 1, outputQuantity: 100, unitHours: 0.5, salesAmount: 1000, weight: 1 },
+      { productId: 2, outputQuantity: 50, unitHours: 1, salesAmount: 2000, weight: 1.5 },
+    ],
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+
+  it("adds equipment monthly depreciation into the month total", () => {
+    const plan = makePlan("output");
+    expect(calculateEquipmentDepreciation(plan.fixedCosts.equipment[0])).toBe(100);
+    expect(calculateMonthlyIndirectTotal(plan.fixedCosts)).toBe(1300);
+  });
+
+  it("allocates by weighted output and weighted sales revenue", () => {
+    const output = calculateProductIndirectAllocations(makePlan("output"));
+    expect(output[1].unitIndirectCost).toBeCloseTo(7.43, 2);
+    expect(output[2].unitIndirectCost).toBeCloseTo(11.14, 2);
+    const revenue = calculateProductIndirectAllocations(makePlan("revenue"));
+    expect(revenue[1].unitIndirectCost).toBeCloseTo(3.25, 2);
+    expect(revenue[2].unitIndirectCost).toBeCloseTo(19.5, 2);
+  });
+
+  it("uses the monthly total production hours for hours allocation", () => {
+    const hours = calculateProductIndirectAllocations(makePlan("hours"));
+    expect(hours[1].unitIndirectCost).toBe(6.5);
+    expect(hours[2].unitIndirectCost).toBe(19.5);
+  });
+
+  it("uses a frozen monthly allocation snapshot in later sales summaries", () => {
+    const ledger = normalizeLedger(seedLedger());
+    ledger.costs.fixedCost = 99;
+    ledger.costs.hiddenCost = 99;
+    ledger.costs.fundingCost = 0;
+    ledger.sales = [{ id: "allocated-sale", productId: 1, quantity: 2, unitPrice: 20, date: "2026-08-17", note: "", unitDirectCostSnapshot: 5, allocatedIndirectCostSnapshot: 4, allocationMethodSnapshot: "output", allocationPlanPeriod: "2026-08" }];
+    const summary = summarizeSales(ledger, "2026-08");
+    expect(summary.costOfSales).toBe(10);
+    expect(summary.allocatedIndirectCosts).toBe(8);
+    expect(summary.operatingResult).toBe(22);
   });
 });
 

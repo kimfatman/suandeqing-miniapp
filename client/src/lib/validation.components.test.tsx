@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => cleanup());
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
+import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { CategorySheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
@@ -85,6 +86,21 @@ describe("Sale refund and inventory interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: /保存并结转/ }));
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("可售库存仅剩");
+  });
+});
+
+describe("Monthly indirect-cost allocation", () => {
+  it("saves output-based rent and equipment depreciation inputs as a monthly plan", () => {
+    const onSave = vi.fn();
+    const product = { ...seedLedger().products[0], bom: [] };
+    render(<MonthlyAllocationSheet period="2026-08" products={[product]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByLabelText("房租月费"), { target: { value: "900" } });
+    fireEvent.click(screen.getByRole("button", { name: /新增设备/ }));
+    fireEvent.change(screen.getByLabelText("设备采购价"), { target: { value: "3600" } });
+    fireEvent.change(screen.getByLabelText("设备使用月数"), { target: { value: "36" } });
+    fireEvent.change(screen.getByLabelText(`${product.name}月产量`), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存本月分摊/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ period: "2026-08", method: "output", fixedCosts: expect.objectContaining({ rent: 900 }), products: [expect.objectContaining({ outputQuantity: 100 })] }));
   });
 });
 
