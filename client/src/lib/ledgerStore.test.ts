@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, createEmptyLedger, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, INDUSTRY_TEMPLATES, initializeIndustryLedger, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -224,6 +224,23 @@ describe("summarizeSales", () => {
     ledger.costs.hiddenCostCategory = "交通配送";
     ledger.records.push({ id: "delivery", type: "expense", amount: 8, category: "交通配送", note: "", date: "2026-08-17" });
     expect(summarizeSales(ledger).allocatedIndirectCosts).toBe(9.84);
+  });
+});
+
+describe("sales deletion", () => {
+  it("removes only the selected sale, its linked receipts and refunds, and restores the net tracked inventory", () => {
+    const ledger = seedLedger();
+    ledger.products[0] = { ...ledger.products[0], stockQuantity: 2 };
+    ledger.sales = [{ id: "sale-delete", productId: 1, quantity: 2, unitPrice: 12, date: "2026-08-18", note: "", refunds: [{ id: "refund-delete", quantity: 1, amount: 12, date: "2026-08-18", note: "退款", restock: true }] }];
+    ledger.records = [
+      { id: "sale-cash", type: "income", amount: 24, category: "销售收入", note: "招牌奶茶销售", date: "2026-08-18", source: "sale", sourceId: "sale-delete" },
+      { id: "refund-cash", type: "expense", amount: 12, category: "销售退款", note: "招牌奶茶退款", date: "2026-08-18", source: "refund", sourceId: "sale-delete" },
+      { id: "manual-expense", type: "expense", amount: 24, category: "物流配送", note: "保留的手工流水", date: "2026-08-18", source: "manual" },
+    ];
+    const deleted = deleteSaleTransaction(ledger, "sale-delete");
+    expect(deleted.sales).toEqual([]);
+    expect(deleted.records).toEqual([ledger.records[2]]);
+    expect(deleted.products[0].stockQuantity).toBe(3);
   });
 });
 

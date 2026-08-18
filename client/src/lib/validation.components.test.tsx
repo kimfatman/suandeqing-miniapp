@@ -8,7 +8,7 @@ import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
-import { CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -289,11 +289,23 @@ describe("QuickCostSheet interactions", () => {
     const ledger = seedLedger();
     const onQuickCost = vi.fn();
     const onBom = vi.fn();
-    render(<ProductsView products={ledger.products} activeProductId={ledger.products[0].id} onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={onQuickCost} onBom={onBom} onAdd={vi.fn()} />);
+    render(<ProductsView products={ledger.products} activeProductId={ledger.products[0].id} fundingCost={0} onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={onQuickCost} onBom={onBom} onAdd={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /更新成本|录入成本/ }));
     expect(onQuickCost).toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /编辑配方/ }));
     expect(onBom).toHaveBeenCalled();
+  });
+});
+
+describe("DeleteSaleSheet interactions", () => {
+  it("requires an explicit confirmation to delete a sale and explains that refunds will be removed with it", () => {
+    const onConfirm = vi.fn();
+    const product = { ...seedLedger().products[0], stockQuantity: 3 };
+    const sale = { id: "sale", productId: product.id, quantity: 2, unitPrice: 12, date: "2026-08-18", note: "", refunds: [{ id: "refund", quantity: 1, amount: 12, date: "2026-08-18", note: "退款", restock: true }] };
+    render(<DeleteSaleSheet sale={sale} product={product} onClose={vi.fn()} onConfirm={onConfirm} />);
+    expect(screen.getByText("已退款 ¥12.00，将一并删除退款记录。")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认删除销售" }));
+    expect(onConfirm).toHaveBeenCalledOnce();
   });
 });
 

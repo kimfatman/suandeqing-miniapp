@@ -553,6 +553,34 @@ export const persistLedger = (ledger: LedgerData) => {
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger)); } catch { /* 演示模式不阻断操作 */ }
 };
 
+/** 仅清除当前浏览器的本机账本，不影响已登录账户的云端备份。 */
+export const clearLocalLedgerStorage = () => {
+  try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* 存储不可用时由内存状态继续回退为空账本 */ }
+};
+
+/**
+ * 删除一笔错误销售及其关联收款/退款流水。新流水按 sourceId 精确匹配；
+ * 旧版本无来源字段时只按同日、同金额、同备注的销售流水作兼容清理。
+ */
+export const deleteSaleTransaction = (ledger: LedgerData, saleId: string): LedgerData => {
+  const sale = ledger.sales.find((item) => item.id === saleId);
+  if (!sale) return ledger;
+  const product = ledger.products.find((item) => item.id === sale.productId);
+  const productName = product?.name ?? "商品";
+  const grossAmount = sale.quantity * sale.unitPrice;
+  const refundRestocked = (sale.refunds ?? []).filter((refund) => refund.restock).reduce((total, refund) => total + Math.max(refund.quantity, 0), 0);
+  const records = ledger.records.filter((record) => {
+    if (record.sourceId === sale.id && (record.source === "sale" || record.source === "refund")) return false;
+    const legacySale = record.source === undefined && record.type === "income" && record.category === "销售收入" && record.date === sale.date && record.amount === grossAmount && record.note === `${productName}销售`;
+    const legacyRefund = record.source === undefined && record.type === "expense" && record.category === "销售退款" && (sale.refunds ?? []).some((refund) => record.date === refund.date && record.amount === refund.amount && record.note === `${productName}退款`);
+    return !legacySale && !legacyRefund;
+  });
+  const products = ledger.products.map((item) => item.id === sale.productId && item.stockQuantity !== undefined
+    ? { ...item, stockQuantity: item.stockQuantity + sale.quantity - refundRestocked }
+    : item);
+  return { ...ledger, products, sales: ledger.sales.filter((item) => item.id !== sale.id), records };
+};
+
 export const makeId = uid;
 
 export const calculateDirectCost = (product: LedgerProduct, materials: Material[]) => {
