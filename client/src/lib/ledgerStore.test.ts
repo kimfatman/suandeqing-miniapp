@@ -205,6 +205,18 @@ describe("industry templates", () => {
     expect(summarizeLedger(next).categoryTotals["设备折旧"]).toBe(50);
   });
 
+  it("preserves a user-selected hidden cost category while switching industries", () => {
+    const ledger = normalizeLedger(seedLedger());
+    ledger.costs.hiddenCostCategory = "自定义核算口径";
+    ledger.costs.hiddenCostCategorySource = "custom";
+
+    const next = applyIndustryTemplate(ledger, "retail");
+
+    expect(next.profile.industry).toBe("retail");
+    expect(next.costs.hiddenCostCategory).toBe("自定义核算口径");
+    expect(next.costs.hiddenCostCategorySource).toBe("custom");
+  });
+
   it("renames custom categories without losing historical linkage", () => {
     const ledger = seedLedger();
     ledger.categories = [...ledger.categories, "设备折旧"];

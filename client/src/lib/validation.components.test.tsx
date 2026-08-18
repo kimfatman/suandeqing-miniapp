@@ -26,7 +26,7 @@ describe("ProfileView industry template interactions", () => {
   it("selects a different industry template", () => {
     const onIndustryChange = vi.fn();
     const onToggleCategory = vi.fn();
-    render(<ProfileView storeName="测试小店" industry="catering" categories={["食材采购"]} categoryStatus={{ "食材采购": true }} onIndustryChange={onIndustryChange} onAddCategory={vi.fn()} onEditCategory={vi.fn()} onToggleCategory={onToggleCategory} onHiddenCost={vi.fn()} onDebt={vi.fn()} />);
+    render(<ProfileView storeName="测试小店" industry="catering" categories={["食材采购"]} categoryStatus={{ "食材采购": true }} user={null} authLoading={false} cloudAvailable={false} onLogin={vi.fn()} onLogout={vi.fn()} isLoggingOut={false} onDataManagement={vi.fn()} onIndustryChange={onIndustryChange} onAddCategory={vi.fn()} onEditCategory={vi.fn()} onToggleCategory={onToggleCategory} onHiddenCost={vi.fn()} onDebt={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /社区零售/ }));
     expect(onIndustryChange).toHaveBeenCalledWith("retail");
     fireEvent.click(screen.getByRole("button", { name: /停用食材采购/ }));

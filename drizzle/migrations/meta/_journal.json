@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1787016300576,
+      "tag": "0000_kind_robin_chapel",
+      "breakpoints": true
+    }
+  ]
+}

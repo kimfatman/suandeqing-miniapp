@@ -1,11 +1,15 @@
+import { OAUTH_STATE_COOKIE, encodeOAuthState } from "@shared/const";
+
 export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
-// Generate login URL at runtime so redirect URI reflects the current origin.
-export const getLoginUrl = () => {
+/** Must only be called from a click handler so the CSRF nonce belongs to this login attempt. */
+export const startLogin = () => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   const appId = import.meta.env.VITE_APP_ID;
   const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
+  const nonce = crypto.randomUUID();
+  document.cookie = `${OAUTH_STATE_COOKIE}=${nonce}; Path=/; Max-Age=600; SameSite=None; Secure`;
+  const state = encodeOAuthState({ redirectUri, nonce });
 
   const url = new URL(`${oauthPortalUrl}/app-auth`);
   url.searchParams.set("appId", appId);
@@ -13,5 +17,5 @@ export const getLoginUrl = () => {
   url.searchParams.set("state", state);
   url.searchParams.set("type", "signIn");
 
-  return url.toString();
+  window.location.href = url.toString();
 };

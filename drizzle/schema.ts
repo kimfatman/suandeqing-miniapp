@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, longtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,4 +25,15 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/** 一位账号对应一个可恢复账本；revision 只用于明确冲突，不用于自动合并账务数据。 */
+export const cloudLedgers = mysqlTable("cloud_ledgers", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  ledgerJson: longtext("ledgerJson").notNull(),
+  schemaVersion: int("schemaVersion").notNull().default(1),
+  revision: int("revision").notNull().default(1),
+  backedUpAt: timestamp("backedUpAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CloudLedger = typeof cloudLedgers.$inferSelect;

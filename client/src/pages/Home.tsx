@@ -1,5 +1,5 @@
 /** 商户账簿工作台：首页按“结论—待办—明细”排列，让小商家在每次打开时先知道该做什么。 */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Banknote,
@@ -8,20 +8,26 @@ import {
   BookOpenCheck,
   ChevronRight,
   CircleDollarSign,
+  Cloud,
   ClipboardList,
   Coins,
   Home as HomeIcon,
   Info,
   LayoutGrid,
+  LogIn,
+  LogOut,
   Menu,
   PackagePlus,
   Plus,
   ReceiptText,
   Settings2,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
   TrendingUp,
   WalletCards,
+  Download,
+  Upload,
 } from "lucide-react";
 import { BrandMark } from "@/components/BrandMark";
 import { MetricCard } from "@/components/MetricCard";
@@ -35,6 +41,9 @@ import {   applyIndustryTemplate, applyQuickCost,
   calculateDirectCost,
   formatBusinessPeriod, getActiveCategories, calculateUnitCost, getBusinessDate, getBusinessPeriod, INDUSTRY_TEMPLATES, IndustryKey, LedgerData, initializeIndustryLedger, LedgerProduct, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
+import { startLogin } from "@/const";
+import { useAuth } from "@/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 
 type Tab = "home" | "products" | "business" | "profile";
 
@@ -95,6 +104,11 @@ export default function Home() {
   const [showProductNameSheet, setShowProductNameSheet] = useState(false);
   const [costEditor, setCostEditor] = useState<"hidden" | "funding" | null>(null);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [showDataManagement, setShowDataManagement] = useState(false);
+  const [pendingIndustry, setPendingIndustry] = useState<IndustryKey | null>(null);
+  const { user, loading: authLoading, isAuthenticated, logout, isLoggingOut } = useAuth();
+  const cloudLedger = trpc.ledger.get.useQuery(undefined, { enabled: isAuthenticated, retry: false });
+  const backupLedger = trpc.ledger.backup.useMutation();
   const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
   const [selectedPeriod, setSelectedPeriod] = useState(() => getBusinessPeriod());
@@ -109,6 +123,50 @@ export default function Home() {
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(null), 2600);
+  };
+
+  const restoreLedger = (ledgerJson: string, source: "云端" | "导入文件") => {
+    const parsed = JSON.parse(ledgerJson) as LedgerData;
+    if (!parsed?.profile || !Array.isArray(parsed.products) || !Array.isArray(parsed.records) || !Array.isArray(parsed.sales)) throw new Error("账本文件格式不完整，未恢复任何数据。");
+    const next = normalizeLedger(parsed);
+    persistLedger(next);
+    setLedger(next);
+    setCurrentCosts({ ...initialCostInputs, ...(next.costs ?? {}) });
+    setSelectedPeriod(getBusinessPeriod());
+    notify(`已恢复${source}账本；历史销售成本快照保持不变`);
+  };
+
+  const exportLedger = () => {
+    const blob = new Blob([JSON.stringify(ledger, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `算得清-${ledger.profile.storeName || "账本"}-${getBusinessDate()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify("已导出本机账本文件");
+  };
+
+  const backupCurrentLedger = async () => {
+    await backupLedger.mutateAsync({ ledgerJson: JSON.stringify(ledger), schemaVersion: 1 });
+    await cloudLedger.refetch();
+    notify("已创建云端备份；本机账本继续作为当前编辑版本");
+  };
+
+  const requestIndustryChange = (industry: IndustryKey) => {
+    if (industry !== ledger.profile.industry) setPendingIndustry(industry);
+  };
+
+  const confirmIndustryChange = () => {
+    if (!pendingIndustry) return;
+    const label = INDUSTRY_TEMPLATES.find((item) => item.key === pendingIndustry)?.label ?? "新行业";
+    setLedger((current) => {
+      const next = applyIndustryTemplate(current, pendingIndustry);
+      persistLedger(next);
+      return next;
+    });
+    setPendingIndustry(null);
+    notify(`已切换为${label}；历史账本和自定义口径未改动`);
   };
 
   const saveSuggestedPrice = (price: number) => {
@@ -203,7 +261,7 @@ export default function Home() {
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} costs={currentCosts} productCount={ledger.products.length} period={selectedPeriod} onPeriodChange={setSelectedPeriod} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} />}
-        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} onIndustryChange={(industry) => { setLedger((current) => { const next = applyIndustryTemplate(current, industry); persistLedger(next); return next; }); notify(`已切换为${INDUSTRY_TEMPLATES.find((item) => item.key === industry)?.label ?? "新行业"}模板`); }} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
+        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setCostEditor("hidden")} onDebt={() => setCostEditor("funding")} />}
       </main>
 
       <nav className="mobile-tabbar" aria-label="底部导航">
@@ -232,6 +290,8 @@ export default function Home() {
       {showQuickCost && <QuickCostSheet product={selectedProduct} template={currentTemplate} onClose={() => setShowQuickCost(false)} onOpenAdvanced={() => { setShowQuickCost(false); setShowBomEditor(true); }} onSave={(draft: QuickCostSave) => { setLedger((current) => { const products = current.products.map((item) => item.id === selectedProduct.id ? applyQuickCost(item, draft, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost, new Date().toISOString().slice(0, 10)) : item); const next = { ...current, products }; persistLedger(next); return next; }); setShowQuickCost(false); notify("已保存快速成本，并生成新的成本版本"); }} />}
       {showBomEditor && <BomEditorSheet product={selectedProduct} materials={ledger.materials} categories={getActiveCategories(ledger)} costLabel={currentTemplate.productCostLabel} costAction={currentTemplate.productCostAction} costEmpty={currentTemplate.productCostEmpty} onClose={() => setShowBomEditor(false)} onSave={(items, settings) => { setLedger((current) => { const products = current.products.map((item) => { if (item.id !== selectedProduct.id) return item; const draftProduct = { ...item, bom: items, costCategory: settings.costCategory, lossRate: settings.lossRate, batchYield: settings.batchYield, materialUnitCosts: settings.costSnapshot?.materialUnitCosts, packaging: settings.costSnapshot?.packaging ?? item.packaging, directLabor: settings.costSnapshot?.directLabor ?? item.directLabor }; const recalculated = recalculateProduct(draftProduct, current.materials, currentCosts.hiddenCost, currentCosts.fixedCost); const nextVersion = makeBomVersionSnapshot(draftProduct, current.materials, settings, new Date().toISOString().slice(0, 10)); return { ...recalculated, category: items.length || recalculated.direct > 0 ? "已补齐成本" : getProductPendingLabel(currentTemplate.productCostLabel), bomVersions: [...(item.bomVersions ?? []), nextVersion] }; }); const next = { ...current, products }; persistLedger(next); return next; }); setShowBomEditor(false); notify(`已保存${currentTemplate.productCostLabel}，并生成新的成本版本`); }} />}
       {costEditor && <CostSettingsSheet type={costEditor} value={costEditor === "hidden" ? currentCosts.hiddenCost : currentCosts.fundingCost} onClose={() => setCostEditor(null)} onSave={(value) => { const nextCosts = { ...currentCosts, [costEditor === "hidden" ? "hiddenCost" : "fundingCost"]: value }; setCurrentCosts(nextCosts); setLedger((current) => { const next = { ...current, costs: nextCosts, products: costEditor === "hidden" ? current.products.map((product) => recalculateProduct(product, current.materials, nextCosts.hiddenCost, nextCosts.fixedCost)) : current.products }; persistLedger(next); return next; }); setCostEditor(null); notify(costEditor === "hidden" ? "已更新隐形成本，经营成本已重新计算" : "已更新资金成本，完整成本已重新计算"); }} />}
+      {showDataManagement && <DataManagementSheet isAuthenticated={isAuthenticated} cloudAvailable={Boolean(cloudLedger.data)} backupAt={cloudLedger.data?.backedUpAt} isBackingUp={backupLedger.isPending} onClose={() => setShowDataManagement(false)} onLogin={startLogin} onBackup={backupCurrentLedger} onRestoreCloud={() => { if (!cloudLedger.data) return; restoreLedger(cloudLedger.data.ledgerJson, "云端"); setShowDataManagement(false); }} onExport={exportLedger} onImport={(content) => { restoreLedger(content, "导入文件"); setShowDataManagement(false); }} />}
+      {pendingIndustry && <IndustryChangeSheet current={ledger.profile.industry} next={pendingIndustry} onClose={() => setPendingIndustry(null)} onConfirm={confirmIndustryChange} />}
       {toast && <div className="app-toast"><CheckBadge />{toast}</div>}
     </div>
   );
@@ -406,18 +466,50 @@ function BusinessView({ summary, costs, productCount, period, onPeriodChange, on
   );
 }
 
-export function ProfileView({ storeName, industry, categories, categoryStatus, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt }: { storeName: string; industry: IndustryKey; categories: string[]; categoryStatus?: Record<string, boolean>; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void }) {
+export function ProfileView({ storeName, industry, categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt }: { storeName: string; industry: IndustryKey; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void }) {
   const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
   const industryName = template.label;
   return (
     <div className="page-content profile-content">
-      <section className="profile-hero"><div className="profile-mark"><BrandMark size={54} /></div><div><span>{industryName}</span><h1>{storeName}</h1></div><button className="icon-button"><Settings2 size={20} /></button></section>
-      <section className="profile-data-boundary" role="status"><BookOpenCheck size={16} /><span><b>仅保存在当前设备</b><small>切换行业不会删除已有账本。</small></span></section>
-      <section className="setting-group"><span className="group-label">行业</span><div className="industry-switcher" role="list" aria-label="选择行业模板">{INDUSTRY_TEMPLATES.map((template) => <button key={template.key} className={template.key === industry ? "industry-switch-card active" : "industry-switch-card"} onClick={() => onIndustryChange(template.key)}><span className="industry-switch-symbol">{template.shortLabel.slice(0, 1)}</span><span><b>{template.label}</b></span>{template.key === industry && <CheckBadge />}</button>)}</div></section>
+      <section className="profile-hero"><div className="profile-mark"><BrandMark size={54} /></div><div><span>{industryName}</span><h1>{storeName}</h1></div></section>
+      <section className="account-status-card" aria-label="账户与数据">
+        <div className="account-status-icon">{user ? <ShieldCheck size={21} /> : <Cloud size={21} />}</div><div className="account-status-copy"><b>{authLoading ? "检查账户状态" : user ? (user.name || "已登录账号") : "本机账本"}</b><small>{authLoading ? "请稍候" : user ? (cloudAvailable && backupAt ? `最近备份：${new Date(backupAt).toLocaleDateString("zh-CN")}` : "尚未创建云端备份") : "登录后可备份并在新设备恢复"}</small></div>
+        {user ? <button className="text-action" onClick={onDataManagement}>数据管理<ChevronRight size={15} /></button> : <button className="account-login" onClick={onLogin}><LogIn size={15} />登录并备份</button>}
+      </section>
+      {user && <button className="account-logout" onClick={() => void onLogout()} disabled={isLoggingOut}><LogOut size={15} />{isLoggingOut ? "正在退出" : "退出账号"}</button>}
+      <section className="setting-group"><div className="setting-group-heading"><span className="group-label">经营资料</span><span className="setting-summary">新录入按行业适配</span></div><div className="industry-switcher" role="list" aria-label="选择行业模板">{INDUSTRY_TEMPLATES.map((template) => <button key={template.key} className={template.key === industry ? "industry-switch-card active" : "industry-switch-card"} onClick={() => onIndustryChange(template.key)}><span className="industry-switch-symbol">{template.shortLabel.slice(0, 1)}</span><span><b>{template.label}</b><small>{template.description}</small></span>{template.key === industry && <CheckBadge />}</button>)}</div></section>
       <section className="setting-group"><div className="setting-group-heading"><span className="group-label">成本项目</span><button className="text-action" onClick={onAddCategory}><Plus size={14} />新增</button></div><div className="custom-category-list">{categories.map((category) => { const active = categoryStatus?.[category] !== false; return <div className={active ? "custom-category-row" : "custom-category-row disabled"} key={category}><button className="category-name-button" onClick={() => onEditCategory(category)}><span>{category}</span><small>{active ? "启用" : "停用"}</small></button><button className="category-toggle" aria-label={`${active ? "停用" : "启用"}${category}`} onClick={() => onToggleCategory(category)}>{active ? "停用" : "启用"}</button><ChevronRight size={16} /></div>; })}</div></section><section className="setting-group"><span className="group-label">经营口径</span><SettingItem icon={<ClipboardList size={19} />} label="隐形成本" note={template.hiddenCostCategory} onClick={onHiddenCost} /><SettingItem icon={<WalletCards size={19} />} label="资金成本" note="仅利息和融资费" onClick={onDebt} /><SettingItem icon={<ReceiptText size={19} />} label="默认分摊" note="按销量" onClick={() => undefined} /></section>
-      <section className="setting-group"><span className="group-label">数据</span><SettingItem icon={<BookOpenCheck size={19} />} label="成本口径" note="直接 · 经营 · 完整" onClick={() => undefined} /><SettingItem icon={<Settings2 size={19} />} label="数据管理" note="导出与隐私" onClick={() => undefined} /></section>
+      <section className="setting-group"><span className="group-label">数据与安全</span><SettingItem icon={<BookOpenCheck size={19} />} label="成本口径" note="直接 · 经营 · 完整" onClick={() => undefined} /><SettingItem icon={<Settings2 size={19} />} label="数据管理" note={user ? "备份、恢复与导出" : "导出与导入恢复"} onClick={onDataManagement} /></section>
     </div>
   );
+}
+
+function DataManagementSheet({ isAuthenticated, cloudAvailable, backupAt, isBackingUp, onClose, onLogin, onBackup, onRestoreCloud, onExport, onImport }: { isAuthenticated: boolean; cloudAvailable: boolean; backupAt?: Date; isBackingUp: boolean; onClose: () => void; onLogin: () => void; onBackup: () => Promise<void>; onRestoreCloud: () => void; onExport: () => void; onImport: (content: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"backup" | "restore" | "import" | null>(null);
+  const [pendingImport, setPendingImport] = useState<string | null>(null);
+  const importFile = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { const content = String(reader.result ?? ""); try { JSON.parse(content); setPendingImport(content); setConfirmAction("import"); } catch { setError("导入失败，请选择算得清导出的JSON文件。"); } };
+    reader.readAsText(file);
+  };
+  const confirm = async () => {
+    if (confirmAction === "backup") await onBackup();
+    if (confirmAction === "restore") onRestoreCloud();
+    if (confirmAction === "import" && pendingImport) onImport(pendingImport);
+    setConfirmAction(null);
+  };
+  const title = confirmAction === "backup" ? "用本机账本替换云端备份？" : confirmAction === "restore" ? "用云端账本覆盖本机？" : "用导入账本覆盖本机？";
+  const detail = confirmAction === "backup" ? "云端旧备份将被替换，但当前设备账本不变。" : "当前设备账本将被替换；两份账本不会自动合并。";
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet data-management-sheet" role="dialog" aria-modal="true" aria-label="数据管理" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">数据与安全</span><h2>账本备份与恢复</h2></div><button className="icon-button" onClick={onClose}>×</button></header>{isAuthenticated ? <><div className="data-state"><Cloud size={18} /><span><b>{cloudAvailable ? "云端备份可恢复" : "尚未备份"}</b><small>{cloudAvailable && backupAt ? `最近备份：${new Date(backupAt).toLocaleString("zh-CN")}` : "先备份当前设备账本"}</small></span></div><button className="primary-action sheet-action" disabled={isBackingUp} onClick={() => cloudAvailable ? setConfirmAction("backup") : void onBackup()}><Cloud size={16} />{isBackingUp ? "正在备份" : "备份当前账本"}</button>{cloudAvailable && <button className="secondary-action sheet-action" onClick={() => setConfirmAction("restore")}><Download size={16} />用云端账本覆盖本机</button>}</> : <><div className="data-state"><ShieldCheck size={18} /><span><b>当前为本机账本</b><small>登录后才可创建云端备份；不会自动上传。</small></span></div><button className="primary-action sheet-action" onClick={onLogin}><LogIn size={16} />登录并备份</button></>}<div className="data-divider" /><button className="secondary-action sheet-action" onClick={onExport}><Download size={16} />导出本机账本 JSON</button><input ref={fileRef} hidden type="file" accept="application/json,.json" onChange={(event) => importFile(event.target.files?.[0])} /><button className="secondary-action sheet-action" onClick={() => fileRef.current?.click()}><Upload size={16} />导入并覆盖本机账本</button><p className="data-warning">恢复或导入会覆盖当前设备账本；云端与本机不会自动合并。</p>{confirmAction && <div className="data-confirmation"><b>{title}</b><p>{detail}</p><div><button className="secondary-action" onClick={() => setConfirmAction(null)}>取消</button><button className="primary-action" onClick={() => void confirm()}>确认继续</button></div></div>}{error && <p className="form-error" role="alert">{error}</p>}</section></div>;
+}
+
+function IndustryChangeSheet({ current, next, onClose, onConfirm }: { current: IndustryKey; next: IndustryKey; onClose: () => void; onConfirm: () => void }) {
+  const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === current) ?? INDUSTRY_TEMPLATES[0];
+  const nextTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === next) ?? INDUSTRY_TEMPLATES[0];
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet industry-change-sheet" role="dialog" aria-modal="true" aria-label="确认切换行业" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">经营资料</span><h2>切换为{nextTemplate.label}</h2></div><button className="icon-button" onClick={onClose}>×</button></header><p className="industry-change-lead">从{currentTemplate.label}切换后，只影响之后的新录入。</p><div className="impact-list"><p><b>将改变</b> 默认成本分类、商品成本名称、快速成本预设和模板隐形成本分类。</p><p><b>不会改变</b> 已有商品、材料、流水、销售、成本版本和自定义成本口径。</p></div><button className="primary-action sheet-action" onClick={onConfirm}><CheckBadge />确认切换行业</button></section></div>;
 }
 
 export function ProductNameSheet({ onClose, onSave }: { onClose: () => void; onSave: (name: string) => void }) {

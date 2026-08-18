@@ -110,6 +110,8 @@ export type LedgerCosts = {
   hiddenCostBasis?: "perUnit" | "perSale";
   hiddenCostSource?: "manual" | "ledger";
   hiddenCostCategory?: string;
+  /** 模板默认分类可随行业更新；用户明确选择的分类必须在切换行业后保留。 */
+  hiddenCostCategorySource?: "template" | "custom";
   allocationPeriod?: string;
   fundingCost: number;
   fundingSource?: "manual" | "ledger";
@@ -289,18 +291,24 @@ export const loadLedger = (): LedgerData => {
 };
 
 /** 对已有本地账本做轻量迁移：带BOM的商品始终以当前BOM重算，避免种子值与配方不一致。 */
-export const normalizeLedger = (ledger: LedgerData): LedgerData => ({
-  ...ledger,
-  products: ledger.products.map((product) => product.bom.length
-    ? recalculateProduct(product, ledger.materials, ledger.costs.hiddenCost, ledger.costs.fixedCost)
-    : product),
-  sales: (ledger.sales ?? []).map((sale) => ({
-    ...sale,
-    hiddenCostSourceSnapshot: sale.hiddenCostSourceSnapshot ?? (sale.hiddenCostSnapshot !== undefined ? "manual" : undefined),
-    hiddenCostBasisSnapshot: sale.hiddenCostBasisSnapshot ?? (sale.hiddenCostSnapshot !== undefined ? "perUnit" : undefined),
-    fundingSourceSnapshot: sale.fundingSourceSnapshot ?? (sale.fundingCostSnapshot !== undefined ? "manual" : undefined),
-  })),
-});
+export const normalizeLedger = (ledger: LedgerData): LedgerData => {
+  const template = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
+  const categorySource = ledger.costs.hiddenCostCategorySource
+    ?? (ledger.costs.hiddenCostCategory && ledger.costs.hiddenCostCategory !== template.hiddenCostCategory ? "custom" : "template");
+  return {
+    ...ledger,
+    costs: { ...ledger.costs, hiddenCostCategorySource: categorySource },
+    products: ledger.products.map((product) => product.bom.length
+      ? recalculateProduct(product, ledger.materials, ledger.costs.hiddenCost, ledger.costs.fixedCost)
+      : product),
+    sales: (ledger.sales ?? []).map((sale) => ({
+      ...sale,
+      hiddenCostSourceSnapshot: sale.hiddenCostSourceSnapshot ?? (sale.hiddenCostSnapshot !== undefined ? "manual" : undefined),
+      hiddenCostBasisSnapshot: sale.hiddenCostBasisSnapshot ?? (sale.hiddenCostSnapshot !== undefined ? "perUnit" : undefined),
+      fundingSourceSnapshot: sale.fundingSourceSnapshot ?? (sale.fundingCostSnapshot !== undefined ? "manual" : undefined),
+    })),
+  };
+};
 
 export const initializeIndustryLedger = (ledger: LedgerData, storeName: string, industry: IndustryKey): LedgerData => {
   const next = applyIndustryTemplate({ ...ledger, profile: { ...ledger.profile, storeName, onboarded: true } }, industry);
@@ -326,7 +334,13 @@ export const applyIndustryTemplate = (ledger: LedgerData, industry: IndustryKey)
     profile: { ...ledger.profile, industry: template.key },
     categories: nextCategories,
     categoryStatus: Object.fromEntries(nextCategories.map((category) => [category, ledger.categoryStatus?.[category] !== false])),
-    costs: { ...ledger.costs, hiddenCostCategory: template.hiddenCostCategory },
+    costs: {
+      ...ledger.costs,
+      hiddenCostCategory: ledger.costs.hiddenCostCategorySource === "custom"
+        ? ledger.costs.hiddenCostCategory
+        : template.hiddenCostCategory,
+      hiddenCostCategorySource: ledger.costs.hiddenCostCategorySource ?? "template",
+    },
   };
 };
 
