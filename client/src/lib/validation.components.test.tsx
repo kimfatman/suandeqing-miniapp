@@ -9,7 +9,7 @@ import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
-import { CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
@@ -48,6 +48,24 @@ describe("Home conclusion attention priority", () => {
   it("shows cash pressure when product setup does not block accounting", () => {
     const items = getHomeAttentionItems({ missingCostProductCount: 0, unpricedProductCount: 0, cashBalance: -1 });
     expect(items).toEqual([expect.objectContaining({ tone: "cash", action: "business" })]);
+  });
+});
+
+describe("QuickEntrySheet unified record entry", () => {
+  it("offers sales, general records, material purchases and product creation from one entry", () => {
+    const onChoose = vi.fn();
+    render(<QuickEntrySheet hasProducts onClose={vi.fn()} onChoose={onChoose} />);
+    expect(screen.getByText("卖商品")).toBeTruthy();
+    expect(screen.getByText("记收支")).toBeTruthy();
+    expect(screen.getByText("采购材料")).toBeTruthy();
+    expect(screen.getByText("新建商品")).toBeTruthy();
+    fireEvent.click(screen.getByText("采购材料"));
+    expect(onChoose).toHaveBeenCalledWith("purchase");
+  });
+
+  it("explains that sales start by creating a product when none exists", () => {
+    render(<QuickEntrySheet hasProducts={false} onClose={vi.fn()} onChoose={vi.fn()} />);
+    expect(screen.getByText("先新建商品，再记录销售")).toBeTruthy();
   });
 });
 

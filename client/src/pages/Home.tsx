@@ -104,6 +104,7 @@ export default function Home() {
   const [activeProductId, setActiveProductId] = useState(1);
   const [showMaterialPanel, setShowMaterialPanel] = useState(false);
   const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+  const [showQuickEntry, setShowQuickEntry] = useState(false);
   const [showQuickRecord, setShowQuickRecord] = useState(false);
   const [showSaleRecord, setShowSaleRecord] = useState(false);
   const [refundSaleId, setRefundSaleId] = useState<string | null>(null);
@@ -269,6 +270,20 @@ export default function Home() {
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const openQuickEntry = () => setShowQuickEntry(true);
+  const chooseQuickEntry = (kind: "sale" | "record" | "purchase" | "product") => {
+    setShowQuickEntry(false);
+    if (kind === "sale") {
+      if (!activeProducts.length) {
+        setShowProductNameSheet(true);
+        notify("先新建一个商品，才能记录商品销售");
+      } else setShowSaleRecord(true);
+      return;
+    }
+    if (kind === "record") { setShowQuickRecord(true); return; }
+    if (kind === "purchase") { setEditingMaterialId(null); setShowMaterialPanel(true); return; }
+    setShowProductNameSheet(true);
+  };
 
   const handleMessageAction = (path?: string | null) => {
     setShowMessages(false);
@@ -363,7 +378,7 @@ export default function Home() {
         {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
       </main>
 
-      <nav className="mobile-tabbar" aria-label="底部导航">
+      <nav className="mobile-tabbar" aria-label="主导航">
         {navItems.map(({ id, label, icon: Icon }) => (
           <button key={id} className={activeTab === id ? "tab-item active" : "tab-item"} onClick={() => navigate(id)}>
             <Icon size={21} strokeWidth={activeTab === id ? 2.7 : 2} />
@@ -371,7 +386,11 @@ export default function Home() {
           </button>
         ))}
       </nav>
+      <button className="unified-entry-trigger" type="button" onClick={openQuickEntry} aria-label="记一笔">
+        <Plus size={23} /><span>记一笔</span>
+      </button>
 
+      {showQuickEntry && <QuickEntrySheet hasProducts={activeProducts.length > 0} onClose={() => setShowQuickEntry(false)} onChoose={chooseQuickEntry} />}
       {showPricing && <PricingPanel costs={pricingCosts} productName={selectedProduct.name} costLines={pricingCostLines} allocationContext={pricingAllocationContext} onClose={() => setShowPricing(false)} onSave={saveSuggestedPrice} onAdjustAllocation={() => { setShowPricing(false); setShowMonthlyAllocation(true); }} />}
       {showProductNameSheet && <ProductNameSheet onClose={() => setShowProductNameSheet(false)} onSave={(name) => {
         const nextId = Math.max(0, ...ledger.products.map((item) => item.id)) + 1;
@@ -565,6 +584,16 @@ export function ProductsView({ products, activeProductId, fundingCost, onSelect,
       </section>
     </div>
   );
+}
+
+export function QuickEntrySheet({ hasProducts, onClose, onChoose }: { hasProducts: boolean; onClose: () => void; onChoose: (kind: "sale" | "record" | "purchase" | "product") => void }) {
+  const entries = [
+    { kind: "sale" as const, icon: <ShoppingBag size={21} />, title: "卖商品", detail: hasProducts ? "记录销量，自动结转收入和成本" : "先新建商品，再记录销售", tone: "sale" },
+    { kind: "record" as const, icon: <ReceiptText size={21} />, title: "记收支", detail: "房租、日常支出或其他收入", tone: "record" },
+    { kind: "purchase" as const, icon: <PackagePlus size={21} />, title: "采购材料", detail: "更新材料成本，可同时记采购付款", tone: "purchase" },
+    { kind: "product" as const, icon: <Plus size={21} />, title: "新建商品", detail: "先建商品，再补成本和设置售价", tone: "product" },
+  ];
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet quick-entry-sheet" role="dialog" aria-modal="true" aria-label="记一笔" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">今天发生了什么</span><h2>记一笔</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭">×</button></header><p className="quick-entry-intro">选择最接近的一项，系统会带你进入对应表单，并保留收入、成本、库存和日期的核算规则。</p><div className="quick-entry-grid">{entries.map((entry) => <button className={`quick-entry-option ${entry.tone}`} type="button" key={entry.kind} onClick={() => onChoose(entry.kind)}><span className="quick-entry-icon">{entry.icon}</span><span><b>{entry.title}</b><small>{entry.detail}</small></span><ChevronRight size={17} /></button>)}</div></section></div>;
 }
 
 export function getRefundableSaleQuantity(sale: SalesRecord) { return Math.max(sale.quantity - (sale.refunds ?? []).reduce((sum, refund) => sum + Math.max(refund.quantity, 0), 0), 0); }
