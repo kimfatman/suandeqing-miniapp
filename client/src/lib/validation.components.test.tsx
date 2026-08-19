@@ -9,7 +9,7 @@ import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
-import { BusinessView, CashRecordsSheet, CategorySheet, CostAnalysisView, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostAnalysisLines, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProductDirectCostTrend, getProfitBridgeData, getRefundableSaleQuantity, HomeView, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, MiniTrendChart, ProductNameSheet, ProductsView, ProfileView, ProfitBridgeChart, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { BusinessView, CashRecordsSheet, CategorySheet, CostAnalysisView, DailyCashDetailSheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostAnalysisLines, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProductDirectCostTrend, getProfitBridgeData, getRefundableSaleQuantity, HomeView, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, MiniTrendChart, ProductNameSheet, ProductsView, ProfileView, ProfitBridgeChart, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
 
 class TestResizeObserver {
@@ -102,6 +102,26 @@ describe("Dynamic chart accounting boundaries", () => {
     expect(screen.getByText("净收付 ¥3,455.00")).toBeTruthy();
   });
 
+  it("opens a selected cash day detail and presents only that day’s real cash records", () => {
+    const onOpenDetails = vi.fn();
+    render(<MiniTrendChart series={[{ date: "2026-08-08", label: "08/08", income: 120, expenses: 50 }]} rangeLabel="本月" onOpenDetails={onOpenDetails} />);
+    fireEvent.click(screen.getByRole("button", { name: "查看08/08现金流水" }));
+    expect(onOpenDetails).toHaveBeenCalledWith("2026-08-08");
+
+    const ledger = seedLedger();
+    ledger.records = [
+      { id: "income", type: "income", amount: 120, category: "销售收入", note: "销售收款", date: "2026-08-08", source: "sale" },
+      { id: "principal", type: "expense", amount: 50, category: "本金还款", note: "归还本金", date: "2026-08-08", source: "manual" },
+      { id: "other", type: "expense", amount: 99, category: "采购", note: "另一日", date: "2026-08-09", source: "purchase" },
+    ];
+    render(<DailyCashDetailSheet date="2026-08-08" ledger={ledger} onClose={vi.fn()} />);
+    expect(screen.getByRole("dialog", { name: "8月8日现金流水明细" })).toBeTruthy();
+    expect(screen.getByText("销售收款 · 销售记录生成")).toBeTruthy();
+    expect(screen.getByText("归还本金 · 手工录入")).toBeTruthy();
+    expect(screen.queryByText("另一日 · 材料采购时记录")).toBeNull();
+    expect(screen.getByText("净收付")).toBeTruthy();
+  });
+
   it("keeps only non-zero cost steps in the profit path while preserving the final result", () => {
     render(<ProfitBridgeChart summary={{ salesRevenue: 100, costOfSales: 42, allocatedIndirectCosts: 0, financingCosts: 0, operatingResult: 58 }} />);
     expect(screen.getByRole("button", { name: /销售收入/ })).toBeTruthy();
@@ -128,7 +148,7 @@ describe("HomeView decision dashboard", () => {
     ];
     ledger.sales = [{ id: "home-sale", productId: ledger.products[0]!.id, date: "2026-08-08", quantity: 5, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [] }];
     const summary = summarizeLedger(ledger, "2026-08");
-    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onPrimaryAction={vi.fn()} />);
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} onOpenCashDay={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onPrimaryAction={vi.fn()} />);
     expect(screen.getByLabelText("本月经营结果")).toBeTruthy();
     expect(screen.getByText("本月经营利润")).toBeTruthy();
     expect(screen.getByText("销售收入")).toBeTruthy();
