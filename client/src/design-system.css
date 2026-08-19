@@ -1604,6 +1604,381 @@
 .dashboard-status-item > b { overflow: hidden; color: #24324b; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 16px; line-height: 1.18; letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-status-item > b small { margin-left: 1px; color: #8292a2; font-size: 9px; font-weight: 600; letter-spacing: 0; }
 .dashboard-status-item > small { overflow: hidden; color: #8292a2; font-size: 8px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 三大核心页：以留白、数据层级和克制的 + / = 品牌符号替代堆叠卡片。 */
+.core-page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.core-page-heading h1 {
+  margin: 0;
+  color: #17233c;
+  font-size: clamp(24px, 6.8vw, 28px);
+  letter-spacing: -.06em;
+}
+
+.core-page-heading .core-subtitle {
+  margin: var(--space-1) 0 0;
+  color: #8492a1;
+  font-size: var(--font-secondary);
+  line-height: 1.5;
+}
+
+.core-add-action,
+.core-outline-action {
+  flex: 0 0 auto;
+  min-height: var(--button-md-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-3);
+  font-size: var(--font-secondary);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.core-add-action {
+  color: #fff;
+  border: 0;
+  background: #087ff5;
+  box-shadow: 0 8px 16px rgb(8 127 245 / .16);
+}
+
+.core-outline-action {
+  color: #087ff5;
+  border: 1px solid #cfe3fb;
+  background: #fff;
+}
+
+.core-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.core-section-heading h2 {
+  margin: 0;
+  color: #17233c;
+  font-size: var(--font-section-title);
+  letter-spacing: -.035em;
+}
+
+.core-section-heading small,
+.core-section-heading > span {
+  color: #8492a1;
+  font-size: var(--font-secondary);
+}
+
+.core-section-heading > button {
+  min-height: var(--tap-target);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-1);
+  color: #087ff5;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-secondary);
+  font-weight: 800;
+}
+
+.core-segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-3);
+  background: #edf2f7;
+}
+
+.core-segmented button {
+  min-height: 40px;
+  color: #718094;
+  border: 0;
+  border-radius: var(--radius-2);
+  background: transparent;
+  font-size: var(--font-body);
+  font-weight: 800;
+}
+
+.core-segmented button[aria-selected="true"] {
+  color: #087ff5;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(11 24 54 / .08);
+}
+
+.core-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin-top: var(--space-4);
+  border-top: 1px solid #e9eef3;
+  border-bottom: 1px solid #e9eef3;
+}
+
+.core-kpi-grid > span {
+  min-width: 0;
+  padding: var(--space-3) var(--space-2);
+}
+
+.core-kpi-grid > span + span {
+  border-left: 1px solid #edf1f5;
+}
+
+.core-kpi-grid small,
+.core-kpi-grid b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-kpi-grid small { color: #8492a1; font-size: 9px; }
+.core-kpi-grid b { margin-top: 3px; color: #17233c; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 15px; letter-spacing: -.045em; }
+.core-kpi-grid .positive b { color: #168968; }
+.core-kpi-grid .brand b { color: #087ff5; }
+.core-kpi-grid .risk b { color: #c64d43; }
+
+.core-brand-equation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  color: #087ff5;
+  border-radius: var(--radius-2);
+  background: #edf7ff;
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 390px) {
+  .core-page-heading { margin-bottom: var(--space-3); }
+  .core-add-action, .core-outline-action { padding-inline: var(--space-2); }
+  .core-kpi-grid > span { padding-inline: var(--space-1); }
+  .core-kpi-grid b { font-size: 13px; }
+}
+
+/* 商品：每一笔金额均绑定售价、成本、利润或毛利率，选中详情保持轻量。 */
+.product-page-heading { margin-bottom: var(--space-3); }
+.product-list-heading { margin-top: 0; }
+.product-list-heading h2 { font-size: var(--font-section-title); }
+.product-list-heading h2 small { color: #8492a1; font-family: "DM Sans", sans-serif; font-size: var(--font-body); font-weight: 700; }
+.product-list {
+  margin-top: var(--space-2);
+  border: 1px solid #e6ecf2;
+  border-radius: var(--radius-ledger-reverse);
+  box-shadow: 0 4px 14px rgb(11 24 54 / .025);
+}
+.product-row {
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  align-items: start;
+  min-height: 92px;
+  padding: var(--space-3);
+}
+.product-symbol { width: 38px; height: 38px; color: #51647d; border-radius: var(--radius-2); background: #f0f4f8; }
+.product-row.selected { background: #f8fbff; }
+.product-main { min-width: 0; }
+.product-main > div:first-child { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.product-main strong { overflow: hidden; font-size: var(--font-card-title); text-overflow: ellipsis; white-space: nowrap; }
+.product-main em { flex: 0 0 auto; padding: 2px 5px; color: #168968; border-radius: var(--radius-2); background: #eaf8f2; font-size: 9px; font-style: normal; font-weight: 800; }
+.product-row:not(.selected) .product-main em { color: #7a8898; background: #f0f3f6; }
+.product-main > span { margin-top: 2px; font-size: 10px; }
+.product-row-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); margin-top: var(--space-2); }
+.product-row-metrics > span { min-width: 0; }
+.product-row-metrics small, .product-row-metrics b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-row-metrics small { color: #93a0ad; font-size: 8px; }
+.product-row-metrics b { margin-top: 1px; color: #263750; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 10px; letter-spacing: -.035em; }
+.product-row-metrics .profit b { color: #168968; }
+.product-row-metrics .brand b { color: #087ff5; }
+.product-row-metrics .loss b { color: #c64d43; }
+.product-row > svg { align-self: center; margin-top: var(--space-2); color: #99a7b5; }
+
+.product-detail-card {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  color: #17233c;
+  border: 1px solid #dce6f0;
+  border-radius: var(--radius-ledger-reverse);
+  background: #fff;
+  box-shadow: 0 6px 18px rgb(11 24 54 / .035);
+}
+.detail-card-title { align-items: center; }
+.detail-card-title .eyebrow { color: #8492a1; }
+.detail-card-title h2 { margin-top: 2px; color: #17233c; font-size: 20px; }
+.product-detail-card .status-pill { color: #168968; border: 0; border-radius: var(--radius-2); background: #eaf8f2; }
+.product-detail-card .status-pill.warning { color: #b57917; background: #fff4dc; }
+.product-kpi-grid { margin-top: var(--space-3); }
+.product-detail-card .cost-composition-chart { margin-top: var(--space-4); }
+.product-detail-card .product-chart-summary { display: none; }
+.product-action-pair { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-top: var(--space-4); border-top: 1px solid #edf1f5; border-bottom: 1px solid #edf1f5; }
+.product-action-pair .secondary-card-action {
+  min-width: 0;
+  min-height: 62px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
+  color: #526477;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 10px;
+}
+.product-action-pair .secondary-card-action + .secondary-card-action { border-left: 1px solid #edf1f5; }
+.product-action-pair .secondary-card-action svg { color: #087ff5; }
+.product-action-pair .cost-analysis-entry { color: #087ff5; border: 0; background: transparent; }
+.product-action-pair .cost-analysis-entry:disabled { color: #96a2af; opacity: .7; }
+.product-more-actions { grid-column: 1 / -1; display: grid; gap: 1px; margin: var(--space-2) 0 0; padding: var(--space-2) 0 0; border-top: 1px solid #edf1f5; background: transparent; }
+.product-more-actions button { min-height: var(--tap-target); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-1); color: #526477; border: 0; background: transparent; text-align: left; font-size: var(--font-secondary); }
+.product-more-actions button.danger { color: #c64d43; }
+.empty-product-page .empty-state-card h2 { margin-top: var(--space-3); color: #17233c; font-size: var(--font-section-title); }
+.empty-product-page .empty-state-card p { margin-top: var(--space-2); color: #718094; font-size: var(--font-secondary); line-height: 1.5; }
+
+@media (max-width: 390px) {
+  .product-detail-card { padding: var(--space-3); }
+  .product-row { padding: var(--space-2); }
+  .product-row-metrics { gap: 2px; }
+  .product-row-metrics b { font-size: 9px; }
+  .product-action-pair .secondary-card-action { font-size: 9px; }
+}
+
+/* 经营：先给出可追溯的本期利润，再按现金流或利润分析查看明细。 */
+.business-page-heading { margin-bottom: var(--space-3); }
+.business-page-heading .period-picker { flex: 0 0 auto; }
+.business-profit-card {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-4);
+  color: #fff;
+  border-radius: var(--radius-ledger);
+  background: linear-gradient(135deg, #167ff4 0%, #087ff5 54%, #2466ca 100%);
+  box-shadow: 0 14px 28px rgb(8 127 245 / .18);
+}
+.business-profit-card::after { content: ""; position: absolute; top: 16px; right: 16px; width: 64px; height: 64px; border: 6px solid rgb(255 255 255 / .78); border-left-color: rgb(255 255 255 / .18); border-bottom-color: rgb(255 255 255 / .18); border-radius: 50%; transform: rotate(-42deg); }
+.business-profit-card.loss { background: linear-gradient(135deg, #c85651, #b84d4b); box-shadow: 0 14px 28px rgb(184 77 75 / .16); }
+.business-profit-heading { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding-right: 76px; }
+.business-profit-heading > span:first-child { color: rgb(255 255 255 / .88); font-size: var(--font-body); font-weight: 800; }
+.business-profit-rate { display: grid; justify-items: end; color: #fff; font-family: "DM Sans", sans-serif; font-size: 19px; font-weight: 800; letter-spacing: -.045em; }
+.business-profit-rate small { margin-top: 1px; color: rgb(255 255 255 / .68); font-family: "Noto Sans SC", sans-serif; font-size: 9px; font-weight: 600; letter-spacing: 0; }
+.business-profit-card > strong { position: relative; z-index: 1; display: block; margin-top: var(--space-2); color: #fff; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: clamp(28px, 8vw, 34px); letter-spacing: -.07em; }
+.business-profit-period { position: relative; z-index: 1; display: block; margin-top: 2px; color: rgb(255 255 255 / .68); font-size: 10px; }
+.business-profit-breakdown { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 16px minmax(0, 1fr); gap: var(--space-1); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid rgb(255 255 255 / .22); }
+.business-profit-breakdown span { min-width: 0; }
+.business-profit-breakdown small, .business-profit-breakdown b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.business-profit-breakdown small { color: rgb(255 255 255 / .65); font-size: 8px; }
+.business-profit-breakdown b { margin-top: 2px; color: #fff; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 11px; letter-spacing: -.04em; }
+.business-profit-breakdown i { align-self: end; padding-bottom: 1px; color: rgb(255 255 255 / .64); font-family: "DM Sans", sans-serif; font-size: 16px; font-style: normal; text-align: center; }
+.business-profit-breakdown .result b { color: #dff7ed; }
+.business-view-switch { margin-top: var(--space-4); }
+
+.business-cash-summary {
+  margin-top: var(--space-4);
+  color: #17233c;
+  border: 1px solid #e0e8f0;
+  border-radius: var(--radius-ledger-reverse);
+  background: #fff;
+  box-shadow: none;
+}
+.business-cash-summary .cash-flow-copy > span, .business-cash-summary .cash-flow-copy p { color: #8190a0; }
+.business-cash-summary .cash-flow-copy h2 { color: #17233c; font-size: 26px; }
+.business-cash-summary .cash-flow-detail { color: #526477; border-color: #dce7f0; background: #f8fbff; }
+.business-cash-summary .cash-records-link { padding-left: 0; color: #087ff5; }
+.business-cash-summary .cash-orbit { color: #087ff5; border-color: #cfe3fb; background: #edf7ff; }
+.business-cash-summary .cash-orbit::before { border-color: #cfe3fb; }
+.business-cash-summary .cash-orbit span { color: #8190a0; }
+.business-content .core-section-heading { margin-top: var(--space-5); }
+.business-content .ledger-lines { margin-top: var(--space-2); border-color: #e5ebf1; box-shadow: 0 3px 12px rgb(11 24 54 / .02); }
+.business-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-4); }
+.business-actions .primary-action, .business-actions .secondary-action { min-height: var(--button-lg-height); margin: 0; border-radius: var(--radius-3); font-size: var(--font-secondary); }
+.business-actions .primary-action { color: #fff; border: 0; background: #087ff5; }
+.business-actions .secondary-action { color: #168968; border-color: #bfe9da; background: #f5fcf9; }
+.business-content .cost-analysis-intro { margin-top: var(--space-4); color: #526477; border-color: #dce7f0; border-radius: var(--radius-3); background: #f8fbff; }
+.business-content .cost-analysis-intro > svg { color: #087ff5; }
+.business-content .sales-result-card { margin-top: var(--space-4); border-color: #e0e8f0; border-radius: var(--radius-ledger-reverse); box-shadow: 0 4px 14px rgb(11 24 54 / .025); }
+
+@media (max-width: 390px) {
+  .business-profit-card { padding: var(--space-3); }
+  .business-profit-breakdown { gap: 2px; }
+  .business-profit-breakdown b { font-size: 10px; }
+  .business-profit-breakdown i { font-size: 14px; }
+}
+
+/* 我的：店铺资料优先，经营和数据操作按功能分组，复杂配置按需展开。 */
+.profile-store-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) var(--tap-target);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid #e0e8f0;
+  border-radius: var(--radius-ledger-reverse);
+  background: #fff;
+  box-shadow: 0 5px 18px rgb(11 24 54 / .035);
+}
+.profile-store-title { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.profile-store-title h1 { overflow: hidden; margin: 0; color: #17233c; font-size: 19px; letter-spacing: -.045em; text-overflow: ellipsis; white-space: nowrap; }
+.profile-store-title span { flex: 0 0 auto; padding: 2px 5px; color: #087ff5; border-radius: var(--radius-2); background: #edf7ff; font-size: 9px; font-weight: 800; }
+.profile-store-card small { display: block; margin-top: 4px; color: #8492a1; font-size: var(--font-secondary); }
+.profile-store-arrow { width: var(--tap-target); height: var(--tap-target); display: grid; place-items: center; color: #738294; border: 0; border-radius: var(--radius-2); background: transparent; }
+.profile-content .account-status-card { margin-top: var(--space-3); border-color: #e3eaf2; border-radius: var(--radius-3); box-shadow: none; }
+.profile-content .account-logout { margin-top: var(--space-2); }
+.profile-section { margin-top: var(--space-5); }
+.profile-section .core-section-heading { margin-top: 0; }
+.profile-management-grid, .profile-data-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
+.profile-management-grid > button, .profile-data-grid > button {
+  min-width: 0;
+  min-height: 106px;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 4px;
+  padding: var(--space-3) var(--space-1);
+  color: #263750;
+  border: 1px solid #e4ebf2;
+  border-radius: var(--radius-3);
+  background: #fff;
+  text-align: center;
+}
+.profile-management-grid > button.active { border-color: #9ecbf6; background: #f7fbff; }
+.profile-management-grid b, .profile-management-grid small, .profile-data-grid b, .profile-data-grid small { display: block; overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.profile-management-grid b, .profile-data-grid b { margin-top: 1px; font-size: 10px; }
+.profile-management-grid small, .profile-data-grid small { color: #8492a1; font-size: 8px; line-height: 1.35; }
+.profile-grid-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius-2); }
+.profile-grid-icon.industry { color: #087ff5; background: #eaf4ff; }
+.profile-grid-icon.category { color: #6757d8; background: #f0edff; }
+.profile-grid-icon.allocation { color: #168968; background: #e9fbf5; }
+.profile-grid-icon.funding { color: #c46b34; background: #fff0e8; }
+.profile-grid-icon.report { color: #087ff5; background: #eaf4ff; }
+.profile-grid-icon.products { color: #6757d8; background: #f0edff; }
+.profile-grid-icon.backup { color: #168968; background: #e9fbf5; }
+.profile-grid-icon.export { color: #c46b34; background: #fff0e8; }
+.profile-expand-panel { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid #dce7f0; border-radius: var(--radius-3); background: #fafcff; }
+.profile-expand-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.profile-expand-heading b { color: #263750; font-size: var(--font-body); }
+.profile-expand-heading small { color: #8492a1; font-size: 9px; line-height: 1.4; }
+.profile-expand-heading .text-action { min-height: var(--tap-target); display: inline-flex; align-items: center; gap: 1px; padding: 0 var(--space-1); color: #087ff5; border: 0; background: transparent; font-size: var(--font-secondary); font-weight: 800; }
+.profile-expand-panel .industry-switcher, .profile-expand-panel .custom-category-list { margin-top: var(--space-3); }
+.profile-system-section .setting-item { border-color: #e5ebf1; }
+.profile-system-section .setting-icon { color: #526477; background: #f0f4f8; }
+.profile-version { margin: var(--space-3) var(--space-1) 0; color: #98a4b1; font-size: 9px; line-height: 1.45; text-align: center; }
+
+@media (max-width: 390px) {
+  .profile-store-card { padding: var(--space-3); }
+  .profile-management-grid, .profile-data-grid { gap: var(--space-1); }
+  .profile-management-grid > button, .profile-data-grid > button { min-height: 98px; padding-inline: 2px; }
+  .profile-management-grid b, .profile-data-grid b { font-size: 9px; }
+}
 .dashboard-status-item.goal { border-color: #cfe4fb; background: #f8fbff; }
 .dashboard-status-item.goal > b { color: #087ff5; }
 .dashboard-status-item.health.healthy > b { color: #168968; }

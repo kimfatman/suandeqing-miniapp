@@ -37,8 +37,10 @@ describe("ProfileView industry template interactions", () => {
     const onIndustryChange = vi.fn();
     const onToggleCategory = vi.fn();
     render(<ProfileView storeName="测试小店" industry="catering" categories={["食材采购"]} categoryStatus={{ "食材采购": true }} user={null} authLoading={false} cloudAvailable={false} onLogin={vi.fn()} onLogout={vi.fn()} isLoggingOut={false} onDataManagement={vi.fn()} onIndustryChange={onIndustryChange} onAddCategory={vi.fn()} onEditCategory={vi.fn()} onToggleCategory={onToggleCategory} onHiddenCost={vi.fn()} onDebt={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /经营行业/ }));
     fireEvent.click(screen.getByRole("button", { name: /社区零售/ }));
     expect(onIndustryChange).toHaveBeenCalledWith("retail");
+    fireEvent.click(screen.getByRole("button", { name: /成本项目/ }));
     fireEvent.click(screen.getByRole("button", { name: /停用食材采购/ }));
     expect(onToggleCategory).toHaveBeenCalledWith("食材采购");
   });
@@ -627,11 +629,23 @@ describe("QuickCostSheet interactions", () => {
     const onQuickCost = vi.fn();
     const onBom = vi.fn();
     render(<ProductsView products={ledger.products} activeProductId={ledger.products[0].id} fundingCost={0} sales={ledger.sales} period="2026-08" onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={onQuickCost} onBom={onBom} onAdd={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /更新成本|录入成本/ }));
+    expect(screen.getAllByText("单件利润").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("毛利率").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "打开直接成本录入" }));
     expect(onQuickCost).toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
     fireEvent.click(screen.getByRole("button", { name: /编辑配方/ }));
     expect(onBom).toHaveBeenCalled();
+  });
+
+  it("keeps list and selected-detail unit price, cost, profit and margin on the same product calculation", () => {
+    const ledger = seedLedger();
+    const product = { ...ledger.products[0], price: 100, operating: 40, direct: 40, bom: [] };
+    render(<ProductsView products={[product]} activeProductId={product.id} fundingCost={0} sales={[]} period="2026-08" onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={vi.fn()} onBom={vi.fn()} onAdd={vi.fn()} />);
+    expect(screen.getAllByText("¥100.00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("¥40.00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("¥60.00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("60.0%").length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -653,9 +667,10 @@ describe("BusinessView cash and cost-analysis layers", () => {
     const ledger = { ...seedLedger(), records: [{ id: "cash-1", type: "expense" as const, amount: 88, category: "房租", note: "8月房租", date: "2026-08-18", source: "manual" as const }], sales: [] };
     const summary = summarizeLedger(ledger, "2026-08");
     render(<BusinessView summary={summary} productCount={ledger.products.length} period="2026-08" onPeriodChange={vi.fn()} onPricing={vi.fn()} onRecord={vi.fn()} onSale={vi.fn()} onCashRecords={vi.fn()} sales={ledger.sales} products={ledger.products} onRefund={vi.fn()} onDeleteSale={vi.fn()} />);
+    expect(screen.getByLabelText("本期经营利润")).toBeTruthy();
     expect(screen.getByText("本期现金结余")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /销售快照成本/ })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: /成本分析/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /利润分析/ }));
     expect(screen.getByText("本期还没有销售结转利润")).toBeTruthy();
     expect(screen.getByRole("heading", { name: /销售快照成本/ })).toBeTruthy();
   });
