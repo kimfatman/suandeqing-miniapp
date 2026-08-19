@@ -28,6 +28,9 @@ export type Material = {
   source: string;
   purchaseUnit?: string;
   conversionFactor?: number;
+  /** 新版材料保留原始采购数据，便于编辑时回填；旧材料缺失时仍兼容。 */
+  purchaseAmount?: number;
+  purchaseQuantity?: number;
 };
 
 export type BomItem = {

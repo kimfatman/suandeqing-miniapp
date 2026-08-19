@@ -265,6 +265,15 @@ describe("ProductNameSheet interactions", () => {
 });
 
 describe("MaterialSheet interactions", () => {
+  it("starts a new material purchase with blank values instead of fake defaults", () => {
+    render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={vi.fn()} />);
+    expect((screen.getByLabelText("材料采购金额") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("材料采购数量") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("材料换算系数") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("材料采购单位") as HTMLSelectElement).value).toBe("");
+    expect((screen.getByLabelText("材料使用单位") as HTMLSelectElement).value).toBe("");
+  });
+
   it("edits an existing material while preserving its id", () => {
     const onSave = vi.fn();
     const material = seedLedger().materials[0];
@@ -278,8 +287,12 @@ describe("MaterialSheet interactions", () => {
   it("shows an error and does not call onSave for zero purchase quantity", () => {
     const onSave = vi.fn();
     render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
-    const quantityInput = screen.getAllByRole("spinbutton")[1];
-    fireEvent.change(quantityInput, { target: { value: "0" } });
+    fireEvent.change(screen.getByPlaceholderText(/例如：/), { target: { value: "纸杯" } });
+    fireEvent.change(screen.getByLabelText("材料采购金额"), { target: { value: "24" } });
+    fireEvent.change(screen.getByLabelText("材料采购数量"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("材料采购单位"), { target: { value: "盒" } });
+    fireEvent.change(screen.getByLabelText("材料使用单位"), { target: { value: "个" } });
+    fireEvent.change(screen.getByLabelText("材料换算系数"), { target: { value: "1" } });
     fireEvent.click(screen.getByRole("button", { name: /保存材料/ }));
     expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByRole("alert").textContent).toContain("采购金额、采购数量和换算系数都必须大于0");
@@ -290,6 +303,12 @@ describe("MaterialSheet interactions", () => {
     render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
     const recordPurchase = screen.getByRole("checkbox") as HTMLInputElement;
     expect(recordPurchase.checked).toBe(true);
+    fireEvent.change(screen.getByPlaceholderText(/例如：/), { target: { value: "纸杯" } });
+    fireEvent.change(screen.getByLabelText("材料采购金额"), { target: { value: "24" } });
+    fireEvent.change(screen.getByLabelText("材料采购数量"), { target: { value: "24" } });
+    fireEvent.change(screen.getByLabelText("材料采购单位"), { target: { value: "盒" } });
+    fireEvent.change(screen.getByLabelText("材料使用单位"), { target: { value: "个" } });
+    fireEvent.change(screen.getByLabelText("材料换算系数"), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText("采购业务日期"), { target: { value: "2026-07-20" } });
     fireEvent.click(screen.getByRole("button", { name: /保存材料/ }));
     expect(onSave).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ recordPurchase: true, date: "2026-07-20" }));
