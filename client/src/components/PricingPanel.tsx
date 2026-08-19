@@ -142,6 +142,7 @@ export function PricingPanel({ costs, productName = "当前商品", costLines = 
             <b>{mode === "margin" ? "%" : "元"}</b>
           </div>
         </label>
+        {mode === "margin" && <div className="pricing-rate-guide"><Info size={15} /><p><b>这里使用“利润率”</b>：利润 ÷ 售价。它不同于“加价率”（利润 ÷ 成本）；例如希望利润率 30%，并不等于在成本上加 30%。平台费会一并从售价中反推。</p></div>}
         <label className="field-block compact-field">
           <span>每单固定费用</span>
           <div className="money-input">

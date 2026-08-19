@@ -9,8 +9,8 @@ import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
-import { CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
-import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger } from "./ledgerStore";
+import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
 
 describe("OnboardingFlow industry initialization", () => {
   it("submits a non-catering industry with the store name", () => {
@@ -107,6 +107,8 @@ describe("PricingPanel cost traceability", () => {
 
   it("keeps zero-value fees visually empty and lets a target margin be cleared and re-entered", () => {
     render(<PricingPanel costs={{ directCost: 6, fixedCost: 0, hiddenCost: 0, fundingCost: 0, feeRate: 3 }} onClose={vi.fn()} />);
+    expect(screen.getByText(/这里使用“利润率”/)).toBeTruthy();
+    expect(screen.getByText(/不同于“加价率”/)).toBeTruthy();
     const target = screen.getByRole("spinbutton", { name: "目标利润率" });
     const fixedFee = screen.getByRole("spinbutton", { name: "每单固定费用" });
     expect((fixedFee as HTMLInputElement).value).toBe("");
@@ -126,7 +128,7 @@ describe("Sale refund and inventory interactions", () => {
     const onConfirm = vi.fn();
     const product = { ...seedLedger().products[0], stockQuantity: 3 };
     render(<SaleRefundSheet product={product} sale={{ id: "sale", productId: product.id, quantity: 2, unitPrice: 10, date: "2026-08-18", note: "" }} onClose={vi.fn()} onConfirm={onConfirm} />);
-    fireEvent.click(screen.getByRole("button", { name: "确认全额撤销" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认全额退款并标为撤销" }));
     expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ quantity: 2, amount: 20, restock: true }));
   });
 
@@ -150,10 +152,17 @@ describe("Monthly indirect-cost allocation", () => {
     const onSave = vi.fn();
     const product = { ...seedLedger().products[0], bom: [] };
     render(<MonthlyAllocationSheet period="2026-08" products={[product]} onClose={vi.fn()} onSave={onSave} />);
+    expect(screen.getAllByText("本期费用").length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText(`${product.name}本期产量`)).toBeNull();
     fireEvent.change(screen.getByLabelText("房租月费"), { target: { value: "900" } });
+    fireEvent.click(screen.getByRole("button", { name: "设备折旧、时间比例和其他费用" }));
     fireEvent.click(screen.getByRole("button", { name: /新增设备/ }));
     fireEvent.change(screen.getByLabelText("设备采购价"), { target: { value: "3600" } });
     fireEvent.change(screen.getByLabelText("设备使用月数"), { target: { value: "36" } });
+    fireEvent.click(screen.getByRole("button", { name: "下一步" }));
+    expect(screen.getAllByText("怎么分").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "下一步" }));
+    expect(screen.getAllByText("确认商品").length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText(`${product.name}本期产量`), { target: { value: "100" } });
     fireEvent.click(screen.getByRole("button", { name: /保存本期分摊/ }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ period: "2026-08", method: "output", fixedCosts: expect.objectContaining({ rent: 900 }), products: [expect.objectContaining({ outputQuantity: 100 })] }));
@@ -163,10 +172,13 @@ describe("Monthly indirect-cost allocation", () => {
     const onSave = vi.fn();
     const product = { ...seedLedger().products[0], bom: [] };
     render(<MonthlyAllocationSheet period="2026-08" products={[product]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.click(screen.getByRole("button", { name: "设备折旧、时间比例和其他费用" }));
     fireEvent.change(screen.getByLabelText("分摊开始日期"), { target: { value: "2026-08-17" } });
     fireEvent.change(screen.getByLabelText("分摊结束日期"), { target: { value: "2026-08-31" } });
     fireEvent.click(screen.getByRole("button", { name: /整月预算按天折算/ }));
     fireEvent.change(screen.getByLabelText("房租月费"), { target: { value: "310" } });
+    fireEvent.click(screen.getByRole("button", { name: "下一步" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一步" }));
     fireEvent.change(screen.getByLabelText(`${product.name}本期产量`), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("button", { name: /保存本期分摊/ }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ effectiveFrom: "2026-08-17", effectiveTo: "2026-08-31", costTiming: "prorated" }));
@@ -202,6 +214,8 @@ describe("DataManagementSheet local reset", () => {
   it("requires explicit confirmation before clearing the current device ledger", () => {
     const onClearLocal = vi.fn();
     render(<DataManagementSheet isAuthenticated={false} cloudAvailable={false} isBackingUp={false} onClose={vi.fn()} onLogin={vi.fn()} onBackup={vi.fn()} onRestoreCloud={vi.fn()} onExport={vi.fn()} onImport={vi.fn()} onClearLocal={onClearLocal} />);
+    expect(screen.getByText("日常备份与恢复")).toBeTruthy();
+    expect(screen.getByText("高级数据操作")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "清空当前设备账本" }));
     expect(screen.getByText("清空当前设备的全部账本数据？")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "确认清空" }));
@@ -411,6 +425,7 @@ describe("QuickCostSheet interactions", () => {
     render(<ProductsView products={ledger.products} activeProductId={ledger.products[0].id} fundingCost={0} onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={onQuickCost} onBom={onBom} onAdd={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /更新成本|录入成本/ }));
     expect(onQuickCost).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
     fireEvent.click(screen.getByRole("button", { name: /编辑配方/ }));
     expect(onBom).toHaveBeenCalled();
   });
@@ -423,8 +438,22 @@ describe("DeleteSaleSheet interactions", () => {
     const sale = { id: "sale", productId: product.id, quantity: 2, unitPrice: 12, date: "2026-08-18", note: "", refunds: [{ id: "refund", quantity: 1, amount: 12, date: "2026-08-18", note: "退款", restock: true }] };
     render(<DeleteSaleSheet sale={sale} product={product} onClose={vi.fn()} onConfirm={onConfirm} />);
     expect(screen.getByText("已退款 ¥12.00，将一并删除退款记录。")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "确认删除销售" }));
+    expect(screen.getByText("仅用于录入错误")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "确认删除录错" }));
     expect(onConfirm).toHaveBeenCalledOnce();
+  });
+});
+
+describe("BusinessView cash and cost-analysis layers", () => {
+  it("defaults to actual cash and separately reveals sales-snapshot profit analysis", () => {
+    const ledger = { ...seedLedger(), records: [{ id: "cash-1", type: "expense" as const, amount: 88, category: "房租", note: "8月房租", date: "2026-08-18", source: "manual" as const }], sales: [] };
+    const summary = summarizeLedger(ledger, "2026-08");
+    render(<BusinessView summary={summary} productCount={ledger.products.length} period="2026-08" onPeriodChange={vi.fn()} onPricing={vi.fn()} onRecord={vi.fn()} onSale={vi.fn()} onCashRecords={vi.fn()} sales={ledger.sales} products={ledger.products} onRefund={vi.fn()} onDeleteSale={vi.fn()} />);
+    expect(screen.getByText("本期现金结余")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /销售快照成本/ })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /成本分析/ }));
+    expect(screen.getByText("本期还没有销售结转利润")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /销售快照成本/ })).toBeTruthy();
   });
 });
 
