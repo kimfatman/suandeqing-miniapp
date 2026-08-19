@@ -46,7 +46,7 @@ import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
 import * as XLSX from "xlsx";
 import {   applyIndustryTemplate, applyQuickCost,
   applyMonthlyIndirectPlan, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, getMonthlyIndirectPlanTiming, calculateProductIndirectAllocations, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, emptyMonthlyFixedCosts,
-  formatBusinessPeriod, getActiveCategories, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getCashTrendSeries, INDUSTRY_TEMPLATES, AllocationMethod, CashTrendRange, HiddenCostItem, IndustryKey, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
+  formatBusinessPeriod, getActiveCategories, getDashboardHealth, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getCashTrendSeries, getRevenueGoalProgress, getSalesTrendSeries, INDUSTRY_TEMPLATES, AllocationMethod, CashTrendRange, HiddenCostItem, IndustryKey, IndustryTemplate, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, resolveIndustryTemplate, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
 import { startLogin } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
@@ -159,7 +159,7 @@ export default function Home() {
     displayedBannerRef.current = visibleImportantBanner.id;
     markMessageDisplayed.mutate({ userMessageId: visibleImportantBanner.id });
   }, [visibleImportantBanner?.id]);
-  const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
+  const currentTemplate = resolveIndustryTemplate(ledger.profile.industry, ledger.profile.industryTemplateOverrides);
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
   const [selectedPeriod, setSelectedPeriod] = useState(() => getBusinessPeriod());
   const [toast, setToast] = useState<string | null>(null);
@@ -259,7 +259,7 @@ export default function Home() {
 
   const confirmIndustryChange = () => {
     if (!pendingIndustry) return;
-    const label = INDUSTRY_TEMPLATES.find((item) => item.key === pendingIndustry)?.label ?? "新行业";
+    const label = resolveIndustryTemplate(pendingIndustry).label;
     setLedger((current) => {
       const next = applyIndustryTemplate(current, pendingIndustry);
       persistLedger(next);
@@ -329,7 +329,7 @@ export default function Home() {
   };
 
   const completeOnboarding = ({ storeName, industry }: { storeName: string; industry: IndustryKey }) => {
-    const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+    const template = resolveIndustryTemplate(industry);
     setLedger((current) => {
       const next = initializeIndustryLedger(current, storeName, industry);
       persistLedger(next);
@@ -388,6 +388,11 @@ export default function Home() {
             onBusiness={() => navigate("business")}
             onProducts={() => navigate("products")}
             readiness={readiness}
+            onSaveRevenueGoal={(monthlyBudget) => setLedger((current) => {
+              const next = { ...current, profile: { ...current.profile, monthlyBudget } };
+              persistLedger(next);
+              return next;
+            })}
             onPrimaryAction={() => {
               if (readiness.stage === "record") setShowQuickRecord(true);
               if (readiness.stage === "product") setShowProductNameSheet(true);
@@ -418,7 +423,7 @@ export default function Home() {
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} productCount={activeProducts.length} period={selectedPeriod} onPeriodChange={setSelectedPeriod} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} onCashRecords={() => setShowCashRecords(true)} sales={ledger.sales} products={ledger.products} onRefund={(saleId) => setRefundSaleId(saleId)} onDeleteSale={(saleId) => setDeletingSaleId(saleId)} />}
-        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
+        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} template={currentTemplate} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
         </>}
       </main>
 
@@ -519,6 +524,7 @@ export function HomeView({
   onBusiness,
   onProducts,
   readiness,
+  onSaveRevenueGoal,
   onPrimaryAction,
 }: {
   ledger: LedgerData;
@@ -538,9 +544,12 @@ export function HomeView({
   onBusiness: () => void;
   onProducts: () => void;
   readiness: Readiness;
+  onSaveRevenueGoal: (monthlyBudget: number) => void;
   onPrimaryAction: () => void;
 }) {
   const [trendRange, setTrendRange] = useState<CashTrendRange>("month");
+  const [editingRevenueGoal, setEditingRevenueGoal] = useState(false);
+  const [revenueGoalInput, setRevenueGoalInput] = useState(ledger.profile.monthlyBudget > 0 ? String(ledger.profile.monthlyBudget) : "");
   const hasSalesResult = summary.profitReady;
   const hasProduct = product.id !== 0;
   const operatingResult = summary.operatingResult;
@@ -556,10 +565,21 @@ export function HomeView({
   const maxContributionRevenue = Math.max(...topContributions.map((item) => Math.abs(item.revenue)), 1);
   const grossMargin = summary.salesRevenue > 0 ? summary.grossProfit / summary.salesRevenue * 100 : null;
   const trendSeries = useMemo(() => getCashTrendSeries(ledger, period, trendRange), [ledger, period, trendRange]);
+  const salesTrendSeries = useMemo(() => getSalesTrendSeries(ledger, period, "7d"), [ledger, period]);
   const trendNet = trendSeries.reduce((total, item) => total + item.income - item.expenses, 0);
   const trendLabel = trendRange === "7d" ? "近 7 天" : trendRange === "30d" ? "近 30 天" : "本月";
-  const healthLabel = !hasSalesResult ? "还差销售结转" : operatingResult < 0 ? "本期经营需关注" : operatingResult > 0 ? "经营状况良好" : "本期经营持平";
-  const healthDetail = !hasSalesResult ? "补一笔销售后，系统才能按销售快照计算利润。" : grossMargin === null ? "已完成销售结转，继续记录销售和退款。" : `毛利率 ${grossMargin.toFixed(1)}%，利润仅来自已结转销售。`;
+  const health = useMemo(() => getDashboardHealth(ledger, summary), [ledger, summary]);
+  const revenueGoal = useMemo(() => getRevenueGoalProgress(ledger.profile.monthlyBudget, summary.salesRevenue), [ledger.profile.monthlyBudget, summary.salesRevenue]);
+  const latestSalesTrend = salesTrendSeries.at(-1);
+  const todaySummary = latestSalesTrend && (latestSalesTrend.salesCount > 0 || latestSalesTrend.revenue !== 0 || latestSalesTrend.cost !== 0)
+    ? latestSalesTrend
+    : null;
+  const saveRevenueGoal = () => {
+    const nextGoal = Math.max(Number(revenueGoalInput) || 0, 0);
+    onSaveRevenueGoal(nextGoal);
+    setRevenueGoalInput(nextGoal > 0 ? String(nextGoal) : "");
+    setEditingRevenueGoal(false);
+  };
   const primaryInsight = dashboardInsights[0];
   const performDashboardAction = (action: DashboardAction) => {
     if (action === "products") onProducts();
@@ -589,10 +609,21 @@ export function HomeView({
         <div className="dashboard-result-foot"><span>{hasSalesResult && grossMargin !== null ? `毛利率 ${grossMargin.toFixed(1)}%` : "完成销售后即可判断利润"}</span><button onClick={onBusiness}>查看经营分析 <ArrowRight size={15} /></button></div>
       </section>
 
+      <section className="dashboard-pulse-grid" aria-label="经营目标与今日摘要">
+        <article className="dashboard-goal-card">
+          <div className="dashboard-card-title"><span>本月收入目标</span><button onClick={() => { setRevenueGoalInput(revenueGoal ? String(revenueGoal.target) : ""); setEditingRevenueGoal((current) => !current); }}>{editingRevenueGoal ? "取消" : revenueGoal ? "调整" : "设置"}</button></div>
+          {editingRevenueGoal ? <div className="dashboard-goal-editor"><label><span>月收入目标</span><div className="money-input"><input aria-label="月收入目标" type="number" min="0" step="1" value={revenueGoalInput} onChange={(event) => setRevenueGoalInput(event.target.value)} /><b>元</b></div></label><button className="primary-action" onClick={saveRevenueGoal}>保存目标</button></div> : revenueGoal ? <><div className="dashboard-goal-body"><span className="dashboard-goal-ring" style={{ background: `conic-gradient(#087ff5 ${Math.min(revenueGoal.percentage, 100)}%, #e9eff7 0)` }}><b>{revenueGoal.percentage.toFixed(0)}%</b></span><div><b>{formatCurrency(revenueGoal.actual)} <small>/ {formatCurrency(revenueGoal.target)}</small></b><span>还差 {formatCurrency(revenueGoal.remaining)}</span></div></div><small>仅统计已结转销售收入，不以现金收款替代。</small></> : <div className="dashboard-goal-empty"><TrendingUp size={18} /><div><b>还未设置收入目标</b><small>设置本月目标后，系统用已结转销售收入计算完成度。</small></div><button onClick={() => setEditingRevenueGoal(true)}>设置</button></div>}
+        </article>
+        <article className="dashboard-today-card">
+          <div className="dashboard-card-title"><span>{todaySummary ? `${todaySummary.label} 经营摘要` : "最近经营摘要"}</span><TrendingUp size={17} /></div>
+          {todaySummary ? <><b className={todaySummary.profit < 0 ? "loss" : ""}>{formatCurrency(todaySummary.profit)}</b><small>收入 {formatCurrency(todaySummary.revenue)} · 已结转成本 {formatCurrency(todaySummary.cost)}</small><em>{todaySummary.profit >= 0 ? "当天已结转利润" : "当天利润需关注"}</em></> : <div className="dashboard-summary-empty"><b>暂无已结转销售</b><small>记录销售后，会按业务日期展示当天收入、成本与利润。</small></div>}
+        </article>
+      </section>
+
       <section className="dashboard-overview-grid" aria-label="经营状态与现金情况">
         <article className={`dashboard-health-card ${hasSalesResult ? operatingResult < 0 ? "loss" : "healthy" : "pending"}`}>
-          <div className="dashboard-card-title"><span>经营状态</span><BrandSignature tone="blue" compact /></div>
-          <b>{healthLabel}</b><small>{healthDetail}</small><button onClick={onBusiness}>查看经营分析 <ArrowRight size={15} /></button>
+          <div className="dashboard-card-title"><span>经营健康度</span><BrandSignature tone="blue" compact /></div>
+          <div className="dashboard-health-score"><b>{health.score}</b><span>/ 100</span></div><strong>{health.label}</strong><small>{health.detail}</small><details><summary>查看评分依据</summary>{health.factors.map((factor) => <span key={factor.key}>{factor.label} {factor.score}/{factor.maxScore} · {factor.detail}</span>)}</details><button onClick={onBusiness}>查看经营分析 <ArrowRight size={15} /></button>
         </article>
         <article className={`dashboard-cash-card ${summary.cashBalance < 0 ? "loss" : ""}`}>
           <div className="dashboard-card-title"><span>现金情况</span><button onClick={onBusiness}>更多 <ChevronRight size={14} /></button></div>
@@ -602,6 +633,11 @@ export function HomeView({
       </section>
 
       <section className="overview-chart-card dashboard-trend-card" aria-label="选定范围现金收付概览"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>现金收付趋势</h2></div><span className="chart-summary-value">{formatCurrency(trendNet)} <small>{trendLabel}净收付</small></span></div><TrendRangePicker value={trendRange} onChange={setTrendRange} /><MiniTrendChart series={trendSeries} rangeLabel={trendLabel} /><p className="dashboard-chart-note">图表仅使用实际收款与付款；销售结转利润、预计分摊会分别在经营分析中说明。</p></section>
+
+      <section className="dashboard-sales-trends" aria-label="近7日销售结转趋势">
+        <SalesTrendChart series={salesTrendSeries} mode="profit" title="最近7天利润趋势" description="收入减去已结转销售成本；退款按退款业务日期回滚。" />
+        <SalesTrendChart series={salesTrendSeries} mode="revenueCost" title="收入与成本对比" description="只使用销售快照收入与已结转成本，不混入现金收付款。" />
+      </section>
 
       <section className="dashboard-products-card" aria-label="商品赚钱能力"><div className="section-heading compact"><div><span className="eyebrow">商品赚钱能力 TOP {Math.min(topContributions.length || 5, 5)}</span><h2>本期销售贡献</h2></div><button onClick={onProducts}>全部商品 <ChevronRight size={14} /></button></div>{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献率</span></div><div className="dashboard-product-list">{topContributions.map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{risk ? "需关注" : `${rate.toFixed(1)}%`}</small></button>; })}</div><p className="dashboard-data-note">直接贡献率使用销售时冻结的直接成本；房租、人工等分摊不会混入本表。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>还没有已结转的商品销售</b><small>记录第一笔销售后，这里会按真实销售快照展示商品贡献。</small><button onClick={onPrimaryAction}>记录销售 <ArrowRight size={14} /></button></div>}</section>
 
@@ -682,6 +718,26 @@ export function MiniTrendChart({ series, rangeLabel }: { series: Array<{ label: 
   if (!hasData) return <div className="mini-chart-empty"><BarChart3 size={20} /><span>{rangeLabel}暂无现金收付</span></div>;
   const selected = series[selectedIndex] ?? series.at(-1)!;
   return <div className="mini-trend-wrap"><svg className="mini-trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${rangeLabel}现金收款与付款趋势`}><line x1="0" y1="92" x2="100" y2="92" /><polyline className="trend-income" points={points("income")} /><polyline className="trend-expense" points={points("expenses")} />{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; const selectedPoint = index === selectedIndex; return <g className={selectedPoint ? "is-selected" : ""} key={item.label}><circle className="trend-income-dot" cx={x} cy={92 - (item.income / max) * 76} r={selectedPoint ? "2.5" : "1.35"} /><circle className="trend-expense-dot" cx={x} cy={92 - (item.expenses / max) * 76} r={selectedPoint ? "2.5" : "1.35"} /></g>; })}</svg><div className="mini-chart-axis" aria-hidden="true">{axisIndexes.map((index) => <span className={index === 0 ? "first" : index === series.length - 1 ? "last" : ""} style={{ left: `${(index / Math.max(series.length - 1, 1)) * 100}%` }} key={series[index]?.label}>{series[index]?.label}</span>)}</div><div className="chart-tooltip mini-trend-tooltip"><div><b>{selected.label}</b><small>当天实际收付</small></div><span><i className="income-dot" />收款 {formatCurrency(selected.income)}</span><span><i className="expense-dot" />付款 {formatCurrency(selected.expenses)}</span><strong>净收付 {formatCurrency(selected.income - selected.expenses)}</strong></div><div className="trend-date-select"><button type="button" aria-label="查看前一天现金收付" disabled={selectedIndex <= 0} onClick={() => setSelectedIndex((index) => Math.max(index - 1, 0))}><ChevronLeft size={16} /></button><label><span>查看日期</span><select aria-label="选择现金收付日期" value={selectedIndex} onChange={(event) => setSelectedIndex(Number(event.currentTarget.value))}>{series.map((item, index) => <option value={index} key={item.label}>{item.label}</option>)}</select></label><button type="button" aria-label="查看后一天现金收付" disabled={selectedIndex >= series.length - 1} onClick={() => setSelectedIndex((index) => Math.min(index + 1, series.length - 1))}><ChevronRight size={16} /></button></div><div className="mini-chart-legend"><span><i className="income-dot" />收款</span><span><i className="expense-dot" />付款</span></div></div>;
+}
+
+type SalesTrendMode = "profit" | "revenueCost";
+
+function SalesTrendChart({ series, mode, title, description }: { series: ReturnType<typeof getSalesTrendSeries>; mode: SalesTrendMode; title: string; description: string }) {
+  const [selectedIndex, setSelectedIndex] = useState(Math.max(series.length - 1, 0));
+  useEffect(() => setSelectedIndex(Math.max(series.length - 1, 0)), [series.length, series.at(-1)?.label]);
+  const keys = mode === "profit" ? ["profit"] as const : ["revenue", "cost"] as const;
+  const hasData = series.some((item) => item.salesCount > 0 || item.revenue !== 0 || item.cost !== 0);
+  const values = series.flatMap((item) => keys.map((key) => item[key]));
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const span = Math.max(max - min, 1);
+  const toY = (value: number) => 92 - ((value - min) / span) * 76;
+  const points = (key: typeof keys[number]) => series.map((item, index) => `${(index / Math.max(series.length - 1, 1)) * 100},${toY(item[key])}`).join(" ");
+  const selected = series[selectedIndex] ?? series.at(-1);
+  const axisIndexes = Array.from(new Set([0, 1, 2, 3, 4].map((step) => Math.round((Math.max(series.length - 1, 0) * step) / 4))));
+  const legend = mode === "profit" ? [{ key: "profit", label: "经营利润", tone: "profit" }] : [{ key: "revenue", label: "销售收入", tone: "income" }, { key: "cost", label: "已结转成本", tone: "cost" }];
+  if (!hasData) return <section className="analytics-trend-card analytics-empty" aria-label={title}><div className="chart-heading"><div><span className="eyebrow">销售快照</span><h2>{title}</h2></div></div><div className="mini-chart-empty"><BarChart3 size={20} /><span>暂无已结转销售</span></div><p>{description}</p></section>;
+  return <section className="analytics-trend-card" aria-label={title}><div className="chart-heading"><div><span className="eyebrow">销售快照 · 近7天</span><h2>{title}</h2></div>{mode === "profit" && <span className={`chart-summary-value ${selected && selected.profit < 0 ? "loss" : ""}`}>{formatCurrency(selected?.profit ?? 0)} <small>选中日期</small></span>}</div><svg className="analytics-trend-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={title}><line className="analytics-zero-line" x1="0" y1={toY(0)} x2="100" y2={toY(0)} /><polyline className={mode === "profit" ? "analytics-profit-line" : "analytics-income-line"} points={points(mode === "profit" ? "profit" : "revenue")} />{mode === "revenueCost" && <polyline className="analytics-cost-line" points={points("cost")} />}{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; const isSelected = index === selectedIndex; return <g key={item.date} className={isSelected ? "is-selected" : ""}><circle className={mode === "profit" ? "analytics-profit-dot" : "analytics-income-dot"} cx={x} cy={toY(mode === "profit" ? item.profit : item.revenue)} r={isSelected ? "2.5" : "1.3"} onClick={() => setSelectedIndex(index)} />{mode === "revenueCost" && <circle className="analytics-cost-dot" cx={x} cy={toY(item.cost)} r={isSelected ? "2.5" : "1.3"} onClick={() => setSelectedIndex(index)} />}</g>; })}</svg><div className="mini-chart-axis" aria-hidden="true">{axisIndexes.map((index) => <span className={index === 0 ? "first" : index === series.length - 1 ? "last" : ""} style={{ left: `${(index / Math.max(series.length - 1, 1)) * 100}%` }} key={series[index]?.label}>{series[index]?.label}</span>)}</div><div className="chart-tooltip analytics-trend-tooltip"><div><b>{selected?.label}</b><small>按业务日期归属</small></div>{mode === "profit" ? <><span><i className="profit-dot" />经营利润 {formatCurrency(selected?.profit ?? 0)}</span><small>收入 {formatCurrency(selected?.revenue ?? 0)} · 成本 {formatCurrency(selected?.cost ?? 0)}</small></> : <><span><i className="income-dot" />销售收入 {formatCurrency(selected?.revenue ?? 0)}</span><span><i className="cost-dot" />已结转成本 {formatCurrency(selected?.cost ?? 0)}</span><strong>经营利润 {formatCurrency(selected?.profit ?? 0)}</strong></>}</div><div className="trend-date-select"><button type="button" aria-label={`查看前一天${title}`} disabled={selectedIndex <= 0} onClick={() => setSelectedIndex((index) => Math.max(index - 1, 0))}><ChevronLeft size={16} /></button><label><span>查看日期</span><select aria-label={`选择${title}日期`} value={selectedIndex} onChange={(event) => setSelectedIndex(Number(event.currentTarget.value))}>{series.map((item, index) => <option value={index} key={item.date}>{item.label}</option>)}</select></label><button type="button" aria-label={`查看后一天${title}`} disabled={selectedIndex >= series.length - 1} onClick={() => setSelectedIndex((index) => Math.min(index + 1, series.length - 1))}><ChevronRight size={16} /></button></div><div className="mini-chart-legend">{legend.map((item) => <span key={item.key}><i className={`${item.tone}-dot`} />{item.label}</span>)}</div><p>{description}</p></section>;
 }
 
 export function CostCompositionChart({ product, operatingCost, fullCost }: { product: LedgerProduct; operatingCost: number; fullCost: number }) {
@@ -910,8 +966,7 @@ export function BusinessView({ summary, productCount, period, onPeriodChange, on
   );
 }
 
-export function ProfileView({ storeName, industry, categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt, onMonthlyReport }: { storeName: string; industry: IndustryKey; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void; onMonthlyReport?: () => void }) {
-  const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+export function ProfileView({ storeName, industry, template = resolveIndustryTemplate(industry), categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt, onMonthlyReport }: { storeName: string; industry: IndustryKey; template?: IndustryTemplate; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void; onMonthlyReport?: () => void }) {
   const industryName = template.label;
   return (
     <div className="page-content profile-content">
@@ -952,8 +1007,8 @@ export function DataManagementSheet({ isAuthenticated, cloudAvailable, backupAt,
 }
 
 function IndustryChangeSheet({ current, next, onClose, onConfirm }: { current: IndustryKey; next: IndustryKey; onClose: () => void; onConfirm: () => void }) {
-  const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === current) ?? INDUSTRY_TEMPLATES[0];
-  const nextTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === next) ?? INDUSTRY_TEMPLATES[0];
+  const currentTemplate = resolveIndustryTemplate(current);
+  const nextTemplate = resolveIndustryTemplate(next);
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet industry-change-sheet" role="dialog" aria-modal="true" aria-label="确认切换行业" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">经营资料</span><h2>切换为{nextTemplate.label}</h2></div><button className="icon-button" onClick={onClose}>×</button></header><p className="industry-change-lead">从{currentTemplate.label}切换后，只影响之后的新录入。</p><div className="impact-list"><p><b>将改变</b> 默认成本分类、商品成本名称、快速成本预设和模板隐形成本分类。</p><p><b>不会改变</b> 已有商品、材料、流水、销售、成本版本和自定义成本口径。</p></div><button className="primary-action sheet-action" onClick={onConfirm}><CheckBadge />确认切换行业</button></section></div>;
 }
 
@@ -1073,6 +1128,13 @@ export function SalesRecordSheet({ products, onClose, onSave }: { products: Ledg
   const [unitPrice, setUnitPrice] = useState(String(selected?.price ?? 0));
   const [date, setDate] = useState(getBusinessDate);
   const [error, setError] = useState<string | null>(null);
+  const previewQuantity = Math.max(Number(quantity) || 0, 0);
+  const previewPrice = Math.max(Number(unitPrice) || 0, 0);
+  const previewRevenue = previewQuantity * previewPrice;
+  const previewUnitCost = Math.max(selected?.operating ?? 0, selected?.direct ?? 0, 0);
+  const previewCost = previewQuantity * previewUnitCost;
+  const previewProfit = previewRevenue - previewCost;
+  const previewMargin = previewRevenue > 0 ? previewProfit / previewRevenue * 100 : null;
   const save = () => {
     const parsedQuantity = Number(quantity);
     const parsedPrice = Number(unitPrice);
@@ -1087,7 +1149,7 @@ export function SalesRecordSheet({ products, onClose, onSave }: { products: Ledg
     }
     onSave({ id: makeId(), productId: selected.id, quantity: parsedQuantity, unitPrice: parsedPrice, date, note: "" });
   };
-  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">销售</span><h2>记录销售</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>商品</span><select value={productId} onChange={(event) => { const nextId = Number(event.target.value); setProductId(nextId); const next = products.find((product) => product.id === nextId); setUnitPrice(String(next?.price ?? 0)); setError(null); }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>{selected?.stockQuantity !== undefined && <p className="record-category-hint">当前可售库存：{selected.stockQuantity}</p>}<div className="two-fields"><label className="field-block"><span>数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(null); }} /><b>份</b></div></label><label className="field-block"><span>成交价</span><div className="money-input"><input aria-label="销售成交价" type="number" min="0.01" step="0.01" value={unitPrice} onChange={(event) => { setUnitPrice(event.target.value); setError(null); }} /><b>元</b></div></label></div><label className="field-block business-date-field"><span>业务日期</span><input aria-label="销售业务日期" type="date" value={date} onChange={(event) => { setDate(event.target.value); setError(null); }} /></label>{selected?.price <= 0 && <p className="record-category-hint">该商品尚未定价，请先设置售价后再结转。</p>}<div className="material-preview"><span>销售收入</span><strong>{formatCurrency((Number(quantity) || 0) * (Number(unitPrice) || 0))}</strong><p>同时结转收入和商品成本。</p></div>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> 保存并结转</button></section></div>;
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet material-sheet" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">销售</span><h2>记录销售</h2></div><button className="icon-button" onClick={onClose}>×</button></header><label className="field-block"><span>商品</span><select value={productId} onChange={(event) => { const nextId = Number(event.target.value); setProductId(nextId); const next = products.find((product) => product.id === nextId); setUnitPrice(String(next?.price ?? 0)); setError(null); }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>{selected?.stockQuantity !== undefined && <p className="record-category-hint">当前可售库存：{selected.stockQuantity}</p>}<div className="two-fields"><label className="field-block"><span>数量</span><div className="money-input"><input type="number" min="0.01" step="0.01" value={quantity} onChange={(event) => { setQuantity(event.target.value); setError(null); }} /><b>份</b></div></label><label className="field-block"><span>成交价</span><div className="money-input"><input aria-label="销售成交价" type="number" min="0.01" step="0.01" value={unitPrice} onChange={(event) => { setUnitPrice(event.target.value); setError(null); }} /><b>元</b></div></label></div><label className="field-block business-date-field"><span>业务日期</span><input aria-label="销售业务日期" type="date" value={date} onChange={(event) => { setDate(event.target.value); setError(null); }} /></label>{selected?.price <= 0 && <p className="record-category-hint">该商品尚未定价，请先设置售价后再结转。</p>}<section className="sale-profit-preview" aria-label="本次销售预计经营反馈"><div><span>预计收入</span><b>{formatCurrency(previewRevenue)}</b></div><div><span>预计完整成本</span><b>{formatCurrency(previewCost)}</b></div><div className={previewProfit < 0 ? "loss" : "profit"}><span>预计经营贡献</span><b>{formatCurrency(previewProfit)}</b></div><div><span>预计毛利率</span><b>{previewMargin === null ? "—" : `${previewMargin.toFixed(1)}%`}</b></div><p>按当前单件经营成本估算；保存后会冻结当时成本快照，实际利润以已结转销售为准。</p></section>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-action sheet-action" onClick={save}><CheckBadge /> 保存并结转</button></section></div>;
 }
 
 export function SaleRefundSheet({ sale, product, onClose, onConfirm }: { sale: SalesRecord; product?: LedgerProduct; onClose: () => void; onConfirm: (refund: SaleRefund) => void }) {

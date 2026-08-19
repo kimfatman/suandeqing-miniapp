@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getCashTrendSeries, getIndustrySampleData, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getCashTrendSeries, getDashboardHealth, getIndustrySampleData, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, getRevenueGoalProgress, getSalesTrendSeries, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -78,6 +78,37 @@ describe("summarizeLedger", () => {
     expect(sevenDays.find((item) => item.label === "07/30")).toMatchObject({ expenses: 20 });
     expect(getCashTrendSeries(ledger, "2026-07", "30d")[0]).toMatchObject({ label: "07/02" });
     expect(getCashTrendSeries(ledger, "2026-07", "month")[0]).toMatchObject({ label: "07/01", income: 10 });
+  });
+
+  it("builds sales-snapshot profit trends separately from cash and rolls back refunds by refund business date", () => {
+    const ledger = createEmptyLedger();
+    ledger.profile.onboarded = true;
+    ledger.products = [{ id: 1, name: "商品A", category: "测试", price: 20, direct: 8, operating: 10, change: "", packaging: 0, directLabor: 0, bom: [] }];
+    ledger.sales = [{ id: "sale-a", productId: 1, quantity: 2, unitPrice: 20, date: "2026-08-17", note: "", unitDirectCostSnapshot: 8, allocatedIndirectCostSnapshot: 2, fundingCostSnapshot: 1, refunds: [{ id: "refund-a", quantity: 1, amount: 20, date: "2026-08-18", note: "" }] }];
+    ledger.records = [{ id: "cash-only", type: "expense", amount: 999, category: "本金还款", note: "", date: "2026-08-18" }];
+
+    const series = getSalesTrendSeries(ledger, "2026-08", "month");
+
+    expect(series.find((item) => item.date === "2026-08-17")).toMatchObject({ revenue: 40, cost: 22, profit: 18, grossProfit: 24, salesCount: 1 });
+    expect(series.find((item) => item.date === "2026-08-18")).toMatchObject({ revenue: -20, cost: -11, profit: -9, grossProfit: -12 });
+    expect(series.find((item) => item.date === "2026-08-18")?.cost).not.toBe(988);
+  });
+
+  it("reports revenue goal completion only from settled sales revenue and exposes health factors instead of a prediction", () => {
+    const ledger = createEmptyLedger();
+    ledger.profile.monthlyBudget = 1000;
+    ledger.profile.onboarded = true;
+    ledger.products = [{ id: 1, name: "商品A", category: "测试", price: 20, direct: 8, operating: 10, change: "", packaging: 0, directLabor: 0, bom: [] }];
+    ledger.sales = [{ id: "sale-a", productId: 1, quantity: 20, unitPrice: 20, date: "2026-08-17", note: "", unitDirectCostSnapshot: 8, allocatedIndirectCostSnapshot: 2 }];
+    const summary = summarizeLedger(ledger, "2026-08");
+    const goal = getRevenueGoalProgress(ledger.profile.monthlyBudget, summary.salesRevenue);
+    const health = getDashboardHealth(ledger, summary);
+
+    expect(goal).toEqual({ target: 1000, actual: 400, percentage: 40, remaining: 600 });
+    expect(getRevenueGoalProgress(0, summary.salesRevenue)).toBeNull();
+    expect(health.score).toBeGreaterThan(0);
+    expect(health.factors.map((factor) => factor.key)).toEqual(["sales", "productData", "cash", "profit"]);
+    expect(health.detail).toContain("不代表经营预测");
   });
 });
 

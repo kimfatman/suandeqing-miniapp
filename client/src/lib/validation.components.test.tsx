@@ -128,12 +128,16 @@ describe("HomeView decision dashboard", () => {
     ];
     ledger.sales = [{ id: "home-sale", productId: ledger.products[0]!.id, date: "2026-08-08", quantity: 5, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [] }];
     const summary = summarizeLedger(ledger, "2026-08");
-    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onPrimaryAction={vi.fn()} />);
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
     expect(screen.getByLabelText("本月经营结果")).toBeTruthy();
     expect(screen.getByText("本月经营利润")).toBeTruthy();
     expect(screen.getByText("销售收入")).toBeTruthy();
     expect(screen.getByText("现金情况")).toBeTruthy();
     expect(screen.getByText("现金仅反映实际收付款，含本金还款。")).toBeTruthy();
+    expect(screen.getByText("经营健康度")).toBeTruthy();
+    expect(screen.getByText("本月收入目标")).toBeTruthy();
+    expect(screen.getByText("最近7天利润趋势")).toBeTruthy();
+    expect(screen.getByText("收入与成本对比")).toBeTruthy();
     expect(screen.getByText("快速操作")).toBeTruthy();
   });
 });
@@ -517,6 +521,10 @@ describe("SalesRecordSheet interactions", () => {
     const priced = { ...ledger.products[1], id: 92, name: "已定价商品", price: 12 };
     const onSave = vi.fn();
     render(<SalesRecordSheet products={[unpriced, priced]} onClose={vi.fn()} onSave={onSave} />);
+    expect(screen.getByLabelText("本次销售预计经营反馈")).toBeTruthy();
+    expect(screen.getByText("预计经营贡献")).toBeTruthy();
+    expect(screen.getByText("预计毛利率")).toBeTruthy();
+    expect(screen.getByText("按当前单件经营成本估算；保存后会冻结当时成本快照，实际利润以已结转销售为准。")).toBeTruthy();
     fireEvent.change(screen.getByRole("spinbutton", { name: "销售成交价" }), { target: { value: "12" } });
     fireEvent.click(screen.getByRole("button", { name: /保存并结转/ }));
     expect(onSave).not.toHaveBeenCalled();
