@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  AlertTriangle,
   Banknote,
   BarChart3,
   BellRing,
@@ -338,6 +339,7 @@ export default function Home() {
             product={selectedProduct}
             products={activeProducts}
             materials={ledger.materials}
+            sales={ledger.sales}
             summary={summary}
             period={selectedPeriod}
             onPeriodChange={setSelectedPeriod}
@@ -428,18 +430,37 @@ export default function Home() {
   );
 }
 
+type DashboardAction = "products" | "business" | "record";
+type DashboardIssue = { id: string; title: string; detail: string; impact: string; tone: "warning" | "loss" | "cash"; action: DashboardAction };
+
+export function getDashboardIssues({ missingCostProductCount, unpricedProductCount, cashBalance, contributions }: { missingCostProductCount: number; unpricedProductCount: number; cashBalance: number; contributions: ReturnType<typeof getProductContributionData> }) {
+  const items: DashboardIssue[] = [];
+  const lossProduct = contributions.find((item) => item.contribution < -0.005);
+  const lowContributionProduct = contributions.find((item) => item.revenue > 0 && item.contribution >= 0 && item.contribution / item.revenue < 0.1);
+  if (lossProduct) items.push({ id: `loss-${lossProduct.productId}`, title: `${lossProduct.name} 已出现直接亏损`, detail: `销售收入 ${formatCurrency(lossProduct.revenue)}，已结转直接成本 ${formatCurrency(lossProduct.directCost)}。`, impact: `当前直接贡献 ${formatCurrency(lossProduct.contribution)}，建议检查售价或成本。`, tone: "loss", action: "products" });
+  if (lowContributionProduct) items.push({ id: `margin-${lowContributionProduct.productId}`, title: `${lowContributionProduct.name} 直接贡献偏低`, detail: `已结转直接贡献率 ${(lowContributionProduct.contribution / lowContributionProduct.revenue * 100).toFixed(1)}%。`, impact: "房租、人工等分摊尚未计入该比例，完整利润可能更低。", tone: "warning", action: "products" });
+  if (missingCostProductCount > 0) items.push({ id: "missing-cost", title: `${missingCostProductCount} 个商品待补成本`, detail: "未补成本的商品无法得出可信利润。", impact: "先补齐直接成本，再判断售价是否合理。", tone: "warning", action: "products" });
+  if (unpricedProductCount > 0) items.push({ id: "unpriced", title: `${unpricedProductCount} 个商品未定价`, detail: "未定价商品不能进入销售结转。", impact: "设置售价后才可生成收入和利润。", tone: "warning", action: "products" });
+  if (cashBalance < 0) items.push({ id: "cash-negative", title: "现金结余为负", detail: "本期实际付款超过实际收款。", impact: "请先核对现金流水，再决定是否补充资金。", tone: "cash", action: "business" });
+  return items.slice(0, 3);
+}
+
+export function getDashboardInsights({ issues, summary, readiness }: { issues: DashboardIssue[]; summary: ReturnType<typeof summarizeLedger>; readiness: Readiness }) {
+  if (issues.length) return issues.map((issue) => ({ id: issue.id, title: issue.title, text: `${issue.detail} ${issue.impact}`, action: issue.action })).slice(0, 3);
+  if (!summary.profitReady) return [{ id: "ready", title: readiness.title, text: readiness.description, action: "record" as const }];
+  return [{ id: "stable", title: "本期经营数据已结转", text: `已按 ${summary.salesCount} 笔销售计算经营结果；继续记录销售和退款，趋势会更可靠。`, action: "business" as const }];
+}
+
+/** 保留给既有首页与组件测试的轻量提醒契约；驾驶舱会使用更完整的 getDashboardIssues。 */
 export function getHomeAttentionItems({ missingCostProductCount, unpricedProductCount, cashBalance }: { missingCostProductCount: number; unpricedProductCount: number; cashBalance: number }) {
-  const items: { title: string; detail: string; tone: "warning" | "cash"; action: "products" | "business" }[] = [];
-  if (missingCostProductCount > 0) items.push({ title: `${missingCostProductCount} 个商品待补成本`, detail: "未补成本的商品无法得出可信利润。", tone: "warning", action: "products" });
-  if (unpricedProductCount > 0) items.push({ title: `${unpricedProductCount} 个商品未定价`, detail: "先设置售价，才能记录销售和结转利润。", tone: "warning", action: "products" });
-  if (cashBalance < 0) items.push({ title: "现金结余为负", detail: "请查看本月现金流出，确认是否需要补充资金。", tone: "cash", action: "business" });
-  return items.slice(0, 2);
+  return getDashboardIssues({ missingCostProductCount, unpricedProductCount, cashBalance, contributions: [] }).map(({ title, detail, tone, action }) => ({ title, detail, tone, action: action === "record" ? "business" : action })).slice(0, 2);
 }
 
 function HomeView({
   product,
   products,
   materials,
+  sales,
   summary,
   period,
   onPeriodChange,
@@ -457,6 +478,7 @@ function HomeView({
   product: LedgerProduct;
   products: LedgerProduct[];
   materials: Material[];
+  sales: SalesRecord[];
   summary: ReturnType<typeof summarizeLedger>;
   period: string;
   onPeriodChange: (period: string) => void;
@@ -479,7 +501,17 @@ function HomeView({
   const resultCost = Math.max(summary.salesRevenue - operatingResult, 0);
   const missingCostProductCount = products.filter((item) => item.direct <= 0 && item.bom.length === 0).length;
   const unpricedProductCount = products.filter((item) => item.price <= 0).length;
-  const attentionItems = getHomeAttentionItems({ missingCostProductCount, unpricedProductCount, cashBalance: summary.cashBalance });
+  const contributions = getProductContributionData(products, sales, period);
+  const dashboardIssues = getDashboardIssues({ missingCostProductCount, unpricedProductCount, cashBalance: summary.cashBalance, contributions });
+  const dashboardInsights = getDashboardInsights({ issues: dashboardIssues, summary, readiness });
+  const topContributions = contributions.slice(0, 5);
+  const maxContributionRevenue = Math.max(...topContributions.map((item) => Math.abs(item.revenue)), 1);
+  const grossMargin = summary.salesRevenue > 0 ? summary.grossProfit / summary.salesRevenue * 100 : null;
+  const performDashboardAction = (action: DashboardAction) => {
+    if (action === "products") onProducts();
+    else if (action === "business") onBusiness();
+    else onPrimaryAction();
+  };
   const unitCost = Math.max(fullCost, operatingCost, product.direct, 0);
   const unitProfit = product.price > 0 ? product.price - unitCost : null;
   const unitMargin = product.price > 0 ? unitProfit! / product.price * 100 : null;
@@ -487,7 +519,6 @@ function HomeView({
   const purchaseAmount = purchaseTotals.reduce((total, [, amount]) => total + amount, 0);
   const linkedMaterialIds = new Set(products.flatMap((item) => item.bom.map((part) => part.materialId)));
   const unlinkedMaterialCount = materials.filter((material) => !linkedMaterialIds.has(material.id)).length;
-  const hasTrendData = summary.dailySeries.some((item) => item.income > 0 || item.expenses > 0);
   const primaryIcon = readiness.stage === "record" ? <ReceiptText size={19} /> : readiness.stage === "product" ? <Plus size={19} /> : readiness.stage === "cost" ? <PackagePlus size={19} /> : readiness.stage === "pricing" ? <Sparkles size={19} /> : readiness.stage === "sale" ? <ShoppingBag size={19} /> : <BarChart3 size={19} />;
   return (
     <div className="page-content home-content">
@@ -505,17 +536,11 @@ function HomeView({
         <div className="ledger-card-foot"><span>现金结余 <b>{formatCurrency(summary.cashBalance)}</b></span><button onClick={onBusiness}>查看经营 <ArrowRight size={16} /></button></div>
       </section>
 
-      <section className="readiness-card" aria-label="经营账下一步">
-        <div className="readiness-copy"><span className="eyebrow">现在最该做</span><h2>{readiness.title}</h2><p>{readiness.description}</p></div>
-        <button className="primary-action readiness-action" onClick={onPrimaryAction}>{primaryIcon}{readiness.actionLabel}<ArrowRight size={16} /></button>
-      </section>
+      <section className="dashboard-status-row" aria-label="经营状态与现金情况"><article className={hasSalesResult ? operatingResult < 0 ? "loss" : "healthy" : "pending"}><span>经营状态</span><b>{!hasSalesResult ? "待销售结转" : operatingResult < 0 ? "本期亏损" : operatingResult > 0 ? "本期盈利" : "本期持平"}</b><small>{hasSalesResult && grossMargin !== null ? `毛利率 ${grossMargin.toFixed(1)}%` : "完成销售后可判断利润"}</small></article><article className={summary.cashBalance < 0 ? "loss" : "cash"}><span>现金情况</span><b>{formatCurrency(summary.cashBalance)}</b><small>{summary.cashBalance < 0 ? "本期现金偏紧" : "本期实际现金结余"}</small></article></section>
 
-      {attentionItems.length > 0 && <section className="home-attention-card" aria-label="需要关注"><div className="section-heading compact"><div><span className="eyebrow">需要关注</span><h2>先处理这 {attentionItems.length} 件事</h2></div></div><div className="home-attention-list">{attentionItems.map((item) => <button className={`home-attention-row ${item.tone}`} key={item.title} onClick={item.action === "products" ? onProducts : onBusiness}><Info size={17} /><span><b>{item.title}</b><small>{item.detail}</small></span><ChevronRight size={16} /></button>)}</div></section>}
+      <section className="overview-chart-card dashboard-trend-card" aria-label="选定月份现金收付概览"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>现金收付</h2></div><span className="chart-summary-value">{formatCurrency(summary.cashBalance)} <small>现金结余</small></span></div><MiniTrendChart series={summary.dailySeries} /><p className="dashboard-chart-note">这里显示实际收款与付款；销售结转后的利润请在“经营”中查看。</p></section>
 
-      {hasTrendData && <section className="overview-chart-card" aria-label="选定月份现金收付概览">
-        <div className="chart-heading"><div><span className="eyebrow">现金流</span><h2>现金收付</h2></div><span className="chart-summary-value">{formatCurrency(summary.cashBalance)} <small>现金结余</small></span></div>
-        <MiniTrendChart series={summary.dailySeries} />
-      </section>}
+      <section className="dashboard-products-card" aria-label="商品赚钱能力"><div className="section-heading compact"><div><span className="eyebrow">商品赚钱能力</span><h2>本期销售贡献</h2></div><button onClick={onProducts}>查看商品 <ChevronRight size={14} /></button></div>{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献</span></div><div className="dashboard-product-list">{topContributions.map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{formatCurrency(item.contribution)}<i>{risk ? "需关注" : `${rate.toFixed(1)}%`}</i></small></button>; })}</div><p className="dashboard-data-note">直接贡献使用销售时冻结的直接成本；房租、人工等分摊请在经营成本分析中查看。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>还没有已结转的商品销售</b><small>记录第一笔销售后，这里会按真实销售快照展示商品贡献。</small><button onClick={onPrimaryAction}>记录销售 <ArrowRight size={14} /></button></div>}</section>
 
       {hasProduct && <section className="unit-economics-card" aria-label={`${product.name}单件成本与利润`}>
         <div className="section-heading compact"><div><span className="eyebrow">商品单件账</span><h2>{product.name}</h2></div><button onClick={onProducts}>管理商品 <ChevronRight size={14} /></button></div>
@@ -523,6 +548,10 @@ function HomeView({
         <div className="unit-economics-note">{unitProfit === null ? "先设置售价，才能比较每件商品的成本和利润。" : unitProfit < 0 ? `每卖 1 件预计亏损 ${formatCurrency(Math.abs(unitProfit))}，建议调整售价或成本。` : `预计利润率 ${unitMargin?.toFixed(1)}%，成本包含直接、经营和资金口径。`}</div>
         <details className="cost-breakdown"><summary>查看单件成本构成</summary><CostCompositionChart product={product} operatingCost={operatingCost} fullCost={fullCost} /></details>
       </section>}
+
+      {dashboardIssues.length > 0 && <section className="dashboard-issues-card" aria-label="经营异常"><div className="section-heading compact"><div><span className="eyebrow">经营异常</span><h2>{dashboardIssues.length} 个问题待处理</h2></div></div><div className="dashboard-issue-list">{dashboardIssues.map((issue) => <button className={issue.tone} key={issue.id} onClick={() => performDashboardAction(issue.action)}><AlertTriangle size={17} /><span><b>{issue.title}</b><small>{issue.detail}</small><em>{issue.impact}</em></span><ChevronRight size={16} /></button>)}</div></section>}
+
+      <section className="dashboard-insights-card" aria-label="今天值得关注"><div className="section-heading compact"><div><span className="eyebrow">今天值得关注</span><h2>下一步怎么做</h2></div><Sparkles size={18} /></div><div className="dashboard-insight-list">{dashboardInsights.map((insight) => <button key={insight.id} onClick={() => performDashboardAction(insight.action)}><span><b>{insight.title}</b><small>{insight.text}</small></span><ArrowRight size={16} /></button>)}</div><div className="readiness-inline"><span>{readiness.title}</span><button className="primary-action" onClick={onPrimaryAction}>{primaryIcon}{readiness.actionLabel}</button></div></section>
 
       {(purchaseAmount > 0 || unlinkedMaterialCount > 0 || (!materials.length && readiness.stage === "cost")) && <section className="material-pulse-card" aria-label="材料采购提示">
         {purchaseAmount > 0 ? <><span className="material-pulse-icon"><ReceiptText size={17} /></span><div><span className="eyebrow">材料采购</span><b>本月采购 {formatCurrency(purchaseAmount)}</b><small>{purchaseTotals.length} 类采购已计入现金流，不展示材料单价明细。</small></div><button onClick={onBusiness}>查看 <ChevronRight size={15} /></button></> : unlinkedMaterialCount > 0 ? <><span className="material-pulse-icon"><PackagePlus size={17} /></span><div><span className="eyebrow">材料提醒</span><b>{unlinkedMaterialCount} 项材料尚未用于商品成本</b><small>补齐关联后，单件成本会更可信。</small></div><button onClick={onProducts}>补成本 <ChevronRight size={15} /></button></> : <><span className="material-pulse-icon"><PackagePlus size={17} /></span><div><span className="eyebrow">材料</span><b>还没有材料采购记录</b><small>添加材料后可用于商品成本核算。</small></div><button onClick={onAddMaterial}>添加 <Plus size={15} /></button></>}

@@ -9,7 +9,7 @@ import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
-import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostMixData, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProfitBridgeData, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProfitBridgeData, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
 
 class TestResizeObserver {
@@ -56,6 +56,25 @@ describe("Home conclusion attention priority", () => {
   it("shows cash pressure when product setup does not block accounting", () => {
     const items = getHomeAttentionItems({ missingCostProductCount: 0, unpricedProductCount: 0, cashBalance: -1 });
     expect(items).toEqual([expect.objectContaining({ tone: "cash", action: "business" })]);
+  });
+});
+
+describe("Dashboard issue priorities", () => {
+  it("prioritizes a sales-snapshot loss, then setup blockers and cash pressure without inventing other issues", () => {
+    const issues = getDashboardIssues({
+      missingCostProductCount: 1,
+      unpricedProductCount: 1,
+      cashBalance: -20,
+      contributions: [{ productId: 7, name: "亏损商品", revenue: 80, directCost: 92, contribution: -12, quantity: 4 }],
+    });
+    expect(issues).toHaveLength(3);
+    expect(issues[0]).toMatchObject({ tone: "loss", action: "products" });
+    expect(issues[0]?.title).toContain("亏损商品");
+    expect(issues.map((issue) => issue.id)).not.toContain("cash-negative");
+  });
+
+  it("only reports cash pressure when there is no higher-priority product issue", () => {
+    expect(getDashboardIssues({ missingCostProductCount: 0, unpricedProductCount: 0, cashBalance: -1, contributions: [] })).toEqual([expect.objectContaining({ id: "cash-negative", tone: "cash", action: "business" })]);
   });
 });
 
