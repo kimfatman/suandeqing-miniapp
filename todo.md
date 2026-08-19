@@ -317,5 +317,5 @@
 - [x] 在GitHub审查分支核验截图图片文件、文件数量和索引提交，并记录Pull Request状态。
 - [x] 将20张真实验收截图按可读性规格分组为九宫格长图。
 - [x] 核验拼图中文字清晰度并交付可下载图片文件。
-- [ ] 将三张总览拼图以 00-overview-1.png、00-overview-2.png、00-overview-3.png 保存至 docs/ui-screenshots/。
-- [ ] 更新截图索引并将总览拼图推送至GitHub审查分支，核验远端文件路径。
+- [x] 将三张总览拼图以 00-overview-1.png、00-overview-2.png、00-overview-3.png 保存至 docs/ui-screenshots/。
+- [x] 更新截图索引并将总览拼图推送至GitHub审查分支，核验远端文件路径。
