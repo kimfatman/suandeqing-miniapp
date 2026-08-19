@@ -1,0 +1,92 @@
+/*
+ * P0 Design System migration layer.
+ * This file is intentionally imported after index.css so the shared component
+ * contract wins over legacy page-specific sizing while brand colours remain intact.
+ */
+
+.page-content {
+  padding: var(--space-6) var(--space-5);
+}
+
+.icon-button {
+  width: var(--tap-target);
+  height: var(--tap-target);
+  border-radius: var(--radius-5);
+}
+
+.icon-button > svg {
+  width: var(--icon-lg);
+  height: var(--icon-lg);
+}
+
+.round-plus {
+  width: var(--button-md-height);
+  height: var(--button-md-height);
+  border-radius: var(--radius-4);
+}
+
+.primary-action {
+  min-height: var(--button-lg-height);
+  padding-inline: var(--space-5);
+  gap: var(--space-2);
+  border-radius: var(--radius-4);
+  font-size: var(--font-card-title);
+  white-space: nowrap;
+}
+
+.secondary-action {
+  min-height: var(--button-md-height);
+  padding-inline: var(--space-4);
+  gap: var(--space-2);
+  border-radius: var(--radius-3);
+  font-size: var(--font-body);
+  white-space: nowrap;
+}
+
+.secondary-card-action, .section-heading > button, .material-pulse-card > button {
+  min-height: var(--button-sm-height);
+  gap: var(--space-2);
+  border-radius: var(--radius-2);
+}
+
+.range-chip, .filter-chip {
+  min-height: var(--button-md-height);
+  border-radius: var(--radius-3);
+}
+
+.hero-ledger-card, .product-detail-card {
+  border-radius: var(--radius-ledger);
+}
+
+.metric-card, .attention-list, .overview-chart-card, .cost-composition-card, .dashboard-products-card, .dashboard-issues-card, .dashboard-insights-card {
+  border-radius: var(--radius-ledger-reverse);
+}
+
+.quick-action {
+  border-radius: var(--radius-ledger);
+  padding: var(--space-3);
+}
+
+.section-heading {
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+}
+
+.section-heading.compact {
+  margin-top: var(--space-6);
+}
+
+.industry-switch-card, .custom-category-row, .product-row, .material-pulse-card {
+  border-radius: var(--radius-5);
+}
+
+@media (max-width: 520px) {
+  .mobile-header {
+    height: calc(var(--header-height) - var(--space-1) - var(--space-1));
+    padding-inline: var(--space-4);
+  }
+
+  .page-content {
+    padding-inline: var(--space-4);
+  }
+}

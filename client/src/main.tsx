@@ -5,6 +5,7 @@ import superjson from "superjson";
 import App from "./App";
 import { trpc } from "./lib/trpc";
 import "./index.css";
+import "./design-system.css";
 
 const queryClient = new QueryClient();
 const trpcClient = trpc.createClient({ links: [httpBatchLink({ url: "/api/trpc", transformer: superjson })] });
