@@ -142,12 +142,13 @@ describe("HomeView decision dashboard", () => {
     expect(screen.getByLabelText("本月经营结果")).toBeTruthy();
     expect(screen.getByText("本月经营利润")).toBeTruthy();
     expect(screen.getByText("销售收入")).toBeTruthy();
-    expect(screen.getByText("现金情况")).toBeTruthy();
-    expect(screen.getByText("现金仅反映实际收付款，含本金还款。")).toBeTruthy();
     expect(screen.getByText("经营健康度")).toBeTruthy();
     expect(screen.getByText("本月收入目标")).toBeTruthy();
-    expect(screen.getByText("最近7天利润趋势")).toBeTruthy();
-    expect(screen.getByText("收入与成本对比")).toBeTruthy();
+    expect(screen.getByText("现金结余")).toBeTruthy();
+    expect(screen.getByLabelText("近7日利润趋势")).toBeTruthy();
+    expect(screen.getByText("看收入、成本与现金明细")).toBeTruthy();
+    expect(screen.queryByText("现金情况")).toBeNull();
+    expect(screen.queryByText("收入与成本对比")).toBeNull();
     expect(screen.getByLabelText("库存健康")).toBeTruthy();
     expect(screen.getByText("还没有启用库存的商品")).toBeTruthy();
     expect(screen.getByText("快速操作")).toBeTruthy();
