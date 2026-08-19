@@ -862,6 +862,17 @@ export const getCashTrendSeries = (ledger: LedgerData, selectedPeriod: string, r
   return Array.from(buckets.entries()).map(([date, values]) => ({ date, label: `${date.slice(5, 7)}/${date.slice(8, 10)}`, income: money(values.income), expenses: money(values.expenses) }));
 };
 
+/**
+ * 选定日期的现金明细与趋势图使用同一份已保存流水。这里不读取销售利润、成本快照或预计分摊，
+ * 本金还款和销售退款均保留为实际付款，便于商家将图表回溯到逐笔现金事实。
+ */
+export const getCashDayDetail = (ledger: LedgerData, date: string) => {
+  const records = ledger.records.filter((record) => record.date === date);
+  const income = money(records.filter((record) => record.type === "income").reduce((total, record) => total + (Number.isFinite(record.amount) ? record.amount : 0), 0));
+  const expenses = money(records.filter((record) => record.type === "expense").reduce((total, record) => total + (Number.isFinite(record.amount) ? record.amount : 0), 0));
+  return { date, records, income, expenses, net: money(income - expenses) };
+};
+
 export const summarizeLedger = (ledger: LedgerData, selectedPeriod = ledger.costs.allocationPeriod ?? getBusinessPeriod()): LedgerSummary => {
   const categoryTotals: Record<string, number> = {};
   const byDate: Record<string, { income: number; expenses: number }> = {};
