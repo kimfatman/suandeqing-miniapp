@@ -173,6 +173,10 @@ describe("HomeView decision dashboard", () => {
     expect(screen.getAllByText("商品成本").length).toBeGreaterThan(0);
     expect(screen.getAllByText("经营费用").length).toBeGreaterThan(0);
     expect(screen.getAllByText("经营利润").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("销售收入减商品成本减经营费用")).toBeTruthy();
+    expect(screen.getByRole("img", { name: /经营利润率 \d+\.\d+%/ })).toBeTruthy();
+    expect(screen.getByText("收入")).toBeTruthy();
+    expect(screen.getAllByText("利润").length).toBeGreaterThan(0);
     expect(screen.getByLabelText("本期经营概览")).toBeTruthy();
     expect(screen.getByLabelText("商品表现")).toBeTruthy();
     expect(screen.queryByLabelText("近7日利润趋势")).toBeNull();
@@ -183,6 +187,15 @@ describe("HomeView decision dashboard", () => {
     expect(onSale).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: /记收支/ }));
     expect(onRecord).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the formula structure but marks the independent profit ring as pending before a sales snapshot exists", () => {
+    const ledger = { ...seedLedger(), sales: [], records: [] };
+    const summary = summarizeLedger(ledger, "2026-08");
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onSale={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "sale", label: "等待第一笔销售", title: "先记录销售", description: "销售结转后才能计算经营利润。", actionLabel: "记录销售" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
+    expect(screen.getByLabelText("销售收入减商品成本减经营费用")).toBeTruthy();
+    expect(screen.getByLabelText("经营利润率待结转")).toBeTruthy();
+    expect(screen.getAllByText("待结转").length).toBeGreaterThan(0);
   });
 
   it("switches the homepage product contribution ranking without changing the monthly issue calculation", () => {

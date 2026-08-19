@@ -575,6 +575,7 @@ export function HomeView({
   const topContributions = contributions.slice(0, 5);
   const maxContributionRevenue = Math.max(...topContributions.map((item) => Math.abs(item.revenue)), 1);
   const grossMargin = summary.salesRevenue > 0 ? summary.grossProfit / summary.salesRevenue * 100 : null;
+  const profitRingProgress = operatingMargin === null ? 0 : Math.min(Math.max(operatingMargin, 0), 100);
   const primaryInsight = dashboardInsights[0];
   const performDashboardAction = (action: DashboardAction) => {
     if (action === "products") onProducts();
@@ -589,12 +590,28 @@ export function HomeView({
         <PeriodPicker period={period} onChange={onPeriodChange} />
       </section>
 
-      <section className={`dashboard-result-card ${hasSalesResult ? operatingResult < 0 ? "loss" : "ready" : "pending"}`} aria-label="本月经营结果">
-        <div className="dashboard-result-top"><span>今天经营得怎么样？</span><span className={hasSalesResult ? "result-status" : "result-status pending"}>{hasSalesResult ? "已结转" : "待结转"}</span></div>
-        <div className="dashboard-result-amount"><div><small>本期经营利润</small><strong>{hasSalesResult ? formatCurrency(operatingResult) : "—"}</strong></div><span className="dashboard-result-rate">{operatingMargin === null ? "待结转" : `${operatingMargin.toFixed(1)}%`}<small>利润率</small></span></div>
+      <section className={`dashboard-formula-card ${hasSalesResult ? operatingResult < 0 ? "loss" : "ready" : "pending"}`} aria-label="本月经营结果">
+        <div className="dashboard-formula-heading"><span>今天经营得怎么样？</span><span className={hasSalesResult ? "result-status" : "result-status pending"}>{hasSalesResult ? "已结转" : "待结转"}</span></div>
+        <div className="dashboard-formula-layout">
+          <div className="dashboard-formula-inputs" aria-label="销售收入减商品成本减经营费用">
+            <span className="formula-metric revenue"><small>销售收入</small><i><TrendingUp size={18} /></i><b>{formatCurrency(summary.salesRevenue)}</b></span>
+            <em>−</em>
+            <span className="formula-metric cost"><small>商品成本</small><i><ShoppingBag size={18} /></i><b>{formatCurrency(summary.costOfSales)}</b></span>
+            <em>−</em>
+            <span className="formula-metric expense"><small>经营费用</small><i><WalletCards size={18} /></i><b>{formatCurrency(operatingExpenses)}</b></span>
+          </div>
+          <em className="formula-equals">=</em>
+          <div className="dashboard-profit-result">
+            <small>本期经营利润</small>
+            <strong>{hasSalesResult ? formatCurrency(operatingResult) : "—"}</strong>
+            <span>利润率 {operatingMargin === null ? "待结转" : `${operatingMargin.toFixed(1)}%`}</span>
+            <div className="dashboard-profit-ring" role="img" aria-label={operatingMargin === null ? "经营利润率待结转" : `经营利润率 ${operatingMargin.toFixed(1)}%`} style={{ background: `conic-gradient(#ffffff 0 ${profitRingProgress}%, rgb(255 255 255 / .24) ${profitRingProgress}% 100%)` }}>
+              <div><b>{operatingMargin === null ? "—" : `${operatingMargin.toFixed(1)}%`}</b><small>利润率</small></div>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-formula-caption"><span>收入</span><i>−</i><span>成本</span><i>−</i><span>费用</span><i>=</i><b>利润</b></div>
         <p>{hasSalesResult ? `已按 ${summary.salesCount} 笔销售快照结转；现金结余不等于利润。` : "记录商品销售后，系统才会按当时成本快照计算利润。"}</p>
-        {hasSalesResult ? <div className="dashboard-result-formula four"><span><small>销售收入</small><b>{formatCurrency(summary.salesRevenue)}</b></span><i>−</i><span><small>商品成本</small><b>{formatCurrency(summary.costOfSales)}</b></span><i>−</i><span><small>经营费用</small><b>{formatCurrency(operatingExpenses)}</b></span><i>=</i><span className="result"><small>经营利润</small><b>{formatCurrency(operatingResult)}</b></span></div> : <div className="dashboard-result-formula"><span><small>已收现金</small><b>{formatCurrency(summary.income)}</b></span><i>−</i><span><small>已付现金</small><b>{formatCurrency(summary.cashOutflow)}</b></span><i>=</i><span className="result"><small>现金结余</small><b>{formatCurrency(summary.cashBalance)}</b></span></div>}
-        <div className="dashboard-result-foot"><span>{hasSalesResult && grossMargin !== null ? `毛利率 ${grossMargin.toFixed(1)}%` : "现金结余会在经营页单独展示"}</span><button onClick={onBusiness}>查看经营分析 <ArrowRight size={15} /></button></div>
       </section>
 
       <section className="home-overview-card" aria-label="本期经营概览">

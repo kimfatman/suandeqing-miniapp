@@ -2215,6 +2215,51 @@
 .ui-contract .product-row + .product-row, .ui-contract .cash-record-row + .cash-record-row, .ui-contract .message-action + .message-action, .ui-contract .report-list > article + article, .ui-contract .allocation-product-row + .allocation-product-row, .ui-contract .bom-row + .bom-row, .ui-contract .custom-category-row + .custom-category-row { border-color: #edf1f5; }
 .ui-contract [data-slot="dialog-content"] { border-color: #e1e9f1; border-radius: var(--radius-6); box-shadow: var(--ui-shadow-lg); }
 .ui-contract .danger-action { min-height: var(--button-lg-height); border-radius: var(--radius-4); }
+
+/* 首页经营结论：严格采用“输入项计算 → 独立结果卡”的图二层级，避免整块蓝色趋势卡。 */
+.dashboard-formula-card {
+  overflow: hidden;
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  color: var(--ui-text);
+  border: 1px solid #dce9f6;
+  border-radius: var(--radius-6);
+  background: linear-gradient(120deg, #e9f4ff 0%, #f8fbff 64%, #eaf5ff 100%);
+  box-shadow: 0 10px 25px rgb(8 127 245 / .08);
+}
+.dashboard-formula-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.dashboard-formula-heading > span:first-child { color: #19335d; font-size: var(--font-card-title); font-weight: 800; }
+.dashboard-formula-card .result-status { min-height: 25px; padding-inline: 9px; }
+.dashboard-formula-card .result-status.pending { color: #a16d10; border: 1px solid #f3d598; background: #fff8e8; }
+.dashboard-formula-layout { display: grid; grid-template-columns: minmax(0, 2.05fr) 18px minmax(116px, 1.05fr); align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+.dashboard-formula-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr) 12px minmax(0, 1fr); align-items: center; gap: var(--space-1); }
+.formula-metric { min-width: 0; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-2) 4px; text-align: center; border: 1px solid rgb(221 231 241 / .94); border-radius: var(--radius-4); background: rgb(255 255 255 / .94); box-shadow: 0 4px 11px rgb(11 24 54 / .04); }
+.formula-metric small { color: #44546a; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.formula-metric i { width: 28px; height: 28px; display: grid; place-items: center; margin-block: 10px; border-radius: var(--radius-3); font-style: normal; }
+.formula-metric.revenue i { color: #087ff5; background: #eaf5ff; }.formula-metric.cost i { color: #168968; background: #eaf9f3; }.formula-metric.expense i { color: #c77b16; background: #fff4e5; }
+.formula-metric b { width: 100%; overflow: hidden; color: #14233d; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: clamp(12px, 3.5vw, 16px); letter-spacing: -.05em; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-formula-inputs > em, .formula-equals { color: #173c83; font-family: "DM Sans", sans-serif; font-size: 21px; font-style: normal; font-weight: 800; text-align: center; }
+.formula-equals { align-self: center; font-size: 26px; }
+.dashboard-profit-result { position: relative; min-height: 176px; overflow: hidden; padding: var(--space-3); color: #fff; border-radius: var(--radius-5); background: linear-gradient(145deg, #1486f9, #0874e8); box-shadow: 0 11px 20px rgb(8 127 245 / .2); }
+.dashboard-profit-result > small { display: block; color: rgb(255 255 255 / .84); font-size: 11px; font-weight: 700; }
+.dashboard-profit-result > strong { display: block; overflow: hidden; margin-top: var(--space-2); color: #fff; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: clamp(22px, 7vw, 31px); line-height: 1; letter-spacing: -.07em; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-profit-result > span { display: block; margin-top: 6px; color: rgb(255 255 255 / .82); font-size: 12px; font-weight: 700; }
+.dashboard-profit-ring { position: absolute; right: 12px; bottom: 12px; width: 72px; height: 72px; display: grid; place-items: center; border-radius: 50%; }
+.dashboard-profit-ring::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: #137fee; }
+.dashboard-profit-ring > div { position: relative; z-index: 1; text-align: center; }.dashboard-profit-ring b { display: block; color: #fff; font-family: "DM Sans", sans-serif; font-size: 14px; letter-spacing: -.05em; }.dashboard-profit-ring small { display: block; margin-top: 2px; color: rgb(255 255 255 / .72); font-size: 8px; }
+.dashboard-formula-caption { display: flex; align-items: center; justify-content: center; gap: var(--space-3); margin-top: var(--space-3); padding-top: var(--space-3); color: #285091; border-top: 1px solid rgb(49 115 206 / .18); font-size: 13px; font-weight: 800; }
+.dashboard-formula-caption i { font-style: normal; }.dashboard-formula-caption b { color: #087ff5; }
+.dashboard-formula-card > p { margin-top: var(--space-2); color: #667992; font-size: 10px; line-height: 1.45; text-align: center; }
+.dashboard-formula-card.loss { border-color: #f1c8c3; background: linear-gradient(120deg, #fff4f3, #fffafa); }.dashboard-formula-card.loss .dashboard-profit-result { background: linear-gradient(145deg, #d55e56, #b94c48); }.dashboard-formula-card.loss .dashboard-profit-ring::before { background: #ca554f; }
+.dashboard-formula-card.pending .dashboard-profit-result { background: linear-gradient(145deg, #6e8ab0, #5d789e); }.dashboard-formula-card.pending .dashboard-profit-ring::before { background: #6682a8; }
+@media (max-width: 390px) {
+  .dashboard-formula-card { padding: var(--space-3); }
+  .dashboard-formula-layout { grid-template-columns: minmax(0, 2.08fr) 14px minmax(106px, 1fr); gap: 4px; }
+  .dashboard-formula-inputs { grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr) 8px minmax(0, 1fr); gap: 2px; }
+  .formula-metric { min-height: 126px; padding-inline: 2px; }.formula-metric small { font-size: 10px; }.formula-metric i { margin-block: 8px; }.formula-metric b { font-size: 12px; }
+  .dashboard-profit-result { min-height: 160px; padding: 10px; }.dashboard-profit-result > strong { font-size: 23px; }.dashboard-profit-ring { right: 9px; bottom: 9px; width: 64px; height: 64px; }.dashboard-profit-ring::before { inset: 7px; }
+  .dashboard-formula-caption { gap: var(--space-2); font-size: 12px; }
+}
 .dashboard-status-item.goal { border-color: #cfe4fb; background: #f8fbff; }
 .dashboard-status-item.goal > b { color: #087ff5; }
 .dashboard-status-item.health.healthy > b { color: #168968; }
