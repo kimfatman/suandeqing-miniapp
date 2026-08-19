@@ -2060,6 +2060,161 @@
   .home-quick-actions > div:last-child > button { grid-template-columns: 33px minmax(0, 1fr) 13px; padding: var(--space-2); }
   .home-quick-actions .quick-action-icon { width: 32px; height: 32px; }
 }
+
+/* 全站组件合同：页面、表单、抽屉、列表和数据状态共享相同的表面、边框、触控与反馈语言。 */
+:root {
+  --ui-surface: #ffffff;
+  --ui-surface-muted: #f6f9fc;
+  --ui-line: #e1e9f1;
+  --ui-text: #17233c;
+  --ui-text-muted: #718094;
+  --ui-success: #168968;
+  --ui-warning: #c48819;
+  --ui-danger: #c64d43;
+  --ui-shadow-sm: 0 5px 18px rgb(11 24 54 / .035);
+  --ui-shadow-lg: 0 18px 38px rgb(11 24 54 / .12);
+  --chart-income: #087ff5;
+  --chart-cost: #20b486;
+  --chart-warning: #f2a93b;
+  --chart-risk: #e55b63;
+  --chart-grid: #e8eef5;
+}
+
+.page-content :where(button, input, select, textarea) { -webkit-tap-highlight-color: transparent; }
+.page-content :where(input, select, textarea) { color: var(--ui-text); border-color: var(--ui-line); background: #fff; }
+.page-content :where(input, select, textarea)::placeholder { color: #9aa7b5; }
+
+/* 高使用率页内容器、分段控件、空状态与状态标签 */
+.chart-card, .overview-chart-card, .analytics-trend-card, .cost-analysis-card, .cost-simulator-card, .cost-structure-card, .cost-anomaly-card, .profit-bridge-card, .inventory-sheet, .message-detail, .message-list, .profile-section, .data-management-sheet {
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-ledger-reverse);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.trend-range-switch, .chart-point-tabs, .cost-trend-tabs, .record-type-switch, .message-filter-row {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid #e2eaf2;
+  border-radius: var(--radius-3);
+  background: #f2f6fa;
+}
+
+.trend-range-switch > button, .chart-point-tabs > button, .cost-trend-tabs > button, .record-type-switch > button, .message-filter-row > button {
+  min-height: var(--button-sm-height);
+  padding-inline: var(--space-3);
+  color: var(--ui-text-muted);
+  border: 0;
+  border-radius: var(--radius-2);
+  background: transparent;
+  font-size: var(--font-caption);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.trend-range-switch > button.selected, .chart-point-tabs > button.selected, .cost-trend-tabs > button.selected, .record-type-switch > button.selected, .message-filter-row > button.active {
+  color: #087ff5;
+  background: #fff;
+  box-shadow: 0 2px 7px rgb(11 24 54 / .08);
+}
+
+.status-pill, .message-level, .result-status, .inventory-health-list em, .dashboard-product-list small.risk {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding-inline: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.message-level.success, .status-pill.enabled, .inventory-health-list em.normal { color: var(--ui-success); border-color: #bfe6d8; background: #effbf6; }
+.message-level.warning, .inventory-health-list em.low, .status-pill.pending { color: var(--ui-warning); border-color: #f4d7a4; background: #fff8e9; }
+.message-level.danger, .inventory-health-list em.excess, .dashboard-product-list small.risk { color: var(--ui-danger); border-color: #f0c7c2; background: #fff3f1; }
+
+.dashboard-empty, .chart-empty, .cost-analysis-empty, .cost-composition-empty, .cost-profit-empty, .cost-trend-empty, .empty-state-card, .empty-product-page, .message-empty, .campaign-empty, .bom-empty, .pricing-cost-empty {
+  min-height: 132px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  color: var(--ui-text-muted);
+  border: 1px dashed #c9d7e5;
+  border-radius: var(--radius-4);
+  background: linear-gradient(135deg, #fafdff, #f4f8fc);
+  text-align: center;
+}
+
+.dashboard-empty > svg, .chart-empty > svg, .cost-analysis-empty > svg, .empty-state-card > svg, .message-empty > svg, .campaign-empty > svg, .bom-empty > svg { color: #087ff5; }
+.dashboard-empty b, .chart-empty b, .cost-analysis-empty b, .empty-state-card b, .message-empty b, .campaign-empty b, .bom-empty b { color: var(--ui-text); font-size: var(--font-body); }
+.dashboard-empty small, .chart-empty small, .cost-analysis-empty small, .empty-state-card small, .message-empty small, .campaign-empty small, .bom-empty small { max-width: 290px; color: var(--ui-text-muted); font-size: var(--font-secondary); line-height: 1.5; }
+
+/* 所有业务抽屉与表单统一为44px以上触控输入、固定底部操作区与清晰风险反馈。 */
+.sheet-backdrop { padding: var(--space-4); background: rgb(11 24 54 / .42); backdrop-filter: blur(3px); }
+.pricing-sheet, .quick-cost-sheet, .record-sheet, .material-sheet, .bom-sheet, .monthly-allocation-sheet, .monthly-report-sheet, .cash-records-sheet, .message-inbox-sheet, .message-detail-sheet, .data-management-sheet, .admin-message-sheet, .industry-change-sheet, .delete-product-sheet, .product-name-sheet, .hidden-cost-sheet {
+  max-height: min(88vh, 760px);
+  overflow: auto;
+  color: var(--ui-text);
+  border: 1px solid rgb(255 255 255 / .9);
+  border-radius: var(--radius-6) var(--radius-6) 0 0;
+  background: #fff;
+  box-shadow: var(--ui-shadow-lg);
+}
+
+.sheet-header, .pricing-sheet .sheet-header { padding-bottom: var(--space-3); border-bottom: 1px solid #edf1f5; }
+.sheet-header h2, .pricing-sheet .sheet-header h2 { color: var(--ui-text); font-size: var(--font-section-title); }
+.sheet-header .eyebrow { color: #718094; }
+.sheet-grabber { background: #c8d3df; }
+.field-block, .record-field-block, .compact-field, .admin-message-field, .onboarding-field, .bom-category-field, .business-date-field { display: grid; gap: var(--space-2); color: #526174; font-size: var(--font-secondary); font-weight: 700; }
+.field-block > :where(input, select, textarea), .record-field-block > :where(input, select, textarea), .compact-field > :where(input, select, textarea), .admin-message-field > :where(input, select, textarea), .onboarding-field > :where(input, select, textarea), .bom-category-field > :where(input, select, textarea), .business-date-field > :where(input, select, textarea) { min-height: var(--button-lg-height); padding-inline: var(--space-3); border: 1px solid #cbd8e5; border-radius: var(--radius-3); font: inherit; }
+.field-block > textarea, .record-field-block > textarea, .admin-message-field > textarea, .onboarding-field > textarea { min-height: 96px; padding-block: var(--space-3); resize: vertical; }
+.money-input, .record-amount, .number-input { min-height: var(--button-lg-height); border: 1px solid #cbd8e5; border-radius: var(--radius-3); background: #fff; }
+.form-error, .field-error { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); color: var(--ui-danger); border: 1px solid #f0c7c2; border-radius: var(--radius-3); background: #fff4f2; font-size: var(--font-secondary); line-height: 1.45; }
+.record-category-hint, .cost-setting-note, .allocation-step-hint, .report-period-note, .pricing-rate-guide, .quick-cost-boundary { padding: var(--space-3); color: #66778a; border: 1px solid #d9e8f7; border-radius: var(--radius-3); background: #f5faff; font-size: var(--font-secondary); line-height: 1.55; }
+.data-confirmation { padding: var(--space-4); color: var(--ui-text); border: 1px solid #f0c7c2; border-radius: var(--radius-4); background: #fff8f7; }
+.data-confirmation b { color: var(--ui-danger); }
+.data-confirmation p { margin-top: var(--space-2); color: #66778a; font-size: var(--font-secondary); line-height: 1.55; }
+
+/* 统一图表容器、图例、指标与提示层；数据颜色固定表达收入、成本、提示与风险。 */
+.chart-card, .overview-chart-card, .analytics-trend-card, .cost-trend-card, .cost-structure-card, .profit-bridge-card, .cash-flow-dynamic-chart, .product-contribution-chart {
+  overflow: hidden;
+  padding: var(--space-4);
+}
+.chart-heading, .analytics-trend-head, .cost-analysis-header, .profit-bridge-heading { min-height: var(--tap-target); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.chart-heading h3, .analytics-trend-head h3, .cost-analysis-header h2, .profit-bridge-heading h3 { color: var(--ui-text); font-size: var(--font-card-title); }
+.chart-heading small, .analytics-trend-head small, .profit-bridge-heading small { display: block; margin-top: 2px; color: var(--ui-text-muted); font-size: var(--font-secondary); line-height: 1.45; }
+.chart-tooltip, .cost-mix-tooltip, .profit-bridge-tooltip { color: var(--ui-text); border: 1px solid #dce6f0; border-radius: var(--radius-3); background: rgb(255 255 255 / .97); box-shadow: 0 10px 24px rgb(11 24 54 / .12); }
+.chart-tooltip b, .cost-mix-tooltip b, .profit-bridge-tooltip b { color: var(--ui-text); }
+.mini-chart-legend, .chart-legend, .analytics-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--ui-text-muted); font-size: var(--font-caption); }
+.mini-chart-legend i, .chart-legend i, .analytics-legend i { width: 8px; height: 8px; border-radius: 50%; }
+.income-dot, .legend-income { background: var(--chart-income); }.expense-dot, .legend-cost { background: var(--chart-cost); }.legend-warning { background: var(--chart-warning); }.legend-risk { background: var(--chart-risk); }
+.mini-trend-chart, .cost-trend-graph, .cash-flow-chart, .cost-composition-chart, .product-contribution-chart svg { min-width: 0; }
+.recharts-cartesian-grid line { stroke: var(--chart-grid); }
+.recharts-text, .recharts-cartesian-axis-tick-value { fill: #7e8b9b; font-size: 11px; }
+
+@media (max-width: 520px) {
+  .sheet-backdrop { padding: 0; }
+  .pricing-sheet, .quick-cost-sheet, .record-sheet, .material-sheet, .bom-sheet, .monthly-allocation-sheet, .monthly-report-sheet, .cash-records-sheet, .message-inbox-sheet, .message-detail-sheet, .data-management-sheet, .admin-message-sheet, .industry-change-sheet, .delete-product-sheet, .product-name-sheet, .hidden-cost-sheet { width: 100%; max-height: 91vh; }
+  .chart-card, .overview-chart-card, .analytics-trend-card, .cost-trend-card, .cost-structure-card, .profit-bridge-card, .cash-flow-dynamic-chart, .product-contribution-chart { padding: var(--space-3); }
+  .trend-range-switch, .chart-point-tabs, .cost-trend-tabs, .record-type-switch, .message-filter-row { overflow-x: auto; scrollbar-width: none; }
+  .trend-range-switch::-webkit-scrollbar, .chart-point-tabs::-webkit-scrollbar, .cost-trend-tabs::-webkit-scrollbar, .record-type-switch::-webkit-scrollbar, .message-filter-row::-webkit-scrollbar { display: none; }
+}
+
+.ui-contract .mobile-tabbar, .ui-contract .desktop-rail { border-color: var(--ui-line); background: rgb(255 255 255 / .96); box-shadow: 0 -6px 18px rgb(11 24 54 / .035); }
+.ui-contract .tab-item, .ui-contract .rail-item { min-height: var(--tap-target); border-radius: var(--radius-3); }
+.ui-contract .tab-item.active, .ui-contract .rail-item.active { color: #087ff5; background: #eff7ff; }
+.ui-contract .entry-tab-icon { box-shadow: 0 9px 20px rgb(8 127 245 / .22); }
+.ui-contract .product-list, .ui-contract .cash-record-list, .ui-contract .message-list, .ui-contract .campaign-list, .ui-contract .report-list, .ui-contract .allocation-product-list, .ui-contract .bom-list, .ui-contract .custom-category-list { border-color: var(--ui-line); border-radius: var(--radius-4); background: #fff; box-shadow: var(--ui-shadow-sm); }
+.ui-contract .product-row, .ui-contract .cash-record-row, .ui-contract .message-action, .ui-contract .campaign-list > button, .ui-contract .report-list > article, .ui-contract .allocation-product-row, .ui-contract .bom-row, .ui-contract .custom-category-row { min-height: var(--tap-target); }
+.ui-contract .product-row + .product-row, .ui-contract .cash-record-row + .cash-record-row, .ui-contract .message-action + .message-action, .ui-contract .report-list > article + article, .ui-contract .allocation-product-row + .allocation-product-row, .ui-contract .bom-row + .bom-row, .ui-contract .custom-category-row + .custom-category-row { border-color: #edf1f5; }
+.ui-contract [data-slot="dialog-content"] { border-color: #e1e9f1; border-radius: var(--radius-6); box-shadow: var(--ui-shadow-lg); }
+.ui-contract .danger-action { min-height: var(--button-lg-height); border-radius: var(--radius-4); }
 .dashboard-status-item.goal { border-color: #cfe4fb; background: #f8fbff; }
 .dashboard-status-item.goal > b { color: #087ff5; }
 .dashboard-status-item.health.healthy > b { color: #168968; }
