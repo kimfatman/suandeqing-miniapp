@@ -39,3 +39,7 @@
 截图用于验收**当前交互和显示状态**，不是演示数据说明。金额、流水与趋势仅来自脚本通过现有表单或既有本地账本结构准备的测试账本；预计模拟、销售结转利润和实际现金在画面中保持分层。
 
 需要重新取证时，请运行 `quick_entry_e2e.mjs`、`dynamic_chart_e2e.mjs`，并以本索引中的页面/入口矩阵复核。
+
+## GitHub 提交状态
+
+验收资料已提交到受保护 `main` 分支的 [Pull Request #2](https://github.com/kimfatman/suandeqing-miniapp/pull/2)。GitHub Actions 的 `validate` 已通过测试、类型检查和生产构建；该 PR 等待满足仓库保护规则的审批后合并。
