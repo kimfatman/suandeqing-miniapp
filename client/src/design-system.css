@@ -80,6 +80,143 @@
   border-radius: var(--radius-5);
 }
 
+/* Sheet foundation: material purchase, cost details and sales correction share one form contract. */
+:root {
+  --sheet-padding-x: var(--space-5);
+  --sheet-padding-y: var(--space-3);
+  --sheet-field-height: var(--button-lg-height);
+  --sheet-field-radius: var(--radius-3);
+  --sheet-section-gap: var(--space-4);
+}
+
+.pricing-sheet {
+  padding: var(--sheet-padding-y) var(--sheet-padding-x) calc(var(--space-6) + env(safe-area-inset-bottom));
+  border-radius: var(--radius-6) var(--radius-6) 0 0;
+}
+
+.pricing-sheet .sheet-grabber {
+  width: var(--space-8);
+  height: var(--space-1);
+  margin: var(--space-1) auto var(--space-4);
+}
+
+.pricing-sheet .sheet-header {
+  min-height: var(--tap-target);
+  gap: var(--space-3);
+}
+
+.pricing-sheet .sheet-header h2 {
+  margin-top: var(--space-1);
+  font-size: var(--font-section-title);
+}
+
+.pricing-sheet .field-block,
+.pricing-sheet .business-date-field {
+  margin-top: var(--sheet-section-gap);
+  color: #526174;
+  font-size: var(--font-secondary);
+}
+
+.pricing-sheet .money-input,
+.pricing-sheet .field-block > select,
+.pricing-sheet .business-date-field > input {
+  box-sizing: border-box;
+  min-height: var(--sheet-field-height);
+  border-radius: var(--sheet-field-radius);
+}
+
+.pricing-sheet .field-block > select,
+.pricing-sheet .business-date-field > input {
+  width: 100%;
+  margin-top: var(--space-2);
+  padding-inline: var(--space-3);
+  color: var(--ledger-navy);
+  border: 1px solid #cbd8e5;
+  background: #fff;
+  font: inherit;
+}
+
+.pricing-sheet .money-input {
+  margin-top: var(--space-2);
+  padding-inline: var(--space-3);
+}
+
+.pricing-sheet .money-input input {
+  font-size: var(--font-card-title);
+}
+
+.pricing-sheet .two-fields {
+  gap: var(--space-3);
+}
+
+.material-sheet .material-preview,
+.sale-refund-sheet .sale-refund-origin,
+.sale-delete-sheet .sale-refund-origin {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border-radius: var(--radius-ledger-reverse);
+}
+
+.material-sheet .material-cash-toggle,
+.sale-refund-sheet .material-cash-toggle {
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-5);
+}
+
+.sale-refund-sheet .refund-impact,
+.sale-delete-sheet .refund-impact,
+.pricing-sheet .cost-setting-note,
+.pricing-sheet .record-category-hint {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-3);
+}
+
+.pricing-sheet .form-error,
+.pricing-sheet .field-error {
+  margin-top: var(--space-3);
+  font-size: var(--font-secondary);
+}
+
+.pricing-sheet .sheet-action {
+  position: sticky;
+  bottom: calc(env(safe-area-inset-bottom) * -1);
+  width: 100%;
+  min-height: var(--button-lg-height);
+  margin-top: var(--space-6);
+  padding-inline: var(--space-5);
+  border-radius: var(--radius-4);
+  font-size: var(--font-card-title);
+}
+
+.pricing-sheet .sheet-action.danger-action {
+  color: #fff;
+}
+
+.bom-sheet .bom-total,
+.bom-sheet .bom-list {
+  border-radius: var(--radius-ledger-reverse);
+}
+
+.bom-sheet .bom-add select,
+.bom-sheet .bom-add button,
+.bom-sheet .bom-row label {
+  min-height: var(--button-md-height);
+  border-radius: var(--radius-3);
+}
+
+@media (max-width: 520px) {
+  .pricing-sheet {
+    padding-inline: var(--space-4);
+  }
+
+  .pricing-sheet .two-fields {
+    gap: var(--space-2);
+  }
+}
+
 @media (max-width: 520px) {
   .mobile-header {
     height: calc(var(--header-height) - var(--space-1) - var(--space-1));
