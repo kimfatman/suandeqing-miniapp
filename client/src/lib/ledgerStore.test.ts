@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getIndustrySampleData, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getCashTrendSeries, getIndustrySampleData, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -63,6 +63,21 @@ describe("summarizeLedger", () => {
     expect(august).toMatchObject({ income: 120, expenses: 20, cashBalance: 100, incomeCount: 1, expenseCount: 1, salesCount: 1, salesRevenue: 20, costOfSales: 8 });
     expect(august.dailySeries).toEqual([{ label: "08/02", income: 120, expenses: 20 }]);
     expect(summarizeLedger(ledger, "2026-07")).toMatchObject({ income: 900, salesCount: 1, salesRevenue: 30, costOfSales: 12 });
+  });
+
+  it("builds 7-day, 30-day and monthly cash trends from business dates and keeps principal in actual payments", () => {
+    const ledger = seedLedger();
+    ledger.records = [
+      { id: "jul-1", type: "income", amount: 10, category: "销售收入", note: "", date: "2026-07-01" },
+      { id: "jul-24", type: "expense", amount: 8, category: "采购", note: "", date: "2026-07-24" },
+      { id: "jul-25", type: "income", amount: 50, category: "销售收入", note: "", date: "2026-07-25" },
+      { id: "jul-30", type: "expense", amount: 20, category: "本金还款", note: "", date: "2026-07-30" },
+    ];
+    const sevenDays = getCashTrendSeries(ledger, "2026-07", "7d");
+    expect(sevenDays.map((item) => item.label)).toEqual(["07/25", "07/26", "07/27", "07/28", "07/29", "07/30", "07/31"]);
+    expect(sevenDays.find((item) => item.label === "07/30")).toMatchObject({ expenses: 20 });
+    expect(getCashTrendSeries(ledger, "2026-07", "30d")[0]).toMatchObject({ label: "07/02" });
+    expect(getCashTrendSeries(ledger, "2026-07", "month")[0]).toMatchObject({ label: "07/01", income: 10 });
   });
 });
 

@@ -45,7 +45,7 @@ import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
 import * as XLSX from "xlsx";
 import {   applyIndustryTemplate, applyQuickCost,
   applyMonthlyIndirectPlan, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, getMonthlyIndirectPlanTiming, calculateProductIndirectAllocations, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, emptyMonthlyFixedCosts,
-  formatBusinessPeriod, getActiveCategories, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, INDUSTRY_TEMPLATES, AllocationMethod, HiddenCostItem, IndustryKey, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
+  formatBusinessPeriod, getActiveCategories, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getCashTrendSeries, INDUSTRY_TEMPLATES, AllocationMethod, CashTrendRange, HiddenCostItem, IndustryKey, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
 import { startLogin } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
@@ -336,6 +336,7 @@ export default function Home() {
 
         {activeTab === "home" && (
           <HomeView
+            ledger={ledger}
             product={selectedProduct}
             products={activeProducts}
             materials={ledger.materials}
@@ -457,6 +458,7 @@ export function getHomeAttentionItems({ missingCostProductCount, unpricedProduct
 }
 
 function HomeView({
+  ledger,
   product,
   products,
   materials,
@@ -475,6 +477,7 @@ function HomeView({
   readiness,
   onPrimaryAction,
 }: {
+  ledger: LedgerData;
   product: LedgerProduct;
   products: LedgerProduct[];
   materials: Material[];
@@ -493,6 +496,7 @@ function HomeView({
   readiness: Readiness;
   onPrimaryAction: () => void;
 }) {
+  const [trendRange, setTrendRange] = useState<CashTrendRange>("month");
   const hasSalesResult = summary.profitReady;
   const hasProduct = product.id !== 0;
   const operatingResult = summary.operatingResult;
@@ -507,6 +511,9 @@ function HomeView({
   const topContributions = contributions.slice(0, 5);
   const maxContributionRevenue = Math.max(...topContributions.map((item) => Math.abs(item.revenue)), 1);
   const grossMargin = summary.salesRevenue > 0 ? summary.grossProfit / summary.salesRevenue * 100 : null;
+  const trendSeries = useMemo(() => getCashTrendSeries(ledger, period, trendRange), [ledger, period, trendRange]);
+  const trendNet = trendSeries.reduce((total, item) => total + item.income - item.expenses, 0);
+  const trendLabel = trendRange === "7d" ? "近 7 天" : trendRange === "30d" ? "近 30 天" : "本月";
   const performDashboardAction = (action: DashboardAction) => {
     if (action === "products") onProducts();
     else if (action === "business") onBusiness();
@@ -538,7 +545,7 @@ function HomeView({
 
       <section className="dashboard-status-row" aria-label="经营状态与现金情况"><article className={hasSalesResult ? operatingResult < 0 ? "loss" : "healthy" : "pending"}><span>经营状态</span><b>{!hasSalesResult ? "待销售结转" : operatingResult < 0 ? "本期亏损" : operatingResult > 0 ? "本期盈利" : "本期持平"}</b><small>{hasSalesResult && grossMargin !== null ? `毛利率 ${grossMargin.toFixed(1)}%` : "完成销售后可判断利润"}</small></article><article className={summary.cashBalance < 0 ? "loss" : "cash"}><span>现金情况</span><b>{formatCurrency(summary.cashBalance)}</b><small>{summary.cashBalance < 0 ? "本期现金偏紧" : "本期实际现金结余"}</small></article></section>
 
-      <section className="overview-chart-card dashboard-trend-card" aria-label="选定月份现金收付概览"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>现金收付</h2></div><span className="chart-summary-value">{formatCurrency(summary.cashBalance)} <small>现金结余</small></span></div><MiniTrendChart series={summary.dailySeries} /><p className="dashboard-chart-note">这里显示实际收款与付款；销售结转后的利润请在“经营”中查看。</p></section>
+      <section className="overview-chart-card dashboard-trend-card" aria-label="选定范围现金收付概览"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>现金收付</h2></div><span className="chart-summary-value">{formatCurrency(trendNet)} <small>{trendLabel}净收付</small></span></div><TrendRangePicker value={trendRange} onChange={setTrendRange} /><MiniTrendChart series={trendSeries} rangeLabel={trendLabel} /><p className="dashboard-chart-note">这里显示所选范围内的实际收款与付款（含本金还款）；销售结转后的利润请在“经营”中查看。</p></section>
 
       <section className="dashboard-products-card" aria-label="商品赚钱能力"><div className="section-heading compact"><div><span className="eyebrow">商品赚钱能力</span><h2>本期销售贡献</h2></div><button onClick={onProducts}>查看商品 <ChevronRight size={14} /></button></div>{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献</span></div><div className="dashboard-product-list">{topContributions.map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{formatCurrency(item.contribution)}<i>{risk ? "需关注" : `${rate.toFixed(1)}%`}</i></small></button>; })}</div><p className="dashboard-data-note">直接贡献使用销售时冻结的直接成本；房租、人工等分摊请在经营成本分析中查看。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>还没有已结转的商品销售</b><small>记录第一笔销售后，这里会按真实销售快照展示商品贡献。</small><button onClick={onPrimaryAction}>记录销售 <ArrowRight size={14} /></button></div>}</section>
 
@@ -612,15 +619,21 @@ export function getProductContributionData(products: LedgerProduct[], sales: Sal
   }).filter((item) => item.revenue !== 0 || item.directCost !== 0).sort((a, b) => b.revenue - a.revenue);
 }
 
-function MiniTrendChart({ series }: { series: ReturnType<typeof summarizeLedger>["dailySeries"] }) {
+function TrendRangePicker({ value, onChange }: { value: CashTrendRange; onChange: (value: CashTrendRange) => void }) {
+  const options: Array<{ value: CashTrendRange; label: string }> = [{ value: "7d", label: "7天" }, { value: "30d", label: "30天" }, { value: "month", label: "本月" }];
+  return <div className="trend-range-switch" role="tablist" aria-label="选择现金趋势范围">{options.map((option) => <button key={option.value} role="tab" aria-selected={value === option.value} className={value === option.value ? "selected" : ""} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>;
+}
+
+function MiniTrendChart({ series, rangeLabel }: { series: Array<{ label: string; income: number; expenses: number }>; rangeLabel: string }) {
   const [selectedIndex, setSelectedIndex] = useState(Math.max(series.length - 1, 0));
+  useEffect(() => setSelectedIndex(Math.max(series.length - 1, 0)), [series.length, series.at(-1)?.label]);
   const values = series.flatMap((item) => [item.income, item.expenses]);
   const max = Math.max(...values, 1);
   const points = (key: "income" | "expenses") => series.map((item, index) => `${(index / Math.max(series.length - 1, 1)) * 100},${92 - (item[key] / max) * 76}`).join(" ");
   const hasData = series.some((item) => item.income > 0 || item.expenses > 0);
-  if (!hasData) return <div className="mini-chart-empty"><BarChart3 size={20} /><span>暂无现金收付</span></div>;
+  if (!hasData) return <div className="mini-chart-empty"><BarChart3 size={20} /><span>{rangeLabel}暂无现金收付</span></div>;
   const selected = series[selectedIndex] ?? series.at(-1)!;
-  return <div className="mini-trend-wrap"><svg className="mini-trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="本月现金收款与付款趋势"><line x1="0" y1="92" x2="100" y2="92" /><polyline className="trend-income" points={points("income")} /><polyline className="trend-expense" points={points("expenses")} />{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; return <g className={index === selectedIndex ? "is-selected" : ""} key={item.label}><circle className="trend-income-dot" cx={x} cy={92 - (item.income / max) * 76} r="1.8" /><circle className="trend-expense-dot" cx={x} cy={92 - (item.expenses / max) * 76} r="1.8" /></g>; })}</svg><div className="chart-tooltip mini-trend-tooltip"><b>{selected.label}</b><span><i className="income-dot" />收款 {formatCurrency(selected.income)}</span><span><i className="expense-dot" />付款 {formatCurrency(selected.expenses)}</span></div><div className="chart-point-tabs" role="tablist" aria-label="选择现金收付日期">{series.map((item, index) => <button role="tab" aria-selected={index === selectedIndex} className={index === selectedIndex ? "selected" : ""} key={item.label} onClick={() => setSelectedIndex(index)}>{item.label}</button>)}</div><div className="mini-chart-legend"><span><i className="income-dot" />收款</span><span><i className="expense-dot" />付款</span></div></div>;
+  return <div className="mini-trend-wrap"><svg className="mini-trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${rangeLabel}现金收款与付款趋势`}><line x1="0" y1="92" x2="100" y2="92" /><polyline className="trend-income" points={points("income")} /><polyline className="trend-expense" points={points("expenses")} />{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; return <g className={index === selectedIndex ? "is-selected" : ""} key={item.label}><circle className="trend-income-dot" cx={x} cy={92 - (item.income / max) * 76} r="1.8" /><circle className="trend-expense-dot" cx={x} cy={92 - (item.expenses / max) * 76} r="1.8" /></g>; })}</svg><div className="chart-tooltip mini-trend-tooltip"><b>{selected.label}</b><span><i className="income-dot" />收款 {formatCurrency(selected.income)}</span><span><i className="expense-dot" />付款 {formatCurrency(selected.expenses)}</span></div><div className="chart-point-tabs" role="tablist" aria-label="选择现金收付日期">{series.map((item, index) => <button role="tab" aria-selected={index === selectedIndex} className={index === selectedIndex ? "selected" : ""} key={item.label} onClick={() => setSelectedIndex(index)}>{item.label}</button>)}</div><div className="mini-chart-legend"><span><i className="income-dot" />收款</span><span><i className="expense-dot" />付款</span></div></div>;
 }
 
 export function CostCompositionChart({ product, operatingCost, fullCost }: { product: LedgerProduct; operatingCost: number; fullCost: number }) {

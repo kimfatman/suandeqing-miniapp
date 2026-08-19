@@ -821,6 +821,47 @@ const summarizeLedgerRecords = (records: LedgerRecord[], period?: string) => rec
   return result;
 }, { financingCosts: 0 });
 
+export type CashTrendRange = "7d" | "30d" | "month";
+export type CashTrendPoint = { date: string; label: string; income: number; expenses: number };
+
+const formatTrendDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * 经营驾驶舱的现金趋势只读取真实收付款流水。范围以所选业务月为锚点：当月截至业务日，历史月截至月末；
+ * 本金还款属于实际付款，虽不属于利润成本，仍必须显示在现金趋势中。
+ */
+export const getCashTrendSeries = (ledger: LedgerData, selectedPeriod: string, range: CashTrendRange): CashTrendPoint[] => {
+  const [year, month] = selectedPeriod.split("-").map(Number);
+  const today = getBusinessDate();
+  const isCurrentPeriod = selectedPeriod === today.slice(0, 7);
+  const monthEnd = new Date(year, month, 0);
+  const periodEnd = isCurrentPeriod ? new Date(`${today}T12:00:00`) : monthEnd;
+  const periodStart = new Date(year, month - 1, 1);
+  const requestedDays = range === "7d" ? 7 : range === "30d" ? 30 : periodEnd.getDate();
+  const candidateStart = new Date(periodEnd);
+  candidateStart.setDate(periodEnd.getDate() - requestedDays + 1);
+  const start = range === "month" || candidateStart < periodStart ? periodStart : candidateStart;
+  const buckets = new Map<string, { income: number; expenses: number }>();
+  const cursor = new Date(start);
+  while (cursor <= periodEnd) {
+    buckets.set(formatTrendDate(cursor), { income: 0, expenses: 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  ledger.records.forEach((record) => {
+    const bucket = buckets.get(record.date);
+    if (!bucket) return;
+    const amount = Number.isFinite(record.amount) ? record.amount : 0;
+    if (record.type === "income") bucket.income += amount;
+    else bucket.expenses += amount;
+  });
+  return Array.from(buckets.entries()).map(([date, values]) => ({ date, label: `${date.slice(5, 7)}/${date.slice(8, 10)}`, income: money(values.income), expenses: money(values.expenses) }));
+};
+
 export const summarizeLedger = (ledger: LedgerData, selectedPeriod = ledger.costs.allocationPeriod ?? getBusinessPeriod()): LedgerSummary => {
   const categoryTotals: Record<string, number> = {};
   const byDate: Record<string, { income: number; expenses: number }> = {};
