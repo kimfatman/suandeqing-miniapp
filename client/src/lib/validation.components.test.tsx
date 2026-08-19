@@ -10,7 +10,7 @@ import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
 import { BusinessView, CashRecordsSheet, CategorySheet, CostAnalysisView, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostAnalysisLines, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProductDirectCostTrend, getProfitBridgeData, getRefundableSaleQuantity, HomeView, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, MiniTrendChart, ProductNameSheet, ProductsView, ProfileView, ProfitBridgeChart, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
-import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
+import { emptyMonthlyFixedCosts, getInventoryHealth, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
 
 class TestResizeObserver {
   observe() {}
@@ -76,6 +76,16 @@ describe("Dashboard issue priorities", () => {
   it("only reports cash pressure when there is no higher-priority product issue", () => {
     expect(getDashboardIssues({ missingCostProductCount: 0, unpricedProductCount: 0, cashBalance: -1, contributions: [] })).toEqual([expect.objectContaining({ id: "cash-negative", tone: "cash", action: "business" })]);
   });
+
+  it("shows a page-level inventory reminder only when tracked stock and observed net sales prove a shortage", () => {
+    const ledger = seedLedger();
+    ledger.products = [{ ...ledger.products[0], stockQuantity: 1 }];
+    ledger.sales = [{ id: "inventory-sale", productId: ledger.products[0]!.id, quantity: 12, unitPrice: 20, date: "2026-08-19", note: "" }];
+    const inventory = getInventoryHealth(ledger, "2026-08-19");
+    const issues = getDashboardIssues({ missingCostProductCount: 0, unpricedProductCount: 0, cashBalance: 0, contributions: [], inventory });
+
+    expect(issues).toEqual([expect.objectContaining({ id: `stock-low-${ledger.products[0]!.id}`, title: expect.stringContaining("库存不足"), action: "products" })]);
+  });
 });
 
 describe("Dynamic chart accounting boundaries", () => {
@@ -138,6 +148,8 @@ describe("HomeView decision dashboard", () => {
     expect(screen.getByText("本月收入目标")).toBeTruthy();
     expect(screen.getByText("最近7天利润趋势")).toBeTruthy();
     expect(screen.getByText("收入与成本对比")).toBeTruthy();
+    expect(screen.getByLabelText("库存健康")).toBeTruthy();
+    expect(screen.getByText("还没有启用库存的商品")).toBeTruthy();
     expect(screen.getByText("快速操作")).toBeTruthy();
   });
 });
@@ -383,6 +395,15 @@ describe("MessageInboxSheet interactions", () => {
     render(<MessageInboxSheet isAuthenticated loading={false} unreadCount={0} levelFilter="all" onLevelFilterChange={onLevelFilterChange} onClose={vi.fn()} onLogin={vi.fn()} onMarkRead={vi.fn()} onMarkAll={vi.fn()} onAction={vi.fn()} messages={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "账本安全" }));
     expect(onLevelFilterChange).toHaveBeenCalledWith("safety");
+  });
+
+  it("shows derived operating reminders separately from server unread messages and routes their action", () => {
+    const onAction = vi.fn();
+    render(<MessageInboxSheet isAuthenticated={false} loading={false} unreadCount={0} onClose={vi.fn()} onLogin={vi.fn()} onMarkRead={vi.fn()} onMarkAll={vi.fn()} onAction={onAction} messages={[]} operatingReminders={[{ id: "sales-stale", severity: "info", title: "已连续 7 天未记录销售", summary: "最近一笔销售已超过7天。", action: "record", actionLabel: "记录销售" }]} />);
+    expect(screen.getByLabelText("经营提醒")).toBeTruthy();
+    expect(screen.getByText("不计入未读，不会发送给他人。")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /记录销售/ }));
+    expect(onAction).toHaveBeenCalledWith("/?action=sale");
   });
 });
 

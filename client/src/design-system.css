@@ -1542,3 +1542,57 @@
 .sale-profit-preview > div.profit b { color: #168968; }
 .sale-profit-preview > div.loss b { color: #c64d43; }
 .sale-profit-preview > p { grid-column: 1 / -1; margin: 0; color: #718094; font-size: 9px; line-height: 1.5; }
+
+.dashboard-inventory-card {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid #e3eaf2;
+  border-radius: var(--radius-ledger-reverse);
+  background: #fff;
+  box-shadow: 0 5px 18px rgb(11 24 54 / .035);
+}
+
+.dashboard-inventory-card .section-heading { min-height: var(--tap-target); align-items: center; margin-top: 0; }
+.dashboard-inventory-card .section-heading > button { min-height: var(--tap-target); padding-inline: var(--space-2); }
+.inventory-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-2); }
+.inventory-summary span { min-width: 0; padding: var(--space-2); border-radius: var(--radius-2); background: #f6f9fc; }
+.inventory-summary small, .inventory-summary b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-summary small { color: #718094; font-size: 8px; }
+.inventory-summary b { margin-top: 2px; color: #24324b; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 11px; }
+.inventory-summary .warning { background: #fff8e9; }
+.inventory-summary .warning b { color: #b57917; }
+.inventory-health-list { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.inventory-health-list button { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--tap-target); padding: var(--space-2); color: #718094; text-align: left; border: 1px solid #e4ebf2; border-radius: var(--radius-2); background: #fff; }
+.inventory-health-list button > span { display: grid; min-width: 0; gap: 2px; }
+.inventory-health-list b { overflow: hidden; color: #24324b; font-size: var(--font-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.inventory-health-list small { overflow: hidden; color: #8292a2; font-size: 8px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-health-list strong { color: #24324b; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 10px; text-align: right; }
+.inventory-health-list em { padding: 3px 6px; color: #168968; border-radius: var(--radius-pill); background: #e8f8f1; font-size: 8px; font-style: normal; font-weight: 800; white-space: nowrap; }
+.inventory-health-list button.insufficient { border-color: #f2dc9c; background: #fffdf7; }
+.inventory-health-list button.insufficient em { color: #a86f11; background: #fff0c9; }
+.inventory-health-list button.high em, .inventory-health-list button.slow em { color: #a86f11; background: #fff4d9; }
+.inventory-health-list button.slow { border-color: #f0c8c4; background: #fff9f8; }
+.inventory-health-list button.slow em { color: #c64d43; background: #fff0ee; }
+.inventory-health-list button.noVelocity em { color: #6e8293; background: #edf2f6; }
+.inventory-untracked-note { margin: var(--space-2) 0 0; color: #8292a2; font-size: 9px; line-height: 1.45; }
+
+.operating-reminder-list { display: grid; gap: var(--space-2); margin: 0 0 var(--space-4); padding: var(--space-3); border: 1px solid #dfe9f5; border-radius: var(--radius-2); background: #f8fbff; }
+.operating-reminder-list > div { display: grid; gap: 2px; }
+.operating-reminder-list h3 { margin: 0; color: #24324b; font-size: var(--font-section-title); }
+.operating-reminder-list > div > small { color: #8292a2; font-size: 9px; }
+.operating-reminder-list article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 1px solid #e4ebf2; border-radius: var(--radius-2); background: #fff; }
+.operating-reminder-list article > svg { color: #b57917; }
+.operating-reminder-list article > span { display: grid; min-width: 0; gap: 2px; }
+.operating-reminder-list article b { color: #24324b; font-size: var(--font-secondary); }
+.operating-reminder-list article small { color: #718094; font-size: 9px; line-height: 1.42; }
+.operating-reminder-list article button { min-height: var(--tap-target); padding: var(--space-1) var(--space-2); color: #087ff5; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.operating-reminder-list article.risk { border-color: #f0c8c4; background: #fffafa; }
+.operating-reminder-list article.risk > svg { color: #c64d43; }
+.operating-reminder-list article.info > svg { color: #087ff5; }
+
+@media (max-width: 390px) {
+  .dashboard-inventory-card { padding: var(--space-3); }
+  .inventory-summary { gap: var(--space-1); }
+  .inventory-health-list button { grid-template-columns: minmax(0, 1fr) auto; }
+  .inventory-health-list em { grid-column: 2; }
+}
