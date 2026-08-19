@@ -16,6 +16,10 @@ describe("validateMaterialDraft", () => {
   it("accepts a positive converted purchase", () => {
     expect(validateMaterialDraft({ name: "鲜奶", amount: 36, quantity: 2, conversionFactor: 1000 })).toBeNull();
   });
+
+  it("accepts a same-unit purchase without requiring a separately entered conversion factor", () => {
+    expect(validateMaterialDraft({ name: "矿泉水", amount: 24, quantity: 12, conversionFactor: Number.NaN, requiresConversion: false })).toBeNull();
+  });
 });
 
 describe("validateBomItems", () => {

@@ -269,9 +269,40 @@ describe("MaterialSheet interactions", () => {
     render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={vi.fn()} />);
     expect((screen.getByLabelText("材料采购金额") as HTMLInputElement).value).toBe("");
     expect((screen.getByLabelText("材料采购数量") as HTMLInputElement).value).toBe("");
-    expect((screen.getByLabelText("材料换算系数") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByLabelText("材料换算系数")).toBeNull();
     expect((screen.getByLabelText("材料采购单位") as HTMLSelectElement).value).toBe("");
     expect((screen.getByLabelText("材料使用单位") as HTMLSelectElement).value).toBe("");
+  });
+
+  it("hides conversion for the same purchase and usage unit, then saves at a 1:1 factor", () => {
+    const onSave = vi.fn();
+    render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByPlaceholderText(/例如：/), { target: { value: "矿泉水" } });
+    fireEvent.change(screen.getByLabelText("材料采购金额"), { target: { value: "24" } });
+    fireEvent.change(screen.getByLabelText("材料采购数量"), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText("材料采购单位"), { target: { value: "瓶" } });
+    fireEvent.change(screen.getByLabelText("材料使用单位"), { target: { value: "瓶" } });
+    expect(screen.queryByLabelText("材料换算系数")).toBeNull();
+    expect(screen.getByText("金额 ÷ 数量（同单位按1:1换算）")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /保存材料/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ conversionFactor: 1, unitCost: 2 }), expect.any(Object));
+  });
+
+  it("shows and requires conversion when purchase and usage units differ", () => {
+    const onSave = vi.fn();
+    render(<MaterialSheet suggestion={seedLedger().materials[0]} onClose={vi.fn()} onSave={onSave} />);
+    fireEvent.change(screen.getByPlaceholderText(/例如：/), { target: { value: "纸杯" } });
+    fireEvent.change(screen.getByLabelText("材料采购金额"), { target: { value: "24" } });
+    fireEvent.change(screen.getByLabelText("材料采购数量"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("材料采购单位"), { target: { value: "盒" } });
+    fireEvent.change(screen.getByLabelText("材料使用单位"), { target: { value: "个" } });
+    expect(screen.getByLabelText("材料换算系数")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /保存材料/ }));
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("采购金额、采购数量和换算系数都必须大于0");
+    fireEvent.change(screen.getByLabelText("材料换算系数"), { target: { value: "24" } });
+    fireEvent.click(screen.getByRole("button", { name: /保存材料/ }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ conversionFactor: 24, unitCost: 1 }), expect.any(Object));
   });
 
   it("edits an existing material while preserving its id", () => {

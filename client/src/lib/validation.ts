@@ -5,6 +5,7 @@ export type MaterialDraft = {
   amount: number;
   quantity: number;
   conversionFactor: number;
+  requiresConversion?: boolean;
 };
 
 export type SaleDraft = {
@@ -30,8 +31,9 @@ export const validateProductName = (name: string) => {
 
 export const validateMaterialDraft = (draft: MaterialDraft) => {
   if (!draft.name.trim()) return "请填写材料名称。";
-  if (![draft.amount, draft.quantity, draft.conversionFactor].every(Number.isFinite)
-    || draft.amount <= 0 || draft.quantity <= 0 || draft.conversionFactor <= 0) {
+  const conversionValues = draft.requiresConversion === false ? [] : [draft.conversionFactor];
+  if (![draft.amount, draft.quantity, ...conversionValues].every(Number.isFinite)
+    || draft.amount <= 0 || draft.quantity <= 0 || conversionValues.some((value) => value <= 0)) {
     return "采购金额、采购数量和换算系数都必须大于0。";
   }
   return null;
