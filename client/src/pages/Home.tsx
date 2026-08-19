@@ -390,6 +390,7 @@ export default function Home() {
             onAddMaterial={() => { setEditingMaterialId(null); setShowMaterialPanel(true); }}
             onEditMaterial={(material) => { setEditingMaterialId(material.id); setShowMaterialPanel(true); }}
             onRecord={() => setShowQuickRecord(true)}
+            onSale={() => setShowSaleRecord(true)}
             onBusiness={() => navigate("business")}
             onProducts={() => navigate("products")}
             readiness={readiness}
@@ -530,6 +531,7 @@ export function HomeView({
   onAddMaterial,
   onEditMaterial,
   onRecord,
+  onSale,
   onBusiness,
   onProducts,
   readiness,
@@ -550,21 +552,18 @@ export function HomeView({
   onAddMaterial: () => void;
   onEditMaterial: (material: Material) => void;
   onRecord: () => void;
+  onSale: () => void;
   onBusiness: () => void;
   onProducts: () => void;
   readiness: Readiness;
   onSaveRevenueGoal: (monthlyBudget: number) => void;
   onPrimaryAction: () => void;
 }) {
-  const [editingRevenueGoal, setEditingRevenueGoal] = useState(false);
-  const [revenueGoalInput, setRevenueGoalInput] = useState(ledger.profile.monthlyBudget > 0 ? String(ledger.profile.monthlyBudget) : "");
   const [contributionRange, setContributionRange] = useState<CashTrendRange>("month");
   const hasSalesResult = summary.profitReady;
-  const hasProduct = product.id !== 0;
   const operatingResult = summary.operatingResult;
-  const resultTitle = !hasSalesResult ? "本月利润待销售结转" : operatingResult > 0 ? "本月经营有盈利" : operatingResult < 0 ? "本月经营亏损" : "本月经营持平";
-  const resultDetail = !hasSalesResult ? "当前显示的是已收与已付现金；补一笔销售后，才会按商品成本计算利润。" : `已按 ${summary.salesCount} 笔销售结转，现金结余不等于利润。`;
-  const resultCost = Math.max(summary.salesRevenue - operatingResult, 0);
+  const operatingExpenses = summary.allocatedIndirectCosts + summary.financingCosts;
+  const operatingMargin = hasSalesResult && summary.salesRevenue > 0 ? operatingResult / summary.salesRevenue * 100 : null;
   const missingCostProductCount = products.filter((item) => item.direct <= 0 && item.bom.length === 0).length;
   const unpricedProductCount = products.filter((item) => item.price <= 0).length;
   const monthlyContributions = useMemo(() => getProductContributionData(products, sales, period), [products, sales, period]);
@@ -576,66 +575,47 @@ export function HomeView({
   const topContributions = contributions.slice(0, 5);
   const maxContributionRevenue = Math.max(...topContributions.map((item) => Math.abs(item.revenue)), 1);
   const grossMargin = summary.salesRevenue > 0 ? summary.grossProfit / summary.salesRevenue * 100 : null;
-  const salesTrendSeries = useMemo(() => getSalesTrendSeries(ledger, period, "7d"), [ledger, period]);
-  const health = useMemo(() => getDashboardHealth(ledger, summary), [ledger, summary]);
-  const revenueGoal = useMemo(() => getRevenueGoalProgress(ledger.profile.monthlyBudget, summary.salesRevenue), [ledger.profile.monthlyBudget, summary.salesRevenue]);
-  const saveRevenueGoal = () => {
-    const nextGoal = Math.max(Number(revenueGoalInput) || 0, 0);
-    onSaveRevenueGoal(nextGoal);
-    setRevenueGoalInput(nextGoal > 0 ? String(nextGoal) : "");
-    setEditingRevenueGoal(false);
-  };
   const primaryInsight = dashboardInsights[0];
   const performDashboardAction = (action: DashboardAction) => {
     if (action === "products") onProducts();
     else if (action === "business") onBusiness();
     else onPrimaryAction();
   };
-  const unitCost = Math.max(fullCost, operatingCost, product.direct, 0);
-  const unitProfit = product.price > 0 ? product.price - unitCost : null;
-  const unitMargin = product.price > 0 ? unitProfit! / product.price * 100 : null;
-  const purchaseTotals = Object.entries(summary.categoryTotals).filter(([category]) => /采购|进货|材料/.test(category));
-  const purchaseAmount = purchaseTotals.reduce((total, [, amount]) => total + amount, 0);
-  const linkedMaterialIds = new Set(products.flatMap((item) => item.bom.map((part) => part.materialId)));
-  const unlinkedMaterialCount = materials.filter((material) => !linkedMaterialIds.has(material.id)).length;
   const primaryIcon = readiness.stage === "record" ? <ReceiptText size={19} /> : readiness.stage === "product" ? <Plus size={19} /> : readiness.stage === "cost" ? <PackagePlus size={19} /> : readiness.stage === "pricing" ? <Sparkles size={19} /> : readiness.stage === "sale" ? <ShoppingBag size={19} /> : <BarChart3 size={19} />;
   return (
     <div className="page-content home-content">
       <section className="period-row dashboard-page-heading">
-        <div><span className="eyebrow">{formatBusinessPeriod(period)}</span><h1>经营总览</h1><small>把生意算清楚</small></div>
+        <div><h1>首页</h1><small>让生意账目更清晰，经营更轻松</small></div>
         <PeriodPicker period={period} onChange={onPeriodChange} />
       </section>
 
       <section className={`dashboard-result-card ${hasSalesResult ? operatingResult < 0 ? "loss" : "ready" : "pending"}`} aria-label="本月经营结果">
-        <div className="dashboard-result-top"><span>{hasSalesResult ? "本月经营利润" : "本月现金结余"}</span><span className={hasSalesResult ? "result-status" : "result-status pending"}>{hasSalesResult ? "已结转" : "待结转"}</span></div>
-        <div className="dashboard-result-amount"><strong>{hasSalesResult ? formatCurrency(operatingResult) : formatCurrency(summary.cashBalance)}</strong><span className="dashboard-result-signature"><BrandSignature tone="inverse" compact /><BookOpenCheck size={18} /></span></div>
-        <p>{hasSalesResult ? `已按 ${summary.salesCount} 笔销售快照结转；现金结余不等于利润。` : "尚未结转销售，当前仅展示实际现金收付。"}</p>
-        {hasSalesResult ? <div className="dashboard-result-formula"><span><small>销售收入</small><b>{formatCurrency(summary.salesRevenue)}</b></span><i>−</i><span><small>已结转成本</small><b>{formatCurrency(resultCost)}</b></span><i>=</i><span className="result"><small>经营利润</small><b>{formatCurrency(operatingResult)}</b></span></div> : <div className="dashboard-result-formula"><span><small>已收现金</small><b>{formatCurrency(summary.income)}</b></span><i>−</i><span><small>已付现金</small><b>{formatCurrency(summary.cashOutflow)}</b></span><i>=</i><span className="result"><small>现金结余</small><b>{formatCurrency(summary.cashBalance)}</b></span></div>}
-        <div className="dashboard-result-foot"><span>{hasSalesResult && grossMargin !== null ? `毛利率 ${grossMargin.toFixed(1)}%` : "完成销售后即可判断利润"}</span><button onClick={onBusiness}>查看经营分析 <ArrowRight size={15} /></button></div>
+        <div className="dashboard-result-top"><span>今天经营得怎么样？</span><span className={hasSalesResult ? "result-status" : "result-status pending"}>{hasSalesResult ? "已结转" : "待结转"}</span></div>
+        <div className="dashboard-result-amount"><div><small>本期经营利润</small><strong>{hasSalesResult ? formatCurrency(operatingResult) : "—"}</strong></div><span className="dashboard-result-rate">{operatingMargin === null ? "待结转" : `${operatingMargin.toFixed(1)}%`}<small>利润率</small></span></div>
+        <p>{hasSalesResult ? `已按 ${summary.salesCount} 笔销售快照结转；现金结余不等于利润。` : "记录商品销售后，系统才会按当时成本快照计算利润。"}</p>
+        {hasSalesResult ? <div className="dashboard-result-formula four"><span><small>销售收入</small><b>{formatCurrency(summary.salesRevenue)}</b></span><i>−</i><span><small>商品成本</small><b>{formatCurrency(summary.costOfSales)}</b></span><i>−</i><span><small>经营费用</small><b>{formatCurrency(operatingExpenses)}</b></span><i>=</i><span className="result"><small>经营利润</small><b>{formatCurrency(operatingResult)}</b></span></div> : <div className="dashboard-result-formula"><span><small>已收现金</small><b>{formatCurrency(summary.income)}</b></span><i>−</i><span><small>已付现金</small><b>{formatCurrency(summary.cashOutflow)}</b></span><i>=</i><span className="result"><small>现金结余</small><b>{formatCurrency(summary.cashBalance)}</b></span></div>}
+        <div className="dashboard-result-foot"><span>{hasSalesResult && grossMargin !== null ? `毛利率 ${grossMargin.toFixed(1)}%` : "现金结余会在经营页单独展示"}</span><button onClick={onBusiness}>查看经营分析 <ArrowRight size={15} /></button></div>
       </section>
 
-      <section className="dashboard-status-strip" aria-label="经营状态摘要">
-        <button className="dashboard-status-item goal" onClick={() => { setRevenueGoalInput(revenueGoal ? String(revenueGoal.target) : ""); setEditingRevenueGoal((current) => !current); }}><span>本月收入目标</span>{revenueGoal ? <><b>{revenueGoal.percentage.toFixed(0)}%</b><small>{formatCurrency(revenueGoal.actual)} / {formatCurrency(revenueGoal.target)}</small></> : <><b>未设置</b><small>点此设置</small></>}</button>
-        <button className={`dashboard-status-item health ${hasSalesResult ? operatingResult < 0 ? "loss" : "healthy" : "pending"}`} onClick={onBusiness}><span>经营健康度</span><b>{health.score}<small>/100</small></b><small>{health.label}</small></button>
-        <button className={`dashboard-status-item cash ${summary.cashBalance < 0 ? "loss" : ""}`} onClick={onBusiness}><span>现金结余</span><b>{formatCurrency(summary.cashBalance)}</b><small>{summary.cashBalance < 0 ? "本期需关注" : "查看现金明细"}</small></button>
+      <section className="home-overview-card" aria-label="本期经营概览">
+        <div className="home-section-heading"><h2>本期概览</h2><button onClick={onBusiness}>查看更多 <ChevronRight size={15} /></button></div>
+        <div className="home-overview-grid">
+          <span><i className="blue"><TrendingUp size={18} /></i><small>销售收入</small><b>{formatCurrency(summary.salesRevenue)}</b><em>已结转销售</em></span>
+          <span><i className="green"><ShoppingBag size={18} /></i><small>商品成本</small><b>{formatCurrency(summary.costOfSales)}</b><em>销售快照成本</em></span>
+          <span><i className="orange"><WalletCards size={18} /></i><small>经营费用</small><b>{formatCurrency(operatingExpenses)}</b><em>分摊与资金成本</em></span>
+          <span className={hasSalesResult && operatingResult < 0 ? "loss" : ""}><i className="blue"><CircleDollarSign size={18} /></i><small>经营利润</small><b>{hasSalesResult ? formatCurrency(operatingResult) : "待结转"}</b><em>{hasSalesResult ? "已结转销售" : "记录销售后生成"}</em></span>
+        </div>
       </section>
 
-      {editingRevenueGoal && <section className="dashboard-goal-editor compact" aria-label="设置本月收入目标"><label><span>本月收入目标</span><div className="money-input"><input aria-label="月收入目标" type="number" min="0" step="1" value={revenueGoalInput} onChange={(event) => setRevenueGoalInput(event.target.value)} /><b>元</b></div></label><div><button className="secondary-action" onClick={() => setEditingRevenueGoal(false)}>取消</button><button className="primary-action" onClick={saveRevenueGoal}>保存目标</button></div></section>}
-
-      <section className="dashboard-primary-trend" aria-label="近7日利润趋势">
-        <SalesTrendChart compact series={salesTrendSeries} mode="profit" title="近7日利润" description="销售快照口径" />
-        <button className="dashboard-trend-more" onClick={onBusiness}>看收入、成本与现金明细 <ArrowRight size={14} /></button>
-      </section>
-
-      <section className="dashboard-products-card" aria-label="商品赚钱能力"><div className="section-heading compact"><div><span className="eyebrow">商品赚钱能力 · {getContributionRangeLabel(contributionRange)} TOP {Math.min(topContributions.length || 5, 5)}</span><h2>本期销售贡献</h2></div><button onClick={onProducts}>全部商品 <ChevronRight size={14} /></button></div><ContributionRangeSwitch range={contributionRange} onChange={setContributionRange} />{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献率</span></div><div className="dashboard-product-list">{topContributions.map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{risk ? "需关注" : `${rate.toFixed(1)}%`}</small></button>; })}</div><p className="dashboard-data-note">按业务日期汇总销售快照与退款；直接贡献率不含房租、人工等分摊。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>{getContributionRangeLabel(contributionRange)}没有已结转的商品销售</b><small>可切换范围查看已记录销售；收入与直接成本均来自销售快照。</small><button onClick={onPrimaryAction}>记录销售 <ArrowRight size={14} /></button></div>}</section>
+      <section className="dashboard-products-card home-products-card" aria-label="商品表现"><div className="home-section-heading"><h2>商品表现 <span>TOP {Math.min(topContributions.length || 3, 3)}</span></h2><button onClick={onProducts}>查看更多 <ChevronRight size={15} /></button></div><ContributionRangeSwitch range={contributionRange} onChange={setContributionRange} />{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献</span><span>贡献率</span></div><div className="dashboard-product-list">{topContributions.slice(0, 3).map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{formatCurrency(item.contribution)}</small><small className={risk ? "risk" : ""}>{risk ? "需关注" : `${rate.toFixed(1)}%`}</small></button>; })}</div><p className="dashboard-data-note">按业务日期汇总销售快照与退款；直接贡献不含房租、人工等分摊。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>{getContributionRangeLabel(contributionRange)}没有已结转的商品销售</b><small>记录销售后，可按商品查看销售额与直接贡献。</small><button onClick={onSale}>记录销售 <ArrowRight size={14} /></button></div>}</section>
 
       {currentTemplate.capabilities.inventory && <section className="dashboard-inventory-card" aria-label="库存健康"><div className="section-heading compact"><div><span className="eyebrow">库存经营</span><h2>库存健康</h2></div><button onClick={onProducts}>库存设置 <ChevronRight size={14} /></button></div>{inventory.trackedProductCount ? <><div className="inventory-summary"><span><small>资金占用</small><b>{formatCurrency(inventory.totalInventoryValue)}</b></span><span><small>已启用库存</small><b>{inventory.trackedProductCount} 个</b></span><span className={inventory.insufficientCount ? "warning" : ""}><small>需补货</small><b>{inventory.insufficientCount} 个</b></span></div><div className="inventory-health-list">{inventory.items.slice(0, 3).map((item) => <button key={item.productId} className={item.status} onClick={onProducts}><span><b>{item.name}</b><small>{item.detail}</small></span><strong>{formatCurrency(item.inventoryValue)}</strong><em>{item.label}</em></button>)}</div><p className="dashboard-data-note">资金占用按当前完整成本估算；可售天数只参考近30日净销量，不是补货预测。</p>{inventory.untrackedProductCount > 0 && <p className="inventory-untracked-note">还有 {inventory.untrackedProductCount} 个商品未启用库存，不参与本卡分析。</p>}</> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>还没有启用库存的商品</b><small>在商品“更多操作”中设置可售库存后，系统才会计算资金占用和可售天数。</small><button onClick={onProducts}>去设置库存 <ArrowRight size={14} /></button></div>}</section>}
 
       <section className="dashboard-issues-card" aria-label="经营异常"><div className="section-heading compact"><div><span className="eyebrow">经营异常{dashboardIssues.length ? ` ${dashboardIssues.length}` : ""}</span><h2>{dashboardIssues.length ? "需要处理的事项" : "当前没有经营异常"}</h2></div>{dashboardIssues.length ? <AlertTriangle size={18} /> : <BrandSignature tone="blue" compact />}</div>{dashboardIssues.length ? <div className="dashboard-issue-list">{dashboardIssues.map((issue) => <button className={issue.tone} key={issue.id} onClick={() => performDashboardAction(issue.action)}><AlertTriangle size={17} /><span><b>{issue.title}</b><small>{issue.detail}</small><em>{issue.impact}</em></span><ChevronRight size={16} /></button>)}</div> : <div className="dashboard-no-issues"><span>╰</span><div><b>当前经营正常</b><small>继续记录销售、退款和成本，系统会自动提示需要关注的变化。</small></div></div>}</section>
 
-      <section className="dashboard-focus-card" aria-label="下一步行动"><div><span className="eyebrow">今天值得关注</span><b>{primaryInsight?.title ?? readiness.title}</b><small>{primaryInsight?.text ?? readiness.description}</small></div><button onClick={() => performDashboardAction(primaryInsight?.action ?? "record")}>{primaryInsight?.action === "business" ? <BarChart3 size={18} /> : primaryIcon}{primaryInsight?.action === "business" ? "查看经营" : readiness.actionLabel}</button></section>
+      <section className="dashboard-quick-actions home-quick-actions" aria-label="快捷记账"><div className="home-section-heading"><h2>快捷记账</h2></div><div><button className="sale" onClick={onSale}><span className="quick-action-icon blue"><Plus size={21} /></span><span><b>记销售</b><small>记录一笔商品销售</small></span><ChevronRight size={18} /></button><button className="expense" onClick={onRecord}><span className="quick-action-icon mint"><Plus size={21} /></span><span><b>记收支</b><small>记录一笔收入或支出</small></span><ChevronRight size={18} /></button></div></section>
 
-      <section className="dashboard-quick-actions" aria-label="快速操作"><div className="section-heading compact"><div><span className="eyebrow">快速操作</span><h2>记一笔，算清楚</h2></div></div><div><button onClick={onProducts}><span className="quick-action-icon blue"><Plus size={18} /></span><b>新建商品</b></button><button onClick={onRecord}><span className="quick-action-icon mint"><ReceiptText size={18} /></span><b>记收支</b></button><button onClick={onAddMaterial}><span className="quick-action-icon amber">−</span><b>采购材料</b></button><button onClick={onBusiness}><span className="quick-action-icon ink"><BarChart3 size={18} /></span><b>经营分析</b></button></div></section>
+      <section className="dashboard-focus-card home-focus-card" aria-label="下一步行动"><div><span className="eyebrow">今天值得关注</span><b>{primaryInsight?.title ?? readiness.title}</b><small>{primaryInsight?.text ?? readiness.description}</small></div><button onClick={() => performDashboardAction(primaryInsight?.action ?? "record")}>{primaryInsight?.action === "business" ? <BarChart3 size={18} /> : primaryIcon}{primaryInsight?.action === "business" ? "查看经营" : readiness.actionLabel}</button></section>
     </div>
   );
 }

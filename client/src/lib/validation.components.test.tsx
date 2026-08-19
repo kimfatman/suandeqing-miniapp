@@ -164,20 +164,25 @@ describe("HomeView decision dashboard", () => {
     ];
     ledger.sales = [{ id: "home-sale", productId: ledger.products[0]!.id, date: "2026-08-08", quantity: 5, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [] }];
     const summary = summarizeLedger(ledger, "2026-08");
-    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
+    const onRecord = vi.fn();
+    const onSale = vi.fn();
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={onRecord} onSale={onSale} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
     expect(screen.getByLabelText("本月经营结果")).toBeTruthy();
-    expect(screen.getByText("本月经营利润")).toBeTruthy();
-    expect(screen.getByText("销售收入")).toBeTruthy();
-    expect(screen.getByText("经营健康度")).toBeTruthy();
-    expect(screen.getByText("本月收入目标")).toBeTruthy();
-    expect(screen.getByText("现金结余")).toBeTruthy();
-    expect(screen.getByLabelText("近7日利润趋势")).toBeTruthy();
-    expect(screen.getByText("看收入、成本与现金明细")).toBeTruthy();
-    expect(screen.queryByText("现金情况")).toBeNull();
-    expect(screen.queryByText("收入与成本对比")).toBeNull();
+    expect(screen.getByText("今天经营得怎么样？")).toBeTruthy();
+    expect(screen.getAllByText("销售收入").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("商品成本").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("经营费用").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("经营利润").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("本期经营概览")).toBeTruthy();
+    expect(screen.getByLabelText("商品表现")).toBeTruthy();
+    expect(screen.queryByLabelText("近7日利润趋势")).toBeNull();
     expect(screen.getByLabelText("库存健康")).toBeTruthy();
     expect(screen.getByText("还没有启用库存的商品")).toBeTruthy();
-    expect(screen.getByText("快速操作")).toBeTruthy();
+    expect(screen.getByLabelText("快捷记账")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /记销售/ }));
+    expect(onSale).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: /记收支/ }));
+    expect(onRecord).toHaveBeenCalledOnce();
   });
 
   it("switches the homepage product contribution ranking without changing the monthly issue calculation", () => {
@@ -188,12 +193,12 @@ describe("HomeView decision dashboard", () => {
       { id: "sale-late", productId: 2, date: "2026-07-30", quantity: 2, unitPrice: 15, note: "", unitDirectCostSnapshot: 2, refunds: [] },
     ];
     const summary = summarizeLedger(ledger, "2026-07");
-    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-07" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-07" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onSale={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
 
     expect(screen.getByRole("group", { name: "选择商品贡献范围" })).toBeTruthy();
-    expect(screen.getByText("商品赚钱能力 · 本月 TOP 2")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /商品表现/ }).textContent).toContain("TOP 2");
     fireEvent.click(screen.getByRole("button", { name: "7天" }));
-    expect(screen.getByText("商品赚钱能力 · 7天 TOP 1")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /商品表现/ }).textContent).toContain("TOP 1");
     expect(screen.getByText("月底商品")).toBeTruthy();
     expect(screen.queryByText("月初商品")).toBeNull();
   });

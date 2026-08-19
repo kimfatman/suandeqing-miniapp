@@ -1979,6 +1979,87 @@
   .profile-management-grid > button, .profile-data-grid > button { min-height: 98px; padding-inline: 2px; }
   .profile-management-grid b, .profile-data-grid b { font-size: 9px; }
 }
+
+/* 首页：用可复算的“收入－成本－费用＝利润”取代并列状态卡，首屏只保留经营结论。 */
+.home-content { background: #f8fafc; }
+.dashboard-page-heading { margin-bottom: var(--space-3); }
+.dashboard-page-heading h1 { margin-top: 0; }
+.dashboard-page-heading small { font-size: var(--font-body); }
+.dashboard-result-card { padding: var(--space-4); background: linear-gradient(135deg, #177ff7 0%, #087ff5 65%, #2567ca 100%); }
+.dashboard-result-card::before { width: 118px; height: 118px; right: -34px; top: 14px; border-width: 5px; border-left-color: rgb(255 255 255 / .18); border-bottom-color: rgb(255 255 255 / .18); }
+.dashboard-result-top > span:first-child { font-size: var(--font-card-title); }
+.dashboard-result-amount { align-items: flex-start; margin-top: var(--space-3); padding-right: 80px; }
+.dashboard-result-amount > div { display: grid; gap: 2px; }
+.dashboard-result-amount > div > small { color: rgb(255 255 255 / .78); font-size: 11px; font-weight: 700; }
+.dashboard-result-amount > strong, .dashboard-result-amount > div > strong { color: #fff; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: clamp(30px, 9vw, 38px); letter-spacing: -.07em; line-height: 1; }
+.dashboard-result-rate { position: absolute; top: 6px; right: 0; width: 64px; height: 64px; display: grid; place-content: center; color: #fff; border: 6px solid rgb(255 255 255 / .84); border-top-color: rgb(255 255 255 / .24); border-left-color: rgb(255 255 255 / .24); border-radius: 50%; font-family: "DM Sans", sans-serif; font-size: 14px; font-weight: 800; letter-spacing: -.04em; text-align: center; }
+.dashboard-result-rate small { display: block; margin-top: 1px; color: rgb(255 255 255 / .68); font-family: "Noto Sans SC", sans-serif; font-size: 8px; font-weight: 500; letter-spacing: 0; }
+.dashboard-result-card > p { margin-top: var(--space-2); font-size: 10px; }
+.dashboard-result-formula { margin-top: var(--space-3); padding-top: var(--space-3); }
+.dashboard-result-formula.four { grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr) 8px minmax(0, 1fr) 8px minmax(0, 1fr); }
+.dashboard-result-formula small { font-size: 8px; }
+.dashboard-result-formula b { font-size: 10px; }
+.dashboard-result-formula i { font-size: 14px; }
+.dashboard-result-foot { margin-top: var(--space-3); padding-top: var(--space-2); }
+
+.home-overview-card, .home-products-card, .home-quick-actions { margin-top: var(--space-4); padding: var(--space-4); border: 1px solid #e2eaf2; border-radius: var(--radius-ledger-reverse); background: #fff; box-shadow: 0 5px 18px rgb(11 24 54 / .03); }
+.home-section-heading { min-height: var(--tap-target); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.home-section-heading h2 { margin: 0; color: #17233c; font-size: var(--font-section-title); letter-spacing: -.035em; }
+.home-section-heading h2 span { color: #526477; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: var(--font-body); }
+.home-section-heading > button { min-height: var(--tap-target); display: inline-flex; align-items: center; gap: 1px; padding: 0; color: #087ff5; border: 0; background: transparent; font-size: var(--font-secondary); font-weight: 800; }
+.home-overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: var(--space-3); }
+.home-overview-grid > span { min-width: 0; display: grid; align-content: start; gap: 3px; padding: 0 var(--space-2); border-left: 1px solid #e7edf3; }
+.home-overview-grid > span:first-child { padding-left: 0; border-left: 0; }
+.home-overview-grid > span:last-child { padding-right: 0; }
+.home-overview-grid i { width: 29px; height: 29px; display: grid; place-items: center; border-radius: var(--radius-2); font-style: normal; }
+.home-overview-grid i.blue { color: #087ff5; background: #eaf4ff; }
+.home-overview-grid i.green { color: #168968; background: #e9fbf5; }
+.home-overview-grid i.orange { color: #d77724; background: #fff2e8; }
+.home-overview-grid small, .home-overview-grid b, .home-overview-grid em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-overview-grid small { margin-top: var(--space-1); color: #66778a; font-size: 9px; }
+.home-overview-grid b { color: #17233c; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 12px; letter-spacing: -.055em; }
+.home-overview-grid em { color: #8492a1; font-size: 8px; font-style: normal; }
+.home-overview-grid > span:last-child b { color: #168968; }
+.home-overview-grid > span.loss:last-child b { color: #c64d43; }
+
+.home-products-card { padding-bottom: var(--space-3); }
+.home-products-card .trend-range-switch { margin: var(--space-2) 0 0; }
+.home-products-card .dashboard-product-head { grid-template-columns: minmax(0, 1fr) 56px 58px 42px; margin: var(--space-3) 0 0 var(--space-5); font-size: 9px; }
+.home-products-card .dashboard-product-list button { grid-template-columns: var(--space-4) minmax(0, 1fr) 56px 58px 42px; min-height: 68px; gap: var(--space-1); padding-block: var(--space-2); }
+.home-products-card .dashboard-product-list button > em { width: 18px; height: 18px; font-size: 9px; }
+.home-products-card .dashboard-product-list button > span > b { font-size: 12px; }
+.home-products-card .dashboard-product-list button > span > i { margin-top: 6px; }
+.home-products-card .dashboard-product-list button > strong, .home-products-card .dashboard-product-list button > small { align-self: center; font-size: 10px; }
+.home-products-card .dashboard-product-list button > small { min-height: auto; justify-content: flex-end; text-align: right; }
+.home-products-card .dashboard-product-list button > small:nth-of-type(2) { color: #087ff5; }
+.home-products-card .dashboard-data-note { padding-top: var(--space-2); font-size: 9px; }
+
+.home-quick-actions { padding: var(--space-4); }
+.home-quick-actions > div:last-child { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-top: var(--space-3); }
+.home-quick-actions > div:last-child > button { min-width: 0; min-height: 76px; display: grid; grid-template-columns: 38px minmax(0, 1fr) 16px; align-items: center; gap: var(--space-2); padding: var(--space-3); border: 1px solid #dfe8f2; border-radius: var(--radius-3); background: #f6faff; text-align: left; }
+.home-quick-actions > div:last-child > button.expense { border-color: #d7eee5; background: #f4fcf8; }
+.home-quick-actions .quick-action-icon { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 50%; }
+.home-quick-actions .quick-action-icon.blue { color: #fff; background: #087ff5; }
+.home-quick-actions .quick-action-icon.mint { color: #fff; background: #20b486; }
+.home-quick-actions button > span:nth-child(2) { min-width: 0; display: grid; gap: 2px; }
+.home-quick-actions button b, .home-quick-actions button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-quick-actions button b { color: #263750; font-size: 12px; }
+.home-quick-actions button small { color: #8492a1; font-size: 9px; }
+.home-quick-actions button > svg { color: #087ff5; }
+.home-quick-actions button.expense > svg { color: #168968; }
+.home-focus-card { margin-top: var(--space-4); }
+
+@media (max-width: 390px) {
+  .dashboard-result-card { padding: var(--space-3); }
+  .dashboard-result-formula.four { gap: 1px; }
+  .dashboard-result-formula.four b { font-size: 9px; }
+  .home-overview-card, .home-products-card, .home-quick-actions { padding: var(--space-3); }
+  .home-overview-grid > span { padding-inline: 5px; }
+  .home-overview-grid b { font-size: 11px; }
+  .home-quick-actions > div:last-child { gap: var(--space-2); }
+  .home-quick-actions > div:last-child > button { grid-template-columns: 33px minmax(0, 1fr) 13px; padding: var(--space-2); }
+  .home-quick-actions .quick-action-icon { width: 32px; height: 32px; }
+}
 .dashboard-status-item.goal { border-color: #cfe4fb; background: #f8fbff; }
 .dashboard-status-item.goal > b { color: #087ff5; }
 .dashboard-status-item.health.healthy > b { color: #168968; }
