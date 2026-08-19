@@ -875,7 +875,8 @@ export type SalesTrendPoint = {
   salesCount: number;
 };
 
-const getTrendDateWindow = (selectedPeriod: string, range: CashTrendRange) => {
+/** 销售趋势与商品贡献共用同一业务日期窗口：当前月截至业务日，历史月截至月末。 */
+export const getTrendDateWindow = (selectedPeriod: string, range: CashTrendRange) => {
   const [year, month] = selectedPeriod.split("-").map(Number);
   const today = getBusinessDate();
   const isCurrentPeriod = selectedPeriod === today.slice(0, 7);

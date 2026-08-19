@@ -46,7 +46,7 @@ import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
 import * as XLSX from "xlsx";
 import {   applyIndustryTemplate, applyQuickCost,
   applyMonthlyIndirectPlan, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, getMonthlyIndirectPlanTiming, calculateProductIndirectAllocations, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, emptyMonthlyFixedCosts,
-  formatBusinessPeriod, getActiveCategories, getDashboardHealth, getInventoryHealth, getOperatingReminders, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getRevenueGoalProgress, getSalesTrendSeries, INDUSTRY_TEMPLATES, AllocationMethod, HiddenCostItem, IndustryKey, IndustryTemplate, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, resolveIndustryTemplate, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
+  formatBusinessPeriod, getActiveCategories, getDashboardHealth, getInventoryHealth, getOperatingReminders, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getRevenueGoalProgress, getSalesTrendSeries, getTrendDateWindow, INDUSTRY_TEMPLATES, AllocationMethod, CashTrendRange, HiddenCostItem, IndustryKey, IndustryTemplate, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, resolveIndustryTemplate, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
 import { startLogin } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
@@ -558,6 +558,7 @@ export function HomeView({
 }) {
   const [editingRevenueGoal, setEditingRevenueGoal] = useState(false);
   const [revenueGoalInput, setRevenueGoalInput] = useState(ledger.profile.monthlyBudget > 0 ? String(ledger.profile.monthlyBudget) : "");
+  const [contributionRange, setContributionRange] = useState<CashTrendRange>("month");
   const hasSalesResult = summary.profitReady;
   const hasProduct = product.id !== 0;
   const operatingResult = summary.operatingResult;
@@ -566,10 +567,11 @@ export function HomeView({
   const resultCost = Math.max(summary.salesRevenue - operatingResult, 0);
   const missingCostProductCount = products.filter((item) => item.direct <= 0 && item.bom.length === 0).length;
   const unpricedProductCount = products.filter((item) => item.price <= 0).length;
-  const contributions = getProductContributionData(products, sales, period);
+  const monthlyContributions = useMemo(() => getProductContributionData(products, sales, period), [products, sales, period]);
+  const contributions = useMemo(() => getProductContributionData(products, sales, period, contributionRange), [products, sales, period, contributionRange]);
   const currentTemplate = useMemo(() => resolveIndustryTemplate(ledger.profile.industry, ledger.profile.industryTemplateOverrides), [ledger.profile.industry, ledger.profile.industryTemplateOverrides]);
   const inventory = useMemo(() => getInventoryHealth(ledger), [ledger]);
-  const dashboardIssues = getDashboardIssues({ missingCostProductCount, unpricedProductCount, cashBalance: summary.cashBalance, contributions, inventory: currentTemplate.capabilities.inventory ? inventory : undefined });
+  const dashboardIssues = getDashboardIssues({ missingCostProductCount, unpricedProductCount, cashBalance: summary.cashBalance, contributions: monthlyContributions, inventory: currentTemplate.capabilities.inventory ? inventory : undefined });
   const dashboardInsights = getDashboardInsights({ issues: dashboardIssues, summary, readiness });
   const topContributions = contributions.slice(0, 5);
   const maxContributionRevenue = Math.max(...topContributions.map((item) => Math.abs(item.revenue)), 1);
@@ -625,7 +627,7 @@ export function HomeView({
         <button className="dashboard-trend-more" onClick={onBusiness}>看收入、成本与现金明细 <ArrowRight size={14} /></button>
       </section>
 
-      <section className="dashboard-products-card" aria-label="商品赚钱能力"><div className="section-heading compact"><div><span className="eyebrow">商品赚钱能力 TOP {Math.min(topContributions.length || 5, 5)}</span><h2>本期销售贡献</h2></div><button onClick={onProducts}>全部商品 <ChevronRight size={14} /></button></div>{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献率</span></div><div className="dashboard-product-list">{topContributions.map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{risk ? "需关注" : `${rate.toFixed(1)}%`}</small></button>; })}</div><p className="dashboard-data-note">直接贡献率使用销售时冻结的直接成本；房租、人工等分摊不会混入本表。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>还没有已结转的商品销售</b><small>记录第一笔销售后，这里会按真实销售快照展示商品贡献。</small><button onClick={onPrimaryAction}>记录销售 <ArrowRight size={14} /></button></div>}</section>
+      <section className="dashboard-products-card" aria-label="商品赚钱能力"><div className="section-heading compact"><div><span className="eyebrow">商品赚钱能力 · {getContributionRangeLabel(contributionRange)} TOP {Math.min(topContributions.length || 5, 5)}</span><h2>本期销售贡献</h2></div><button onClick={onProducts}>全部商品 <ChevronRight size={14} /></button></div><ContributionRangeSwitch range={contributionRange} onChange={setContributionRange} />{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献率</span></div><div className="dashboard-product-list">{topContributions.map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{risk ? "需关注" : `${rate.toFixed(1)}%`}</small></button>; })}</div><p className="dashboard-data-note">按业务日期汇总销售快照与退款；直接贡献率不含房租、人工等分摊。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>{getContributionRangeLabel(contributionRange)}没有已结转的商品销售</b><small>可切换范围查看已记录销售；收入与直接成本均来自销售快照。</small><button onClick={onPrimaryAction}>记录销售 <ArrowRight size={14} /></button></div>}</section>
 
       {currentTemplate.capabilities.inventory && <section className="dashboard-inventory-card" aria-label="库存健康"><div className="section-heading compact"><div><span className="eyebrow">库存经营</span><h2>库存健康</h2></div><button onClick={onProducts}>库存设置 <ChevronRight size={14} /></button></div>{inventory.trackedProductCount ? <><div className="inventory-summary"><span><small>资金占用</small><b>{formatCurrency(inventory.totalInventoryValue)}</b></span><span><small>已启用库存</small><b>{inventory.trackedProductCount} 个</b></span><span className={inventory.insufficientCount ? "warning" : ""}><small>需补货</small><b>{inventory.insufficientCount} 个</b></span></div><div className="inventory-health-list">{inventory.items.slice(0, 3).map((item) => <button key={item.productId} className={item.status} onClick={onProducts}><span><b>{item.name}</b><small>{item.detail}</small></span><strong>{formatCurrency(item.inventoryValue)}</strong><em>{item.label}</em></button>)}</div><p className="dashboard-data-note">资金占用按当前完整成本估算；可售天数只参考近30日净销量，不是补货预测。</p>{inventory.untrackedProductCount > 0 && <p className="inventory-untracked-note">还有 {inventory.untrackedProductCount} 个商品未启用库存，不参与本卡分析。</p>}</> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>还没有启用库存的商品</b><small>在商品“更多操作”中设置可售库存后，系统才会计算资金占用和可售天数。</small><button onClick={onProducts}>去设置库存 <ArrowRight size={14} /></button></div>}</section>}
 
@@ -668,14 +670,16 @@ export function getProfitBridgeData(summary: Pick<ReturnType<typeof summarizeLed
   ];
 }
 
-export function getProductContributionData(products: LedgerProduct[], sales: SalesRecord[], period: string) {
+export function getProductContributionData(products: LedgerProduct[], sales: SalesRecord[], period: string, range: CashTrendRange = "month") {
+  const { start, end } = getTrendDateWindow(period, range);
+  const inRange = (date: string) => date >= start && date <= end;
   return products.map((product) => {
     let revenue = 0;
     let directCost = 0;
     let quantity = 0;
-    sales.filter((sale) => sale.productId === product.id).forEach((sale) => {
-      const saleInPeriod = sale.date.startsWith(period);
-      const refunds = (sale.refunds ?? []).filter((refund) => refund.date.startsWith(period));
+    sales.filter((sale) => sale.productId === product.id && sale.status !== "voided").forEach((sale) => {
+      const saleInPeriod = inRange(sale.date);
+      const refunds = (sale.refunds ?? []).filter((refund) => inRange(refund.date));
       const refundedQuantity = Math.min(refunds.reduce((sum, refund) => sum + Math.max(Number(refund.quantity) || 0, 0), 0), sale.quantity);
       const refundedAmount = Math.min(refunds.reduce((sum, refund) => sum + Math.max(Number(refund.amount) || 0, 0), 0), sale.quantity * sale.unitPrice);
       if (!saleInPeriod && refundedQuantity <= 0 && refundedAmount <= 0) return;
@@ -688,6 +692,14 @@ export function getProductContributionData(products: LedgerProduct[], sales: Sal
     });
     return { productId: product.id, name: product.name, revenue, directCost, contribution: revenue - directCost, quantity };
   }).filter((item) => item.revenue !== 0 || item.directCost !== 0).sort((a, b) => b.revenue - a.revenue);
+}
+
+const contributionRangeOptions: Array<{ value: CashTrendRange; label: string }> = [{ value: "7d", label: "7天" }, { value: "30d", label: "30天" }, { value: "month", label: "本月" }];
+
+export const getContributionRangeLabel = (range: CashTrendRange) => contributionRangeOptions.find((item) => item.value === range)?.label ?? "本月";
+
+function ContributionRangeSwitch({ range, onChange }: { range: CashTrendRange; onChange: (range: CashTrendRange) => void }) {
+  return <div className="trend-range-switch" role="group" aria-label="选择商品贡献范围">{contributionRangeOptions.map((item) => <button type="button" key={item.value} className={range === item.value ? "selected" : ""} aria-pressed={range === item.value} onClick={() => onChange(item.value)}>{item.label}</button>)}</div>;
 }
 
 export function MiniTrendChart({ series, rangeLabel }: { series: Array<{ label: string; income: number; expenses: number }>; rangeLabel: string }) {
@@ -752,12 +764,12 @@ export function ProfitBridgeChart({ summary }: { summary: Pick<ReturnType<typeof
 }
 
 function ProductContributionChart({ products, sales, period }: { products: LedgerProduct[]; sales: SalesRecord[]; period: string }) {
-  const rows = getProductContributionData(products, sales, period);
+  const [range, setRange] = useState<CashTrendRange>("month");
+  const rows = useMemo(() => getProductContributionData(products, sales, period, range), [products, sales, period, range]);
   const [selectedId, setSelectedId] = useState(rows[0]?.productId ?? 0);
   const selected = rows.find((item) => item.productId === selectedId) ?? rows[0];
   const max = Math.max(...rows.map((item) => Math.abs(item.revenue)), 1);
-  if (!rows.length) return null;
-  return <section className="product-contribution-chart" aria-label="商品销售贡献图"><div className="section-heading compact"><div><span className="eyebrow">商品经营</span><h2>销售贡献</h2></div><small>仅含已结转直接成本</small></div><div className="contribution-bars">{rows.map((item) => <button key={item.productId} className={selected?.productId === item.productId ? "selected" : ""} onClick={() => setSelectedId(item.productId)}><span>{item.name}</span><i><b style={{ width: `${Math.max(Math.abs(item.revenue) / max * 100, 5)}%` }} /></i><strong>{formatCurrency(item.revenue)}</strong></button>)}</div><div className="chart-tooltip product-contribution-tooltip"><b>{selected?.name}</b><span>销售收入 {formatCurrency(selected?.revenue ?? 0)} · 已结转直接成本 {formatCurrency(selected?.directCost ?? 0)}</span><strong>直接贡献 {formatCurrency(selected?.contribution ?? 0)}</strong><small>{selected?.quantity ?? 0} 件净销量；房租、人工等分摊请在“成本分析”查看。</small></div></section>;
+  return <section className="product-contribution-chart" aria-label="商品销售贡献图"><div className="section-heading compact"><div><span className="eyebrow">商品经营 · {getContributionRangeLabel(range)}</span><h2>销售贡献</h2></div><small>仅含已结转直接成本</small></div><ContributionRangeSwitch range={range} onChange={setRange} />{rows.length ? <><div className="contribution-bars">{rows.map((item) => <button key={item.productId} className={selected?.productId === item.productId ? "selected" : ""} onClick={() => setSelectedId(item.productId)}><span>{item.name}</span><i><b style={{ width: `${Math.max(Math.abs(item.revenue) / max * 100, 5)}%` }} /></i><strong>{formatCurrency(item.revenue)}</strong></button>)}</div><div className="chart-tooltip product-contribution-tooltip"><b>{selected?.name}</b><span>销售收入 {formatCurrency(selected?.revenue ?? 0)} · 已结转直接成本 {formatCurrency(selected?.directCost ?? 0)}</span><strong>直接贡献 {formatCurrency(selected?.contribution ?? 0)}</strong><small>{selected?.quantity ?? 0} 件净销量；房租、人工等分摊请在“成本分析”查看。</small></div></> : <div className="chart-empty"><BarChart3 size={20} /><strong>{getContributionRangeLabel(range)}暂无商品销售贡献</strong><span>可切换范围查看其他已结转销售。</span></div>}</section>;
 }
 
 export function ProductsView({ products, activeProductId, fundingCost, sales, period, onSelect, onPricing, productCostAction, productCostLabel, onQuickCost, onBom, onAdd, onDelete, onInventory, onCostAnalysis }: { products: LedgerProduct[]; activeProductId: number; fundingCost: number; sales: SalesRecord[]; period: string; onSelect: (id: number) => void; onPricing: () => void; productCostAction: string; productCostLabel: string; onQuickCost: () => void; onBom: () => void; onAdd: () => void; onDelete?: (product: LedgerProduct) => void; onInventory?: (product: LedgerProduct) => void; onCostAnalysis?: (product: LedgerProduct) => void }) {
