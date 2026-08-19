@@ -1,9 +1,17 @@
 import { z } from "zod";
 
+/** 兼容旧账本的默认模板版本；模板的实际版本以各注册项的 version 为准。 */
 export const INDUSTRY_TEMPLATE_VERSION = 1 as const;
 
 export const IndustryKeySchema = z.enum(["catering", "retail", "ecommerce", "beauty", "stall", "handmade"]);
 export type IndustryKey = z.infer<typeof IndustryKeySchema>;
+
+/** 注册表稳定 API：旧账本仍保存 IndustryKey，注册表通过映射兼容其历史值。 */
+export const IndustryTemplateIdSchema = z.enum(["restaurant", "retail", "ecommerce", "beauty", "vendor", "handmade"]);
+export type IndustryTemplateId = z.infer<typeof IndustryTemplateIdSchema>;
+
+export const IndustryTemplateStatusSchema = z.enum(["active", "deprecated"]);
+export type IndustryTemplateStatus = z.infer<typeof IndustryTemplateStatusSchema>;
 
 export const IndustryMetricKeySchema = z.enum(["cashBalance", "salesRevenue", "grossProfit", "directCost", "inventoryHealth", "lossRate", "customerValue", "laborEfficiency"]);
 export type IndustryMetricKey = z.infer<typeof IndustryMetricKeySchema>;
@@ -18,13 +26,23 @@ export const IndustryCostItemSchema = z.object({
 export type IndustryCostItem = z.infer<typeof IndustryCostItemSchema>;
 
 export const IndustryCapabilitiesSchema = z.object({
+  /** 统一能力矩阵：所有模板均须显式声明，页面和业务层不得据行业名判断。 */
   bom: z.boolean(),
+  monthlyAllocation: z.boolean(),
   inventory: z.boolean(),
+  purchasing: z.boolean(),
+  sales: z.boolean(),
+  refunds: z.boolean(),
+  cash: z.boolean(),
+  customers: z.boolean(),
+  suppliers: z.boolean(),
+  production: z.boolean(),
+  multiStore: z.boolean(),
+  /** PR #3 已有字段，继续作为兼容别名而非第二套开关。 */
   lossTracking: z.boolean(),
   cashOperations: z.boolean(),
   purchaseTracking: z.boolean(),
   salesSnapshots: z.boolean(),
-  monthlyAllocation: z.boolean(),
   appointmentTracking: z.boolean(),
   platformFees: z.boolean(),
 });
@@ -42,7 +60,9 @@ export type IndustryMetric = z.infer<typeof IndustryMetricSchema>;
  * 因此不改变当前商品成本、销售结转和现金核算逻辑。
  */
 export const IndustryTemplateSchema = z.object({
-  version: z.literal(INDUSTRY_TEMPLATE_VERSION),
+  id: IndustryTemplateIdSchema,
+  version: z.number().int().positive(),
+  status: IndustryTemplateStatusSchema,
   key: IndustryKeySchema,
   name: z.string().min(1),
   label: z.string().min(1),
@@ -90,12 +110,20 @@ const metrics = {
 
 const standardCapabilities: IndustryCapabilities = {
   bom: true,
+  monthlyAllocation: true,
   inventory: true,
+  purchasing: true,
+  sales: true,
+  refunds: true,
+  cash: true,
+  customers: false,
+  suppliers: true,
+  production: true,
+  multiStore: false,
   lossTracking: true,
   cashOperations: true,
   purchaseTracking: true,
   salesSnapshots: true,
-  monthlyAllocation: true,
   appointmentTracking: false,
   platformFees: false,
 };
@@ -104,7 +132,7 @@ const makeTemplate = (template: IndustryTemplate): IndustryTemplate => IndustryT
 
 const officialTemplates = [
   makeTemplate({
-    version: 1, key: "catering", name: "餐饮饮品", label: "餐饮饮品", shortLabel: "餐饮", description: "配方、损耗、包装与人工", businessItemName: "菜品/饮品",
+    id: "restaurant", version: 1, status: "active", key: "catering", name: "餐饮饮品", label: "餐饮饮品", shortLabel: "餐饮", description: "配方、损耗、包装与人工", businessItemName: "菜品/饮品",
     categories: ["食材采购", "包装耗材", "平台服务", "房租水电", "人工分摊"],
     costItems: [{ id: "ingredient", label: "食材成本", layer: "direct", defaultCategory: "食材采购", enabledByDefault: true }, { id: "packaging", label: "包装耗材", layer: "direct", defaultCategory: "包装耗材", enabledByDefault: true }, { id: "delivery", label: "平台与配送", layer: "indirect", defaultCategory: "平台服务", enabledByDefault: true }],
     capabilities: { ...standardCapabilities, platformFees: true },
@@ -112,39 +140,39 @@ const officialTemplates = [
     hiddenCostCategory: "平台服务", hiddenCostDescription: "店主工时、配送、平台抽佣和设备占用", fundingCostDescription: "外卖平台服务费、短期周转利息和融资费用", productCostLabel: "商品配方", productCostAction: "编辑配方", productCostEmpty: "还没有配方材料，先添加一项食材。", quickPrimaryLabel: "食材成本", quickSecondaryOptions: ["包装费", "单件人工"], quickUnit: "份",
   }),
   makeTemplate({
-    version: 1, key: "retail", name: "社区零售", label: "社区零售", shortLabel: "零售", description: "进货、促销、配送与平台", businessItemName: "货品",
+    id: "retail", version: 1, status: "active", key: "retail", name: "社区零售", label: "社区零售", shortLabel: "零售", description: "进货、促销、配送与平台", businessItemName: "货品",
     categories: ["货品采购", "物流配送", "促销让利", "摊位房租", "平台服务"],
     costItems: [{ id: "purchase", label: "进货成本", layer: "direct", defaultCategory: "货品采购", enabledByDefault: true }, { id: "delivery", label: "物流配送", layer: "direct", defaultCategory: "物流配送", enabledByDefault: true }, { id: "promotion", label: "促销让利", layer: "indirect", defaultCategory: "促销让利", enabledByDefault: true }],
-    capabilities: { ...standardCapabilities, bom: false, platformFees: true },
+    capabilities: { ...standardCapabilities, bom: false, production: false, platformFees: true },
     coreMetrics: [metrics.grossProfit, metrics.salesRevenue, metrics.inventoryHealth, metrics.directCost, metrics.cashBalance], homeMetricOrder: ["grossProfit", "cashBalance", "salesRevenue", "inventoryHealth", "directCost"],
     hiddenCostCategory: "物流配送", hiddenCostDescription: "补货配送、促销让利、货架占用和平台服务", fundingCostDescription: "进货周转借款、供应商账期费用和融资费用", productCostLabel: "进货明细", productCostAction: "编辑进货明细", productCostEmpty: "还没有进货明细，先添加一项货品。", quickPrimaryLabel: "进货价", quickSecondaryOptions: ["单件配送费", "促销让利"], quickUnit: "件",
   }),
   makeTemplate({
-    version: 1, key: "ecommerce", name: "电商", label: "电商经营", shortLabel: "电商", description: "货源、平台费、物流与退货", businessItemName: "商品/SPU",
+    id: "ecommerce", version: 1, status: "active", key: "ecommerce", name: "电商", label: "电商经营", shortLabel: "电商", description: "货源、平台费、物流与退货", businessItemName: "商品/SPU",
     categories: ["货源采购", "快递物流", "平台服务", "推广投放", "售后退款"],
     costItems: [{ id: "supply", label: "货源成本", layer: "direct", defaultCategory: "货源采购", enabledByDefault: true }, { id: "freight", label: "单件快递", layer: "direct", defaultCategory: "快递物流", enabledByDefault: true }, { id: "platform", label: "平台服务费", layer: "indirect", defaultCategory: "平台服务", enabledByDefault: true }],
-    capabilities: { ...standardCapabilities, bom: false, platformFees: true },
+    capabilities: { ...standardCapabilities, bom: false, customers: true, production: false, platformFees: true },
     coreMetrics: [metrics.grossProfit, metrics.salesRevenue, metrics.directCost, metrics.inventoryHealth, metrics.cashBalance], homeMetricOrder: ["grossProfit", "salesRevenue", "cashBalance", "directCost", "inventoryHealth"],
     hiddenCostCategory: "平台服务", hiddenCostDescription: "平台佣金、推广投放、客服与仓储占用", fundingCostDescription: "备货周转利息、平台账期费用和融资费用", productCostLabel: "商品成本", productCostAction: "编辑货源明细", productCostEmpty: "还没有货源明细，先添加一项商品成本。", quickPrimaryLabel: "货源价", quickSecondaryOptions: ["单件快递", "平台服务费"], quickUnit: "件",
   }),
   makeTemplate({
-    version: 1, key: "beauty", name: "美业", label: "美业服务", shortLabel: "美业", description: "项目耗材、技师工时与预约服务", businessItemName: "服务项目",
+    id: "beauty", version: 1, status: "active", key: "beauty", name: "美业", label: "美业服务", shortLabel: "美业", description: "项目耗材、技师工时与预约服务", businessItemName: "服务项目",
     categories: ["服务耗材", "技师人工", "房租水电", "预约营销", "设备折旧"],
     costItems: [{ id: "consumables", label: "服务耗材", layer: "direct", defaultCategory: "服务耗材", enabledByDefault: true }, { id: "technician", label: "技师人工", layer: "direct", defaultCategory: "技师人工", enabledByDefault: true }, { id: "room", label: "场地与设备", layer: "indirect", defaultCategory: "房租水电", enabledByDefault: true }],
-    capabilities: { ...standardCapabilities, bom: false, inventory: false, lossTracking: false, appointmentTracking: true },
+    capabilities: { ...standardCapabilities, bom: false, inventory: false, customers: true, production: false, lossTracking: false, appointmentTracking: true },
     coreMetrics: [metrics.grossProfit, metrics.salesRevenue, metrics.customerValue, metrics.laborEfficiency, metrics.cashBalance], homeMetricOrder: ["grossProfit", "salesRevenue", "customerValue", "laborEfficiency", "cashBalance"],
     hiddenCostCategory: "技师人工", hiddenCostDescription: "技师工时、房租水电、设备折旧和预约营销", fundingCostDescription: "设备分期利息、装修周转和融资费用", productCostLabel: "项目成本", productCostAction: "编辑项目成本", productCostEmpty: "还没有项目耗材或人工，先添加一项成本。", quickPrimaryLabel: "服务耗材", quickSecondaryOptions: ["技师人工", "单次场地分摊"], quickUnit: "次",
   }),
   makeTemplate({
-    version: 1, key: "stall", name: "商贩", label: "商贸摆摊", shortLabel: "商贩", description: "进货、摊位、损耗、库存与现金", businessItemName: "货品",
+    id: "vendor", version: 1, status: "active", key: "stall", name: "商贩", label: "商贸摆摊", shortLabel: "商贩", description: "进货、摊位、损耗、库存与现金", businessItemName: "货品",
     categories: ["进货成本", "摊位费用", "交通配送", "货品损耗", "尾货折价"],
     costItems: [{ id: "purchase", label: "进货成本", layer: "direct", defaultCategory: "进货成本", enabledByDefault: true }, { id: "loss", label: "损耗与尾货", layer: "direct", defaultCategory: "货品损耗", enabledByDefault: true }, { id: "stall", label: "摊位与交通", layer: "indirect", defaultCategory: "摊位费用", enabledByDefault: true }],
-    capabilities: { ...standardCapabilities, bom: false, monthlyAllocation: false, platformFees: false },
+    capabilities: { ...standardCapabilities, bom: false, monthlyAllocation: false, production: false, platformFees: false },
     coreMetrics: [metrics.grossProfit, metrics.salesRevenue, metrics.inventoryHealth, metrics.lossRate, metrics.cashBalance], homeMetricOrder: ["grossProfit", "cashBalance", "salesRevenue", "inventoryHealth", "lossRate"],
     hiddenCostCategory: "交通配送", hiddenCostDescription: "摊位、交通、尾货损耗和临时人工", fundingCostDescription: "进货周转、摊位押金借款和融资费用", productCostLabel: "货品成本", productCostAction: "编辑货品成本", productCostEmpty: "还没有货品成本明细，先添加一项进货。", quickPrimaryLabel: "拿货价", quickSecondaryOptions: ["摊位交通分摊", "尾货损耗"], quickUnit: "件",
   }),
   makeTemplate({
-    version: 1, key: "handmade", name: "手作生产", label: "手作生产", shortLabel: "手作", description: "材料、工时、工具与试做", businessItemName: "手作商品",
+    id: "handmade", version: 1, status: "active", key: "handmade", name: "手作生产", label: "手作生产", shortLabel: "手作", description: "材料、工时、工具与试做", businessItemName: "手作商品",
     categories: ["材料采购", "包材耗材", "手工工时", "设备工具", "试做报废"],
     costItems: [{ id: "material", label: "材料成本", layer: "direct", defaultCategory: "材料采购", enabledByDefault: true }, { id: "labor", label: "直接人工", layer: "direct", defaultCategory: "手工工时", enabledByDefault: true }, { id: "tool", label: "工具与折旧", layer: "indirect", defaultCategory: "设备工具", enabledByDefault: true }],
     capabilities: standardCapabilities,
@@ -163,18 +191,100 @@ const freezeTemplate = (template: IndustryTemplate): IndustryTemplate => Object.
   quickSecondaryOptions: Object.freeze([...template.quickSecondaryOptions]) as unknown as string[],
 });
 
-/** 官方模板为冻结只读配置；解析用户偏好时永远不在此对象上写入。 */
-export const OFFICIAL_INDUSTRY_TEMPLATES = Object.freeze(Object.fromEntries(officialTemplates.map((template) => [template.key, freezeTemplate(template)])) as Record<IndustryKey, Readonly<IndustryTemplate>>);
+/** 注册项将稳定 ID、版本、默认配置及能力矩阵聚合在同一处。 */
+export type IndustryTemplateRegistration = Readonly<{
+  id: IndustryTemplateId;
+  name: string;
+  version: number;
+  status: IndustryTemplateStatus;
+  schema: typeof IndustryTemplateSchema;
+  defaultConfig: Readonly<IndustryTemplate>;
+  capabilities: Readonly<IndustryCapabilities>;
+}>;
+
+const createIndustryTemplateRegistration = (template: IndustryTemplate): IndustryTemplateRegistration => {
+  const defaultConfig = freezeTemplate(IndustryTemplateSchema.parse(template));
+  return Object.freeze({
+    id: defaultConfig.id,
+    name: defaultConfig.name,
+    version: defaultConfig.version,
+    status: defaultConfig.status,
+    schema: IndustryTemplateSchema,
+    defaultConfig,
+    capabilities: defaultConfig.capabilities,
+  });
+};
+
+/**
+ * 仅承担模板发现与版本索引，不承担数据迁移或模板升级。
+ * 未知ID/版本明确返回 null，调用方不得将其静默替换为餐饮模板。
+ */
+export const createIndustryTemplateRegistry = (entries: readonly IndustryTemplateRegistration[]) => {
+  const registrations = entries.map((entry) => Object.freeze({ ...entry }));
+  const identifiers = new Set<string>();
+  registrations.forEach((entry) => {
+    const identifier = `${entry.id}@${entry.version}`;
+    if (identifiers.has(identifier)) throw new Error(`重复的行业模板注册：${identifier}`);
+    if (entry.schema.safeParse(entry.defaultConfig).success === false) throw new Error(`无效的行业模板配置：${identifier}`);
+    if (JSON.stringify(entry.capabilities) !== JSON.stringify(entry.defaultConfig.capabilities)) throw new Error(`能力矩阵与默认配置不一致：${identifier}`);
+    identifiers.add(identifier);
+  });
+  const registrationsFor = (id: IndustryTemplateId | string) => {
+    const parsedId = IndustryTemplateIdSchema.safeParse(id);
+    return parsedId.success ? registrations.filter((entry) => entry.id === parsedId.data).sort((left, right) => right.version - left.version) : [];
+  };
+  const getTemplate = (id: IndustryTemplateId | string, version?: number) => {
+    const candidates = registrationsFor(id);
+    if (version !== undefined) return candidates.find((entry) => entry.version === version) ?? null;
+    return candidates[0] ?? null;
+  };
+  return Object.freeze({
+    listTemplates: () => [...registrations],
+    getTemplate,
+    getDefaultTemplate: (id: IndustryTemplateId | string) => registrationsFor(id).find((entry) => entry.status === "active") ?? getTemplate(id),
+    getTemplateCapabilities: (id: IndustryTemplateId | string, version?: number) => getTemplate(id, version)?.capabilities ?? null,
+  });
+};
+
+export const INDUSTRY_TEMPLATE_REGISTRY = createIndustryTemplateRegistry(officialTemplates.map(createIndustryTemplateRegistration));
+
+/** 面向业务层的统一查询入口。 */
+export const listTemplates = () => INDUSTRY_TEMPLATE_REGISTRY.listTemplates();
+export const getTemplate = (id: IndustryTemplateId | string, version?: number) => INDUSTRY_TEMPLATE_REGISTRY.getTemplate(id, version);
+export const getDefaultTemplate = (id: IndustryTemplateId | string) => INDUSTRY_TEMPLATE_REGISTRY.getDefaultTemplate(id);
+export const getTemplateCapabilities = (id: IndustryTemplateId | string, version?: number) => INDUSTRY_TEMPLATE_REGISTRY.getTemplateCapabilities(id, version);
+
+const legacyKeyToTemplateId: Record<IndustryKey, IndustryTemplateId> = {
+  catering: "restaurant",
+  retail: "retail",
+  ecommerce: "ecommerce",
+  beauty: "beauty",
+  stall: "vendor",
+  handmade: "handmade",
+};
+
+/** 官方模板为冻结只读配置；保留现有以 IndustryKey 读取的兼容导出。 */
+export const OFFICIAL_INDUSTRY_TEMPLATES = Object.freeze(Object.fromEntries(listTemplates().map((entry) => [entry.defaultConfig.key, entry.defaultConfig])) as Record<IndustryKey, Readonly<IndustryTemplate>>);
 export const INDUSTRY_TEMPLATES = Object.freeze(Object.values(OFFICIAL_INDUSTRY_TEMPLATES));
 export const DEFAULT_INDUSTRY_KEY: IndustryKey = "catering";
 
-export const getOfficialIndustryTemplate = (key?: IndustryKey | string | null) => OFFICIAL_INDUSTRY_TEMPLATES[IndustryKeySchema.safeParse(key).success ? key as IndustryKey : DEFAULT_INDUSTRY_KEY];
+const parseTemplateId = (key?: IndustryKey | IndustryTemplateId | string | null): IndustryTemplateId | null => {
+  const registered = IndustryTemplateIdSchema.safeParse(key);
+  if (registered.success) return registered.data;
+  const legacy = IndustryKeySchema.safeParse(key);
+  return legacy.success ? legacyKeyToTemplateId[legacy.data] : null;
+};
+
+/** 旧账本入口继续对无效行业回退到既有餐饮默认；注册表公开查询不会回退。 */
+export const getOfficialIndustryTemplate = (key?: IndustryKey | IndustryTemplateId | string | null) => {
+  const templateId = parseTemplateId(key) ?? legacyKeyToTemplateId[DEFAULT_INDUSTRY_KEY];
+  return getDefaultTemplate(templateId)?.defaultConfig ?? OFFICIAL_INDUSTRY_TEMPLATES[DEFAULT_INDUSTRY_KEY];
+};
 
 const unique = <T>(items: readonly T[]) => Array.from(new Set(items));
 
-/** 返回可供页面和账本读取的解析配置；所有数组和对象均为新副本。 */
-export const resolveIndustryTemplate = (key?: IndustryKey | string | null, rawOverrides?: IndustryTemplateUserOverrides | null): IndustryTemplate => {
-  const official = getOfficialIndustryTemplate(key);
+/** 以一份已注册官方配置为基线解析用户覆盖；所有数组和对象均为新副本。 */
+const resolveTemplateConfig = (official: Readonly<IndustryTemplate>, rawOverrides?: IndustryTemplateUserOverrides | null): IndustryTemplate => {
   const overrides = IndustryTemplateUserOverridesSchema.safeParse(rawOverrides).success ? rawOverrides : undefined;
   const requestedOrder = overrides?.homeMetricOrder ?? official.homeMetricOrder;
   const supportedMetricKeys = new Set(official.coreMetrics.map((metric) => metric.key));
@@ -193,6 +303,19 @@ export const resolveIndustryTemplate = (key?: IndustryKey | string | null, rawOv
     homeMetricOrder: homeMetricOrder.length ? homeMetricOrder : [...official.homeMetricOrder],
     quickSecondaryOptions: [...official.quickSecondaryOptions],
   };
+};
+
+/** 按稳定模板ID与版本解析；未知ID或版本明确返回 null，不静默回退。 */
+export const resolveTemplateAtVersion = (id: IndustryTemplateId | string, version: number, rawOverrides?: IndustryTemplateUserOverrides | null) => {
+  const registration = getTemplate(id, version);
+  return registration ? resolveTemplateConfig(registration.defaultConfig, rawOverrides) : null;
+};
+
+/** 保留PR #3的旧账本入口，并在内部通过注册表取得模板。 */
+export const resolveIndustryTemplate = (key?: IndustryKey | IndustryTemplateId | string | null, rawOverrides?: IndustryTemplateUserOverrides | null): IndustryTemplate => {
+  const templateId = parseTemplateId(key) ?? legacyKeyToTemplateId[DEFAULT_INDUSTRY_KEY];
+  const registration = getDefaultTemplate(templateId) ?? getDefaultTemplate(legacyKeyToTemplateId[DEFAULT_INDUSTRY_KEY]);
+  return resolveTemplateConfig(registration!.defaultConfig, rawOverrides);
 };
 
 /** 为持久化前的用户偏好生成经schema校验的新对象，避免调用方保留可变引用。 */

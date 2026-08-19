@@ -2,8 +2,8 @@
 import { DEFAULT_INDUSTRY_KEY, getOfficialIndustryTemplate, INDUSTRY_TEMPLATES, INDUSTRY_TEMPLATE_VERSION, normalizeIndustryTemplateOverrides, resolveIndustryTemplate } from "./industryTemplates";
 import type { IndustryKey, IndustryTemplate, IndustryTemplateUserOverrides } from "./industryTemplates";
 
-export { DEFAULT_INDUSTRY_KEY, getOfficialIndustryTemplate, INDUSTRY_TEMPLATES, INDUSTRY_TEMPLATE_VERSION, normalizeIndustryTemplateOverrides, resolveIndustryTemplate } from "./industryTemplates";
-export type { IndustryCapabilities, IndustryCostItem, IndustryKey, IndustryMetric, IndustryMetricKey, IndustryTemplate, IndustryTemplateUserOverrides } from "./industryTemplates";
+export { DEFAULT_INDUSTRY_KEY, getDefaultTemplate, getOfficialIndustryTemplate, getTemplate, getTemplateCapabilities, INDUSTRY_TEMPLATE_REGISTRY, INDUSTRY_TEMPLATES, INDUSTRY_TEMPLATE_VERSION, listTemplates, normalizeIndustryTemplateOverrides, resolveIndustryTemplate, resolveTemplateAtVersion } from "./industryTemplates";
+export type { IndustryCapabilities, IndustryCostItem, IndustryKey, IndustryMetric, IndustryMetricKey, IndustryTemplate, IndustryTemplateId, IndustryTemplateRegistration, IndustryTemplateStatus, IndustryTemplateUserOverrides } from "./industryTemplates";
 
 export type Material = {
   id: string;
