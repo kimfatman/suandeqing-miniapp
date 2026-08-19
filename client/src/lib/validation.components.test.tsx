@@ -9,7 +9,7 @@ import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
-import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProfitBridgeData, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, MiniTrendChart, ProductNameSheet, ProductsView, ProfileView, ProfitBridgeChart, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProfitBridgeData, getRefundableSaleQuantity, HomeView, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, MiniTrendChart, ProductNameSheet, ProductsView, ProfileView, ProfitBridgeChart, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
 
 class TestResizeObserver {
@@ -116,6 +116,25 @@ describe("Dynamic chart accounting boundaries", () => {
     const product = { ...seedLedger().products[0], id: 42, name: "快照商品", direct: 99 };
     const sales = [{ id: "sale-1", productId: 42, date: "2026-08-12", quantity: 3, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [{ id: "refund-1", date: "2026-08-13", quantity: 1, amount: 20, note: "客户退款", restock: true }] }];
     expect(getProductContributionData([product], sales, "2026-08")).toEqual([expect.objectContaining({ name: "快照商品", revenue: 40, directCost: 16, contribution: 24, quantity: 2 })]);
+  });
+});
+
+describe("HomeView decision dashboard", () => {
+  it("presents sales-snapshot profit separately from actual cash in the redesigned homepage", () => {
+    const ledger = seedLedger();
+    ledger.records = [
+      { id: "home-income", type: "income", amount: 100, category: "销售收入", note: "已收", date: "2026-08-08", source: "sale", sourceId: "home-sale" },
+      { id: "home-expense", type: "expense", amount: 20, category: "进货采购", note: "采购", date: "2026-08-08", source: "purchase" },
+    ];
+    ledger.sales = [{ id: "home-sale", productId: ledger.products[0]!.id, date: "2026-08-08", quantity: 5, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [] }];
+    const summary = summarizeLedger(ledger, "2026-08");
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onPrimaryAction={vi.fn()} />);
+    expect(screen.getByLabelText("本月经营结果")).toBeTruthy();
+    expect(screen.getByText("本月经营利润")).toBeTruthy();
+    expect(screen.getByText("销售收入")).toBeTruthy();
+    expect(screen.getByText("现金情况")).toBeTruthy();
+    expect(screen.getByText("现金仅反映实际收付款，含本金还款。")).toBeTruthy();
+    expect(screen.getByText("快速操作")).toBeTruthy();
   });
 });
 
