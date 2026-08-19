@@ -9,7 +9,7 @@ import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
-import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProfitBridgeData, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProfitBridgeData, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, MiniTrendChart, ProductNameSheet, ProductsView, ProfileView, ProfitBridgeChart, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
 
 class TestResizeObserver {
@@ -92,6 +92,24 @@ describe("Dynamic chart accounting boundaries", () => {
     const rows = getProfitBridgeData({ salesRevenue: 100, costOfSales: 42, allocatedIndirectCosts: 18, financingCosts: 5, operatingResult: 35 });
     expect(rows.map((row) => [row.key, row.amount])).toEqual([["revenue", 100], ["direct", 42], ["allocation", 18], ["funding", 5], ["result", 35]]);
     expect(rows.find((row) => row.key === "result")?.direction).toBe("result");
+  });
+
+  it("uses a compact date selector instead of rendering every trend date as a tab", () => {
+    const series = Array.from({ length: 30 }, (_, index) => ({ label: `08/${String(index + 1).padStart(2, "0")}`, income: index === 29 ? 3455 : 0, expenses: 0 }));
+    render(<MiniTrendChart series={series} rangeLabel="近 30 天" />);
+    expect(screen.getByRole("combobox", { name: "选择现金收付日期" })).toBeTruthy();
+    expect(screen.queryByRole("tablist", { name: "选择现金收付日期" })).toBeNull();
+    expect(screen.getByText("净收付 ¥3,455.00")).toBeTruthy();
+  });
+
+  it("keeps only non-zero cost steps in the profit path while preserving the final result", () => {
+    render(<ProfitBridgeChart summary={{ salesRevenue: 100, costOfSales: 42, allocatedIndirectCosts: 0, financingCosts: 0, operatingResult: 58 }} />);
+    expect(screen.getByRole("button", { name: /销售收入/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /直接成本/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /间接分摊/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /经营结果/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /直接成本/ }));
+    expect(screen.getByText("扣减 ¥42.00；数据来自已结转销售快照。")).toBeTruthy();
   });
 
   it("aggregates a product contribution from the sale-time direct-cost snapshot and period refunds", () => {
