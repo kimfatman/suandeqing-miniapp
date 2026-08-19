@@ -127,6 +127,30 @@ describe("Dynamic chart accounting boundaries", () => {
     const sales = [{ id: "sale-1", productId: 42, date: "2026-08-12", quantity: 3, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [{ id: "refund-1", date: "2026-08-13", quantity: 1, amount: 20, note: "客户退款", restock: true }] }];
     expect(getProductContributionData([product], sales, "2026-08")).toEqual([expect.objectContaining({ name: "快照商品", revenue: 40, directCost: 16, contribution: 24, quantity: 2 })]);
   });
+
+  it("filters product contribution by the shared 7-day, 30-day and monthly business-date windows", () => {
+    const [first, second] = seedLedger().products;
+    const products = [{ ...first!, id: 1, name: "月初商品" }, { ...second!, id: 2, name: "月底商品" }];
+    const sales = [
+      { id: "sale-start", productId: 1, date: "2026-07-01", quantity: 1, unitPrice: 100, note: "", unitDirectCostSnapshot: 40, refunds: [] },
+      { id: "sale-mid", productId: 1, date: "2026-07-15", quantity: 3, unitPrice: 20, note: "", unitDirectCostSnapshot: 5, refunds: [{ id: "refund-late", date: "2026-07-28", quantity: 1, amount: 20, note: "退款" }] },
+      { id: "sale-late", productId: 2, date: "2026-07-30", quantity: 2, unitPrice: 15, note: "", unitDirectCostSnapshot: 2, refunds: [] },
+      { id: "sale-voided", productId: 2, date: "2026-07-30", quantity: 9, unitPrice: 99, note: "", unitDirectCostSnapshot: 1, status: "voided" as const, refunds: [] },
+    ];
+
+    expect(getProductContributionData(products, sales, "2026-07", "month")).toEqual([
+      expect.objectContaining({ name: "月初商品", revenue: 140, directCost: 50, contribution: 90, quantity: 3 }),
+      expect.objectContaining({ name: "月底商品", revenue: 30, directCost: 4, contribution: 26, quantity: 2 }),
+    ]);
+    expect(getProductContributionData(products, sales, "2026-07", "30d")).toEqual([
+      expect.objectContaining({ name: "月初商品", revenue: 40, directCost: 10, contribution: 30, quantity: 2 }),
+      expect.objectContaining({ name: "月底商品", revenue: 30, directCost: 4, contribution: 26, quantity: 2 }),
+    ]);
+    expect(getProductContributionData(products, sales, "2026-07", "7d")).toEqual([
+      expect.objectContaining({ name: "月底商品", revenue: 30, directCost: 4, contribution: 26, quantity: 2 }),
+      expect.objectContaining({ name: "月初商品", revenue: -20, directCost: -5, contribution: -15, quantity: -1 }),
+    ]);
+  });
 });
 
 describe("HomeView decision dashboard", () => {
@@ -152,6 +176,24 @@ describe("HomeView decision dashboard", () => {
     expect(screen.getByLabelText("库存健康")).toBeTruthy();
     expect(screen.getByText("还没有启用库存的商品")).toBeTruthy();
     expect(screen.getByText("快速操作")).toBeTruthy();
+  });
+
+  it("switches the homepage product contribution ranking without changing the monthly issue calculation", () => {
+    const ledger = seedLedger();
+    ledger.products = [{ ...ledger.products[0]!, id: 1, name: "月初商品" }, { ...ledger.products[0]!, id: 2, name: "月底商品" }];
+    ledger.sales = [
+      { id: "sale-start", productId: 1, date: "2026-07-01", quantity: 1, unitPrice: 100, note: "", unitDirectCostSnapshot: 40, refunds: [] },
+      { id: "sale-late", productId: 2, date: "2026-07-30", quantity: 2, unitPrice: 15, note: "", unitDirectCostSnapshot: 2, refunds: [] },
+    ];
+    const summary = summarizeLedger(ledger, "2026-07");
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-07" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
+
+    expect(screen.getByRole("group", { name: "选择商品贡献范围" })).toBeTruthy();
+    expect(screen.getByText("商品赚钱能力 · 本月 TOP 2")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "7天" }));
+    expect(screen.getByText("商品赚钱能力 · 7天 TOP 1")).toBeTruthy();
+    expect(screen.getByText("月底商品")).toBeTruthy();
+    expect(screen.queryByText("月初商品")).toBeNull();
   });
 });
 
