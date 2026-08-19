@@ -298,3 +298,7 @@
 - [x] 核对GitHub仓库当前可见性、公开前敏感信息边界与默认分支状态。
 - [x] 将 kimfatman/suandeqing-miniapp 切换为公开仓库并核验公开地址可访问。
 - [x] 更新仓库推送记录，标记公开状态与核验结果。
+- [x] 核对公开仓库的默认分支、Issues/Discussions状态、现有保护规则与CI依赖版本。
+- [x] 新增GitHub Actions工作流，在Pull Request与main推送时执行依赖安装、Vitest测试、类型检查与生产构建。
+- [ ] 启用Issues与Discussions，并为main配置分支保护：必须通过CI检查且禁止直接推送。
+- [ ] 核验工作流文件、仓库协作设置与分支保护规则，并更新协作与推送记录。
