@@ -9,7 +9,7 @@ import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
-import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProfitBridgeData, getRefundableSaleQuantity, HomeView, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, MiniTrendChart, ProductNameSheet, ProductsView, ProfileView, ProfitBridgeChart, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { BusinessView, CashRecordsSheet, CategorySheet, CostAnalysisView, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostAnalysisLines, getCostMixData, getDashboardIssues, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProductDirectCostTrend, getProfitBridgeData, getRefundableSaleQuantity, HomeView, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, MiniTrendChart, ProductNameSheet, ProductsView, ProfileView, ProfitBridgeChart, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
 
 class TestResizeObserver {
@@ -135,6 +135,51 @@ describe("HomeView decision dashboard", () => {
     expect(screen.getByText("现金情况")).toBeTruthy();
     expect(screen.getByText("现金仅反映实际收付款，含本金还款。")).toBeTruthy();
     expect(screen.getByText("快速操作")).toBeTruthy();
+  });
+});
+
+describe("Product cost analysis dashboard", () => {
+  it("merges cost lines into a complete-cost structure without creating a cost that is not in the source data", () => {
+    const lines = getCostAnalysisLines([
+      { label: "咖啡豆", amount: 3.2, source: "材料", layer: "direct" as const },
+      { label: "房租", amount: 1.8, source: "月度分摊", layer: "operating" as const },
+      { label: "咖啡豆", amount: 0.8, source: "材料", layer: "direct" as const },
+    ], 5.8);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ label: "咖啡豆", amount: 4, share: expect.closeTo(4 / 5.8, 6) });
+    expect(lines.reduce((sum, line) => sum + line.amount, 0)).toBeCloseTo(5.8, 6);
+  });
+
+  it("uses only completed sales with a saved direct-cost snapshot for the cost trend", () => {
+    const trend = getProductDirectCostTrend([
+      { id: "trend-one", productId: 1, date: "2026-08-01", quantity: 2, unitPrice: 20, note: "", unitDirectCostSnapshot: 6, refunds: [] },
+      { id: "trend-two", productId: 1, date: "2026-08-03", quantity: 2, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [] },
+      { id: "trend-voided", productId: 1, date: "2026-08-04", quantity: 2, unitPrice: 20, note: "", unitDirectCostSnapshot: 1, status: "voided", refunds: [] },
+      { id: "other-product", productId: 2, date: "2026-08-04", quantity: 2, unitPrice: 20, note: "", unitDirectCostSnapshot: 1, refunds: [] },
+    ], 1, "30d");
+    expect(trend).toEqual([{ date: "2026-08-01", label: "08/01", unitCost: 6 }, { date: "2026-08-03", label: "08/03", unitCost: 8 }]);
+  });
+
+  it("keeps simulation separate from product price and renders a product-bound analysis view", () => {
+    const ledger = seedLedger();
+    const product = { ...ledger.products[0]!, price: 20 };
+    render(<CostAnalysisView product={product} products={[product]} costLines={[{ label: "材料", amount: 5, source: "材料明细", layer: "direct" }, { label: "房租", amount: 2, source: "月度分摊", layer: "operating" }]} fullCost={7} directCost={5} period="2026-08" sales={[]} plannedQuantity={10} onBack={vi.fn()} onSelectProduct={vi.fn()} onAddCost={vi.fn()} onPricing={vi.fn()} onAdjustAllocation={vi.fn()} />);
+    expect(screen.getByLabelText("单位盈亏结论")).toBeTruthy();
+    expect(screen.getByText("成本结构")).toBeTruthy();
+    expect(screen.getByText("盈亏模拟")).toBeTruthy();
+    expect(screen.getByText("保本分析")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "减少售价" }));
+    expect((screen.getByLabelText("模拟售价") as HTMLInputElement).value).toBe("19");
+    expect(product.price).toBe(20);
+  });
+
+  it("guides a product without cost data to add its first cost", () => {
+    const onAddCost = vi.fn();
+    const product = { ...seedLedger().products[0]!, price: 20, direct: 0, operating: 0, bom: [] };
+    render(<CostAnalysisView product={product} products={[product]} costLines={[]} fullCost={0} directCost={0} period="2026-08" sales={[]} plannedQuantity={0} onBack={vi.fn()} onSelectProduct={vi.fn()} onAddCost={onAddCost} onPricing={vi.fn()} onAdjustAllocation={vi.fn()} />);
+    expect(screen.getAllByText("还没有成本数据").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: /添加成本/ })[0]!);
+    expect(onAddCost).toHaveBeenCalledTimes(1);
   });
 });
 

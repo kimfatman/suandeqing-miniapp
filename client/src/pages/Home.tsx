@@ -101,11 +101,20 @@ const navItems = [
   { id: "profile" as Tab, label: "我的", icon: Menu },
 ];
 
+const getCostAnalysisRouteProductId = () => {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("view") !== "cost-analysis") return null;
+  const productId = Number(params.get("productId"));
+  return Number.isFinite(productId) && productId > 0 ? productId : null;
+};
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [costAnalysisProductId, setCostAnalysisProductId] = useState<number | null>(getCostAnalysisRouteProductId);
   const [showPricing, setShowPricing] = useState(false);
   const [ledger, setLedger] = useState(() => normalizeLedger(loadLedger()));
-  const [activeProductId, setActiveProductId] = useState(1);
+  const [activeProductId, setActiveProductId] = useState(() => getCostAnalysisRouteProductId() ?? 1);
   const [showMaterialPanel, setShowMaterialPanel] = useState(false);
   const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
   const [showQuickEntry, setShowQuickEntry] = useState(false);
@@ -271,7 +280,31 @@ export default function Home() {
   };
 
   const navigate = (tab: Tab) => {
+    if (costAnalysisProductId !== null) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("view");
+      url.searchParams.delete("productId");
+      window.history.pushState({}, "", url);
+    }
+    setCostAnalysisProductId(null);
     setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const openCostAnalysis = (productId: number) => {
+    setActiveProductId(productId);
+    setCostAnalysisProductId(productId);
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", "cost-analysis");
+    url.searchParams.set("productId", String(productId));
+    window.history.pushState({ view: "cost-analysis", productId }, "", url);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const closeCostAnalysis = () => {
+    setCostAnalysisProductId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("view");
+    url.searchParams.delete("productId");
+    window.history.pushState({}, "", url);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const openQuickEntry = () => setShowQuickEntry(true);
@@ -335,6 +368,7 @@ export default function Home() {
 
         {visibleImportantBanner && <ImportantMessageBanner message={visibleImportantBanner} onDismiss={() => setDismissedBannerId(visibleImportantBanner.id)} onOpen={() => { if (!visibleImportantBanner.readAt) markMessageRead.mutate({ userMessageId: visibleImportantBanner.id }); setInitialMessageDetail({ ...visibleImportantBanner, readAt: visibleImportantBanner.readAt ?? new Date() }); setDismissedBannerId(visibleImportantBanner.id); setShowMessages(true); }} />}
 
+        {costAnalysisProductId !== null ? <CostAnalysisView product={activeProducts.find((item) => item.id === costAnalysisProductId) ?? selectedProduct} products={activeProducts} costLines={pricingCostLines} fullCost={fullCost} directCost={pricingDirectCost} period={selectedPeriod} sales={ledger.sales} plannedQuantity={pricingAllocation?.outputQuantity ?? 0} onBack={closeCostAnalysis} onSelectProduct={openCostAnalysis} onAddCost={() => { closeCostAnalysis(); setShowQuickCost(true); }} onPricing={() => { closeCostAnalysis(); setShowPricing(true); }} onAdjustAllocation={() => { closeCostAnalysis(); setShowMonthlyAllocation(true); }} /> : <>
         {activeTab === "home" && (
           <HomeView
             ledger={ledger}
@@ -380,10 +414,12 @@ export default function Home() {
             onAdd={() => setShowProductNameSheet(true)}
             onDelete={(product) => setPendingProductDeletion(product)}
             onInventory={(product) => setInventoryProductId(product.id)}
+            onCostAnalysis={(product) => openCostAnalysis(product.id)}
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} productCount={activeProducts.length} period={selectedPeriod} onPeriodChange={setSelectedPeriod} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} onCashRecords={() => setShowCashRecords(true)} sales={ledger.sales} products={ledger.products} onRefund={(saleId) => setRefundSaleId(saleId)} onDeleteSale={(saleId) => setDeletingSaleId(saleId)} />}
         {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
+        </>}
       </main>
 
       <nav className="mobile-tabbar" aria-label="主导航">
@@ -684,7 +720,7 @@ function ProductContributionChart({ products, sales, period }: { products: Ledge
   return <section className="product-contribution-chart" aria-label="商品销售贡献图"><div className="section-heading compact"><div><span className="eyebrow">商品经营</span><h2>销售贡献</h2></div><small>仅含已结转直接成本</small></div><div className="contribution-bars">{rows.map((item) => <button key={item.productId} className={selected?.productId === item.productId ? "selected" : ""} onClick={() => setSelectedId(item.productId)}><span>{item.name}</span><i><b style={{ width: `${Math.max(Math.abs(item.revenue) / max * 100, 5)}%` }} /></i><strong>{formatCurrency(item.revenue)}</strong></button>)}</div><div className="chart-tooltip product-contribution-tooltip"><b>{selected?.name}</b><span>销售收入 {formatCurrency(selected?.revenue ?? 0)} · 已结转直接成本 {formatCurrency(selected?.directCost ?? 0)}</span><strong>直接贡献 {formatCurrency(selected?.contribution ?? 0)}</strong><small>{selected?.quantity ?? 0} 件净销量；房租、人工等分摊请在“成本分析”查看。</small></div></section>;
 }
 
-export function ProductsView({ products, activeProductId, fundingCost, sales, period, onSelect, onPricing, productCostAction, productCostLabel, onQuickCost, onBom, onAdd, onDelete, onInventory }: { products: LedgerProduct[]; activeProductId: number; fundingCost: number; sales: SalesRecord[]; period: string; onSelect: (id: number) => void; onPricing: () => void; productCostAction: string; productCostLabel: string; onQuickCost: () => void; onBom: () => void; onAdd: () => void; onDelete?: (product: LedgerProduct) => void; onInventory?: (product: LedgerProduct) => void }) {
+export function ProductsView({ products, activeProductId, fundingCost, sales, period, onSelect, onPricing, productCostAction, productCostLabel, onQuickCost, onBom, onAdd, onDelete, onInventory, onCostAnalysis }: { products: LedgerProduct[]; activeProductId: number; fundingCost: number; sales: SalesRecord[]; period: string; onSelect: (id: number) => void; onPricing: () => void; productCostAction: string; productCostLabel: string; onQuickCost: () => void; onBom: () => void; onAdd: () => void; onDelete?: (product: LedgerProduct) => void; onInventory?: (product: LedgerProduct) => void; onCostAnalysis?: (product: LedgerProduct) => void }) {
   const [showMoreActions, setShowMoreActions] = useState(false);
   if (!products.length) return <div className="page-content product-content empty-product-page"><section className="empty-state-card"><span className="eyebrow">商品</span><h1>还没有商品</h1><button className="primary-action" onClick={onAdd}><Plus size={18} /> 新建商品</button></section></div>;
   const selected = products.find((product) => product.id === activeProductId) ?? products[0];
@@ -710,10 +746,97 @@ export function ProductsView({ products, activeProductId, fundingCost, sales, pe
         <div className="detail-card-title"><div><div className="detail-brand-line"><BrandSignature tone="inverse" compact /><span>商品单件账</span></div><h2>{selected.name}</h2></div><span className={needsCost ? "status-pill warning" : "status-pill"}>{needsCost ? `待补${productCostLabel}` : needsPricing ? "待定价" : "已核算"}</span></div>
         <div className="product-chart-summary"><span>成本 <b>{formatCurrency(selected.operating)}</b></span><span>利润率 <b>{selected.price ? `${margin.toFixed(1)}%` : "—"}</b></span><span>库存 <b>{selected.stockQuantity === undefined ? "未启用" : selected.stockQuantity}</b></span></div>
         <CostCompositionChart product={selected} operatingCost={selected.operating} fullCost={selected.operating + fundingCost} />
-        <div className="product-action-pair"><button className="primary-action quick-cost-entry" onClick={onQuickCost}><Coins size={18} /><span>{needsCost ? "录入成本" : "更新成本"}<small>最多两项</small></span></button><button className={!needsCost && needsPricing ? "primary-action" : "secondary-card-action"} onClick={onPricing}><Sparkles size={18} /> {needsPricing ? "设置售价" : "查看定价"}</button><button className="secondary-card-action" aria-expanded={showMoreActions} onClick={() => setShowMoreActions((current) => !current)}>更多操作<ChevronRight size={16} /></button>{showMoreActions && <div className="product-more-actions"><button onClick={onBom}><ClipboardList size={16} /> {productCostAction}</button>{onInventory && <button onClick={() => onInventory(selected)}><ShoppingBag size={16} />库存设置</button>}{onDelete && <button className="danger" onClick={() => onDelete(selected)}><Trash2 size={16} />删除商品</button>}</div>}</div>
+        <div className="product-action-pair"><button className="primary-action quick-cost-entry" onClick={onQuickCost}><Coins size={18} /><span>{needsCost ? "录入成本" : "更新成本"}<small>最多两项</small></span></button><button className={!needsCost && needsPricing ? "primary-action" : "secondary-card-action"} onClick={onPricing}><Sparkles size={18} /> {needsPricing ? "设置售价" : "查看定价"}</button>{onCostAnalysis && <button className="secondary-card-action cost-analysis-entry" onClick={() => onCostAnalysis(selected)}><BarChart3 size={16} /> 成本分析<ChevronRight size={16} /></button>}<button className="secondary-card-action" aria-expanded={showMoreActions} onClick={() => setShowMoreActions((current) => !current)}>更多操作<ChevronRight size={16} /></button>{showMoreActions && <div className="product-more-actions"><button onClick={onBom}><ClipboardList size={16} /> {productCostAction}</button>{onInventory && <button onClick={() => onInventory(selected)}><ShoppingBag size={16} />库存设置</button>}{onDelete && <button className="danger" onClick={() => onDelete(selected)}><Trash2 size={16} />删除商品</button>}</div>}</div>
       </section>
     </div>
   );
+}
+
+type CostAnalysisLine = PricingCostLine & { share: number; tone: string };
+
+export function getCostAnalysisLines(costLines: PricingCostLine[], fallbackCost: number): CostAnalysisLine[] {
+  const merged = new Map<string, PricingCostLine>();
+  costLines.filter((line) => line.amount > 0).forEach((line) => {
+    const current = merged.get(line.label);
+    merged.set(line.label, current ? { ...current, amount: current.amount + line.amount } : line);
+  });
+  const items = Array.from(merged.values());
+  const total = items.reduce((sum, item) => sum + item.amount, 0) || Math.max(fallbackCost, 0);
+  const palette = ["#087ff5", "#20b486", "#f2a54a", "#7567df", "#d66c78", "#7084a2"];
+  if (!items.length && total > 0) return [{ label: "完整成本", amount: total, source: "商品成本设置", layer: "operating", share: 1, tone: palette[0] }];
+  return items.sort((a, b) => b.amount - a.amount).map((item, index) => ({ ...item, share: total ? item.amount / total : 0, tone: palette[index % palette.length] }));
+}
+
+export function getProductDirectCostTrend(sales: SalesRecord[], productId: number, range: "7d" | "30d" | "90d") {
+  const activeSales = sales.filter((sale) => sale.productId === productId && sale.status !== "voided" && sale.unitDirectCostSnapshot !== undefined).sort((a, b) => a.date.localeCompare(b.date));
+  if (!activeSales.length) return [];
+  const latest = new Date(`${activeSales.at(-1)!.date}T00:00:00`);
+  const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
+  const start = new Date(latest);
+  start.setDate(start.getDate() - (days - 1));
+  const byDate = new Map<string, { amount: number; quantity: number }>();
+  activeSales.filter((sale) => new Date(`${sale.date}T00:00:00`) >= start).forEach((sale) => {
+    const refunded = (sale.refunds ?? []).reduce((sum, refund) => sum + Math.max(refund.quantity, 0), 0);
+    const quantity = Math.max(sale.quantity - refunded, 0);
+    if (quantity <= 0) return;
+    const current = byDate.get(sale.date) ?? { amount: 0, quantity: 0 };
+    byDate.set(sale.date, { amount: current.amount + (sale.unitDirectCostSnapshot ?? 0) * quantity, quantity: current.quantity + quantity });
+  });
+  return Array.from(byDate.entries()).map(([date, value]) => ({ date, label: date.slice(5).replace("-", "/"), unitCost: value.quantity ? value.amount / value.quantity : 0 })).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function CostAnalysisView({ product, products, costLines, fullCost, directCost, period, sales, plannedQuantity, onBack, onSelectProduct, onAddCost, onPricing, onAdjustAllocation }: { product: LedgerProduct; products: LedgerProduct[]; costLines: PricingCostLine[]; fullCost: number; directCost: number; period: string; sales: SalesRecord[]; plannedQuantity: number; onBack: () => void; onSelectProduct: (productId: number) => void; onAddCost: () => void; onPricing: () => void; onAdjustAllocation: () => void }) {
+  const unitCost = Math.max(costLines.reduce((sum, line) => sum + Math.max(line.amount, 0), 0), fullCost, 0);
+  const lines = getCostAnalysisLines(costLines, unitCost);
+  const hasCost = unitCost > 0;
+  const unitProfit = product.price > 0 && hasCost ? product.price - unitCost : null;
+  const margin = unitProfit !== null && product.price > 0 ? unitProfit / product.price * 100 : null;
+  const [trendRange, setTrendRange] = useState<"7d" | "30d" | "90d">("30d");
+  const trend = useMemo(() => getProductDirectCostTrend(sales, product.id, trendRange), [sales, product.id, trendRange]);
+  const [selectedTrendIndex, setSelectedTrendIndex] = useState(0);
+  const suggestedQuantity = plannedQuantity > 0 ? Math.round(plannedQuantity) : Math.max(1, sales.filter((sale) => sale.productId === product.id && sale.date.startsWith(period) && sale.status !== "voided").reduce((sum, sale) => sum + Math.max(sale.quantity - (sale.refunds ?? []).reduce((refunds, refund) => refunds + Math.max(refund.quantity, 0), 0), 0), 0));
+  const [simulation, setSimulation] = useState(() => ({ price: product.price || 0, cost: unitCost, quantity: suggestedQuantity }));
+  useEffect(() => { setSimulation({ price: product.price || 0, cost: unitCost, quantity: suggestedQuantity }); setSelectedTrendIndex(Math.max(trend.length - 1, 0)); }, [product.id, product.price, unitCost, suggestedQuantity, trend.length]);
+  const selectedTrend = trend[selectedTrendIndex] ?? trend.at(-1);
+  const chartMax = Math.max(...trend.map((item) => item.unitCost), 1);
+  const chartMin = Math.min(...trend.map((item) => item.unitCost), 0);
+  const chartSpan = Math.max(chartMax - chartMin, 0.01);
+  const points = trend.map((item, index) => `${trend.length === 1 ? 150 : 18 + index / (trend.length - 1) * 264},${94 - (item.unitCost - chartMin) / chartSpan * 66}`).join(" ");
+  const simulatedUnitProfit = simulation.price - simulation.cost;
+  const simulatedMargin = simulation.price > 0 ? simulatedUnitProfit / simulation.price * 100 : null;
+  const simulatedMonthlyProfit = simulatedUnitProfit * simulation.quantity;
+  const largestLine = lines[0];
+  const indirectCost = lines.filter((line) => line.layer === "operating").reduce((sum, line) => sum + line.amount, 0);
+  const anomalies = [
+    !hasCost ? { tone: "warning", title: "还没有成本数据", text: "添加第一项成本后，才能判断每件是否赚钱。", action: onAddCost, label: "添加成本" } : null,
+    product.price <= 0 ? { tone: "warning", title: "商品还没有售价", text: "设置售价后，才能计算单位毛利、毛利率和保本空间。", action: onPricing, label: "设置售价" } : null,
+    unitProfit !== null && unitProfit < 0 ? { tone: "loss", title: "当前售价低于单位完整成本", text: `每卖 1 件预计亏损 ${formatCurrency(Math.abs(unitProfit))}。`, action: onPricing, label: "调整售价" } : null,
+    largestLine && largestLine.share >= .6 ? { tone: "warning", title: `${largestLine.label}成本集中`, text: `占单位完整成本 ${(largestLine.share * 100).toFixed(1)}%，建议核对该项单价、数量或损耗。`, action: onAddCost, label: "核对成本" } : null,
+    indirectCost > directCost && indirectCost > 0 ? { tone: "cash", title: "经营分摊高于直接成本", text: "房租、人工等分摊占比较高，可检查本期分摊依据与预计产量。", action: onAdjustAllocation, label: "查看分摊" } : null,
+  ].filter(Boolean) as Array<{ tone: string; title: string; text: string; action: () => void; label: string }>;
+  const suggestions = [
+    unitProfit !== null && unitProfit >= 0 ? { id: "margin", title: "当前售价高于完整成本", text: `每件预计留出 ${formatCurrency(unitProfit)} 毛利空间；模拟调整不会改变已结转销售。`, action: onPricing, label: "调整定价" } : null,
+    largestLine ? { id: "largest", title: `优先关注 ${largestLine.label}`, text: `该项占单位完整成本 ${(largestLine.share * 100).toFixed(1)}%，是当前最主要的成本来源。`, action: onAddCost, label: "查看成本" } : null,
+    indirectCost > 0 ? { id: "allocation", title: "分摊成本已计入完整成本", text: "本页成本结构使用当前期间预计分摊；已发生利润仍以销售时冻结快照为准。", action: onAdjustAllocation, label: "调整分摊" } : null,
+  ].filter(Boolean) as Array<{ id: string; title: string; text: string; action: () => void; label: string }>;
+  const gradient = lines.length ? `conic-gradient(${lines.map((line, index) => `${line.tone} ${lines.slice(0, index).reduce((sum, item) => sum + item.share * 100, 0)}% ${lines.slice(0, index + 1).reduce((sum, item) => sum + item.share * 100, 0)}%`).join(",")})` : "conic-gradient(#e8eef5 0 100%)";
+  const changeSimulation = (key: "price" | "cost" | "quantity", delta: number) => setSimulation((current) => ({ ...current, [key]: Math.max(0, Math.round((current[key] + delta) * 100) / 100) }));
+  return <div className="page-content cost-analysis-page">
+    <section className="cost-analysis-header"><button className="icon-button" onClick={onBack} aria-label="返回商品"><ChevronLeft size={21} /></button><div><span className="eyebrow">商品成本</span><h1>成本分析</h1></div><select aria-label="切换成本分析商品" value={product.id} onChange={(event) => onSelectProduct(Number(event.target.value))}>{products.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></section>
+    <section className="cost-analysis-product"><span>当前商品</span><b>{product.name}</b><small>{formatBusinessPeriod(period)} · 当前成本与定价口径</small></section>
+    <section className={`cost-profit-card ${unitProfit !== null && unitProfit < 0 ? "loss" : !hasCost || product.price <= 0 ? "pending" : ""}`} aria-label="单位盈亏结论"><div><span>现在赚多少？</span><BrandSignature tone="inverse" compact /></div>{hasCost && product.price > 0 ? <><div className="cost-profit-formula"><span><small>售价</small><b>{formatCurrency(product.price)}</b></span><i>−</i><span><small>单位完整成本</small><b>{formatCurrency(unitCost)}</b></span><i>=</i><span className="result"><small>单位毛利</small><b>{formatCurrency(unitProfit ?? 0)}</b></span></div><div className="cost-profit-foot"><span>毛利率 <b>{margin?.toFixed(1)}%</b></span><small>预计口径：当前成本与售价</small></div></> : <div className="cost-profit-empty"><b>{!hasCost ? "先补齐一项成本" : "先设置商品售价"}</b><small>{!hasCost ? "添加材料、进货或制作成本后，系统会计算完整成本。" : "售价设置完成后，可计算单位毛利与保本空间。"}</small><button onClick={!hasCost ? onAddCost : onPricing}>{!hasCost ? "添加成本" : "设置售价"}<ArrowRight size={15} /></button></div>}</section>
+    <section className="cost-analysis-card cost-structure-card"><div className="section-heading compact"><div><span className="eyebrow">钱都花在哪里</span><h2>成本结构</h2></div><small>单位完整成本</small></div>{hasCost ? <div className="cost-structure-main"><div className="cost-donut" style={{ background: gradient }}><div><small>单位成本</small><b>{formatCurrency(unitCost)}</b></div></div><div className="cost-structure-list">{lines.map((line) => <div key={`${line.layer}-${line.label}`}><i style={{ background: line.tone }} /><span><b>{line.label}</b><small>{line.source}</small></span><strong>{formatCurrency(line.amount)}<small>{(line.share * 100).toFixed(1)}%</small></strong></div>)}</div></div> : <div className="cost-analysis-empty"><Coins size={22} /><b>还没有成本数据</b><small>添加第一项成本，开始算清利润。</small><button onClick={onAddCost}>添加成本 <ArrowRight size={14} /></button></div>}</section>
+    <section className="cost-analysis-card cost-anomaly-card"><div className="section-heading compact"><div><span className="eyebrow">成本异常</span><h2>{anomalies.length ? "需要关注" : "当前成本正常"}</h2></div>{anomalies.length ? <AlertTriangle size={18} /> : <BrandSignature tone="blue" compact />}</div>{anomalies.length ? <div className="cost-anomaly-list">{anomalies.map((item) => <article className={item.tone} key={item.title}><span>{item.tone === "loss" ? "−" : "!"}</span><div><b>{item.title}</b><small>{item.text}</small></div><button onClick={item.action}>{item.label}<ChevronRight size={14} /></button></article>)}</div> : <div className="cost-normal-state"><span>⌣</span><div><b>成本结构没有发现集中或亏损风险</b><small>后续材料价格、分摊或售价变化会自动重新计算。</small></div></div>}</section>
+    <section className="cost-analysis-card cost-trend-card"><div className="section-heading compact"><div><span className="eyebrow">成本变化</span><h2>已结转单位直接成本</h2></div><span>{selectedTrend ? formatCurrency(selectedTrend.unitCost) : "暂无快照"}</span></div><div className="cost-range-picker" role="tablist" aria-label="选择成本变化范围">{(["7d", "30d", "90d"] as const).map((range) => <button key={range} role="tab" aria-selected={range === trendRange} onClick={() => setTrendRange(range)}>{range === "7d" ? "7天" : range === "30d" ? "30天" : "90天"}</button>)}</div>{trend.length ? <><svg className="cost-trend-graph" viewBox="0 0 300 110" role="img" aria-label="已结转单位直接成本变化"><line x1="18" y1="94" x2="282" y2="94" /><line x1="18" y1="60" x2="282" y2="60" /><polyline points={points} fill="none" stroke="#087ff5" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />{trend.map((item, index) => { const x = trend.length === 1 ? 150 : 18 + index / (trend.length - 1) * 264; const y = 94 - (item.unitCost - chartMin) / chartSpan * 66; return <circle key={item.date} cx={x} cy={y} r={index === selectedTrendIndex ? 5 : 3} onClick={() => setSelectedTrendIndex(index)} />; })}</svg><div className="cost-trend-selected"><b>{selectedTrend?.label}</b><span>销售时冻结的单位直接成本 <strong>{formatCurrency(selectedTrend?.unitCost ?? 0)}</strong></span></div><div className="cost-trend-tabs">{trend.map((item, index) => <button className={index === selectedTrendIndex ? "active" : ""} key={item.date} onClick={() => setSelectedTrendIndex(index)}>{item.label}</button>)}</div></> : <div className="cost-trend-empty"><b>还没有可用的销售成本快照</b><small>记录商品销售后，这里会按销售当时冻结的单位直接成本显示变化；不会把当前成本倒灌到历史。</small></div>}</section>
+    <section className="cost-analysis-card cost-simulator-card"><div className="section-heading compact"><div><span className="eyebrow">如果……会怎样</span><h2>盈亏模拟</h2></div><small>预计测算</small></div><p>调整不会修改账本、售价或已结转销售，只用于比较经营结果。</p><div className="cost-simulation-controls"><SimulationControl label="售价" value={simulation.price} unit="元" step={1} onChange={(value) => setSimulation((current) => ({ ...current, price: value }))} onAdjust={(delta) => changeSimulation("price", delta)} /><SimulationControl label="单位成本" value={simulation.cost} unit="元" step={.1} onChange={(value) => setSimulation((current) => ({ ...current, cost: value }))} onAdjust={(delta) => changeSimulation("cost", delta)} /><SimulationControl label="月销量" value={simulation.quantity} unit="件" step={1} onChange={(value) => setSimulation((current) => ({ ...current, quantity: value }))} onAdjust={(delta) => changeSimulation("quantity", delta)} /></div><div className={`cost-simulation-result ${simulatedMonthlyProfit < 0 ? "loss" : ""}`}><span><small>预计月利润</small><b>{formatCurrency(simulatedMonthlyProfit)}</b></span><span><small>单位毛利</small><b>{formatCurrency(simulatedUnitProfit)}</b></span><span><small>毛利率</small><b>{simulatedMargin === null ? "—" : `${simulatedMargin.toFixed(1)}%`}</b></span></div></section>
+    <section className={`cost-analysis-card break-even-card ${unitProfit !== null && unitProfit < 0 ? "loss" : ""}`}><div className="section-heading compact"><div><span className="eyebrow">你的保本线</span><h2>保本分析</h2></div></div>{hasCost && product.price > 0 ? <><div className="break-even-values"><span><small>保本售价</small><b>{formatCurrency(unitCost)}</b></span><span><small>当前售价</small><b>{formatCurrency(product.price)}</b></span><span><small>安全空间</small><b>{formatCurrency(product.price - unitCost)}</b></span></div><div className="break-even-scale"><i /><b style={{ left: `${Math.min(Math.max(unitCost / Math.max(product.price, unitCost) * 100, 10), 100)}%` }} /><span>保本线</span><strong>当前售价</strong></div><p>{product.price >= unitCost ? `当前售价高于保本价 ${formatCurrency(product.price - unitCost)}。` : `当前售价低于保本价 ${formatCurrency(unitCost - product.price)}，每卖一件都会亏损。`}</p></> : <div className="cost-trend-empty"><b>补齐成本与售价后显示保本线</b><small>保本价等于当前商品的单位完整成本，不包含未保存的模拟调整。</small></div>}</section>
+    <section className="cost-analysis-card cost-suggestion-card"><div className="section-heading compact"><div><span className="eyebrow">算得清建议</span><h2>下一步怎么做</h2></div><Sparkles size={18} /></div><div>{suggestions.length ? suggestions.map((item, index) => <article key={item.id}><em>{String(index + 1).padStart(2, "0")}</em><span><b>{item.title}</b><small>{item.text}</small></span><button onClick={item.action}>{item.label}<ArrowRight size={14} /></button></article>) : <div className="cost-analysis-empty"><b>完成成本和售价后，系统会给出下一步建议。</b></div>}</div></section>
+    <section className="cost-analysis-actions"><button className="secondary-action" onClick={onPricing}><Sparkles size={17} /> 调整售价</button><button className="primary-action" onClick={onAddCost}><Plus size={18} /> 添加成本</button></section>
+  </div>;
+}
+
+function SimulationControl({ label, value, unit, step, onChange, onAdjust }: { label: string; value: number; unit: string; step: number; onChange: (value: number) => void; onAdjust: (delta: number) => void }) {
+  return <label><span>{label}</span><div><button type="button" aria-label={`减少${label}`} onClick={() => onAdjust(-step)}>−</button><input aria-label={`模拟${label}`} type="number" inputMode="decimal" value={Number.isFinite(value) ? value : ""} onChange={(event) => onChange(Math.max(0, Number(event.target.value) || 0))} /><small>{unit}</small><button type="button" aria-label={`增加${label}`} onClick={() => onAdjust(step)}>＋</button></div></label>;
 }
 
 export function QuickEntrySheet({ hasProducts, onClose, onChoose }: { hasProducts: boolean; onClose: () => void; onChoose: (kind: "sale" | "record" | "purchase" | "product") => void }) {
