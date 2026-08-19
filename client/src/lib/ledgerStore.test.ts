@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getCashDayDetail, getCashTrendSeries, getIndustrySampleData, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getCashTrendSeries, getIndustrySampleData, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -78,18 +78,6 @@ describe("summarizeLedger", () => {
     expect(sevenDays.find((item) => item.label === "07/30")).toMatchObject({ expenses: 20 });
     expect(getCashTrendSeries(ledger, "2026-07", "30d")[0]).toMatchObject({ label: "07/02" });
     expect(getCashTrendSeries(ledger, "2026-07", "month")[0]).toMatchObject({ label: "07/01", income: 10 });
-  });
-
-  it("returns only the selected day’s saved cash records and keeps refunds and principal as actual payments", () => {
-    const ledger = seedLedger();
-    ledger.records = [
-      { id: "day-income", type: "income", amount: 120, category: "销售收入", note: "商品销售", date: "2026-08-08", source: "sale" },
-      { id: "day-refund", type: "expense", amount: 20, category: "销售退款", note: "客户退款", date: "2026-08-08", source: "refund" },
-      { id: "day-principal", type: "expense", amount: 30, category: "本金还款", note: "周转还款", date: "2026-08-08", source: "manual" },
-      { id: "other-day", type: "expense", amount: 99, category: "材料采购", note: "不应出现", date: "2026-08-09", source: "purchase" },
-    ];
-    expect(getCashDayDetail(ledger, "2026-08-08")).toMatchObject({ income: 120, expenses: 50, net: 70 });
-    expect(getCashDayDetail(ledger, "2026-08-08").records.map((record) => record.id)).toEqual(["day-income", "day-refund", "day-principal"]);
   });
 });
 

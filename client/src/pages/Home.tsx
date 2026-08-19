@@ -46,7 +46,7 @@ import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
 import * as XLSX from "xlsx";
 import {   applyIndustryTemplate, applyQuickCost,
   applyMonthlyIndirectPlan, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, getMonthlyIndirectPlanTiming, calculateProductIndirectAllocations, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, emptyMonthlyFixedCosts,
-  formatBusinessPeriod, getActiveCategories, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getCashDayDetail, getCashTrendSeries, INDUSTRY_TEMPLATES, AllocationMethod, CashTrendRange, HiddenCostItem, IndustryKey, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
+  formatBusinessPeriod, getActiveCategories, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getCashTrendSeries, INDUSTRY_TEMPLATES, AllocationMethod, CashTrendRange, HiddenCostItem, IndustryKey, IndustryTemplate, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, resolveIndustryTemplate, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
 import { startLogin } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
@@ -133,7 +133,6 @@ export default function Home() {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [showDataManagement, setShowDataManagement] = useState(false);
   const [showCashRecords, setShowCashRecords] = useState(false);
-  const [cashDetailDate, setCashDetailDate] = useState<string | null>(null);
   const [showMessages, setShowMessages] = useState(false);
   const [showAdminMessages, setShowAdminMessages] = useState(false);
   const [messageLevelFilter, setMessageLevelFilter] = useState<MessageLevel | "all">("all");
@@ -160,7 +159,7 @@ export default function Home() {
     displayedBannerRef.current = visibleImportantBanner.id;
     markMessageDisplayed.mutate({ userMessageId: visibleImportantBanner.id });
   }, [visibleImportantBanner?.id]);
-  const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
+  const currentTemplate = resolveIndustryTemplate(ledger.profile.industry, ledger.profile.industryTemplateOverrides);
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
   const [selectedPeriod, setSelectedPeriod] = useState(() => getBusinessPeriod());
   const [toast, setToast] = useState<string | null>(null);
@@ -260,7 +259,7 @@ export default function Home() {
 
   const confirmIndustryChange = () => {
     if (!pendingIndustry) return;
-    const label = INDUSTRY_TEMPLATES.find((item) => item.key === pendingIndustry)?.label ?? "新行业";
+    const label = resolveIndustryTemplate(pendingIndustry).label;
     setLedger((current) => {
       const next = applyIndustryTemplate(current, pendingIndustry);
       persistLedger(next);
@@ -330,7 +329,7 @@ export default function Home() {
   };
 
   const completeOnboarding = ({ storeName, industry }: { storeName: string; industry: IndustryKey }) => {
-    const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+    const template = resolveIndustryTemplate(industry);
     setLedger((current) => {
       const next = initializeIndustryLedger(current, storeName, industry);
       persistLedger(next);
@@ -388,7 +387,6 @@ export default function Home() {
             onRecord={() => setShowQuickRecord(true)}
             onBusiness={() => navigate("business")}
             onProducts={() => navigate("products")}
-            onOpenCashDay={setCashDetailDate}
             readiness={readiness}
             onPrimaryAction={() => {
               if (readiness.stage === "record") setShowQuickRecord(true);
@@ -420,7 +418,7 @@ export default function Home() {
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} productCount={activeProducts.length} period={selectedPeriod} onPeriodChange={setSelectedPeriod} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} onCashRecords={() => setShowCashRecords(true)} sales={ledger.sales} products={ledger.products} onRefund={(saleId) => setRefundSaleId(saleId)} onDeleteSale={(saleId) => setDeletingSaleId(saleId)} />}
-        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
+        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} template={currentTemplate} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
         </>}
       </main>
 
@@ -462,7 +460,6 @@ export default function Home() {
       {inventoryProduct && <InventorySheet product={inventoryProduct} onClose={() => setInventoryProductId(null)} onSave={(quantity) => { setLedger((current) => { const products = current.products.map((product) => product.id === inventoryProduct.id ? { ...product, stockQuantity: quantity } : product); const next = { ...current, products }; persistLedger(next); return next; }); setInventoryProductId(null); notify(`已设置“${inventoryProduct.name}”可售库存为 ${quantity}`); }} />}
       {showMonthlyAllocation && <MonthlyAllocationSheet period={selectedPeriod} products={activeProducts} initialPlan={getMonthlyIndirectPlan(ledger, selectedPeriod)} onClose={() => setShowMonthlyAllocation(false)} onSave={(plan) => { setLedger((current) => { const monthlyIndirectPlans = [...(current.costs.monthlyIndirectPlans ?? []).filter((item) => item.period !== plan.period), plan]; const costs = { ...current.costs, monthlyIndirectPlans, allocationPeriod: plan.period }; const products = applyMonthlyIndirectPlan(current.products, plan, current.materials); const next = { ...current, costs, products }; persistLedger(next); return next; }); setShowMonthlyAllocation(false); notify(`已保存${formatBusinessPeriod(plan.period)}分摊；未来单件完整成本已更新`); }} onDelete={() => { setLedger((current) => { const costs = { ...current.costs, monthlyIndirectPlans: (current.costs.monthlyIndirectPlans ?? []).filter((item) => item.period !== selectedPeriod) }; const products = current.products.map((product) => recalculateProduct(product, current.materials, costs.hiddenCost, costs.fixedCost)); const next = { ...current, costs, products }; persistLedger(next); return next; }); setShowMonthlyAllocation(false); notify(`已删除${formatBusinessPeriod(selectedPeriod)}分摊；历史销售快照未改动`); }} />}
       {showCashRecords && <CashRecordsSheet period={selectedPeriod} records={ledger.records} onClose={() => setShowCashRecords(false)} onDelete={(recordId) => { setLedger((current) => { const next = { ...current, records: current.records.filter((record) => record.id !== recordId) }; persistLedger(next); return next; }); notify("已删除该笔流水，现金汇总已更新"); }} />}
-      {cashDetailDate && <DailyCashDetailSheet date={cashDetailDate} ledger={ledger} onClose={() => setCashDetailDate(null)} />}
       {showCostReport && <MonthlyCostReportSheet period={selectedPeriod} products={activeProducts} plan={getMonthlyIndirectPlan(ledger, selectedPeriod)} onClose={() => setShowCostReport(false)} />}
       {pendingProductDeletion && <DeleteProductSheet product={pendingProductDeletion} saleCount={ledger.sales.filter((sale) => sale.productId === pendingProductDeletion.id).length} onClose={() => setPendingProductDeletion(null)} onConfirm={() => { const product = pendingProductDeletion; const hasSales = ledger.sales.some((sale) => sale.productId === product.id); setLedger((current) => { const products = hasSales ? current.products.map((item) => item.id === product.id ? { ...item, archivedAt: new Date().toISOString() } : item) : current.products.filter((item) => item.id !== product.id); const next = { ...current, products }; persistLedger(next); return next; }); const remaining = activeProducts.filter((item) => item.id !== product.id); setActiveProductId(remaining[0]?.id ?? 0); setPendingProductDeletion(null); notify(hasSales ? `已归档“${product.name}”；历史销售和成本快照已保留` : `已删除“${product.name}”`); }} />}
 
@@ -521,7 +518,6 @@ export function HomeView({
   onRecord,
   onBusiness,
   onProducts,
-  onOpenCashDay,
   readiness,
   onPrimaryAction,
 }: {
@@ -541,7 +537,6 @@ export function HomeView({
   onRecord: () => void;
   onBusiness: () => void;
   onProducts: () => void;
-  onOpenCashDay: (date: string) => void;
   readiness: Readiness;
   onPrimaryAction: () => void;
 }) {
@@ -606,7 +601,7 @@ export function HomeView({
         </article>
       </section>
 
-      <section className="overview-chart-card dashboard-trend-card" aria-label="选定范围现金收付概览"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>现金收付趋势</h2></div><span className="chart-summary-value">{formatCurrency(trendNet)} <small>{trendLabel}净收付</small></span></div><TrendRangePicker value={trendRange} onChange={setTrendRange} /><MiniTrendChart series={trendSeries} rangeLabel={trendLabel} onOpenDetails={onOpenCashDay} /><p className="dashboard-chart-note">图表仅使用实际收款与付款；点选日期可核对当日流水。销售结转利润、预计分摊会分别在经营分析中说明。</p></section>
+      <section className="overview-chart-card dashboard-trend-card" aria-label="选定范围现金收付概览"><div className="chart-heading"><div><span className="eyebrow">经营趋势</span><h2>现金收付趋势</h2></div><span className="chart-summary-value">{formatCurrency(trendNet)} <small>{trendLabel}净收付</small></span></div><TrendRangePicker value={trendRange} onChange={setTrendRange} /><MiniTrendChart series={trendSeries} rangeLabel={trendLabel} /><p className="dashboard-chart-note">图表仅使用实际收款与付款；销售结转利润、预计分摊会分别在经营分析中说明。</p></section>
 
       <section className="dashboard-products-card" aria-label="商品赚钱能力"><div className="section-heading compact"><div><span className="eyebrow">商品赚钱能力 TOP {Math.min(topContributions.length || 5, 5)}</span><h2>本期销售贡献</h2></div><button onClick={onProducts}>全部商品 <ChevronRight size={14} /></button></div>{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献率</span></div><div className="dashboard-product-list">{topContributions.map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{risk ? "需关注" : `${rate.toFixed(1)}%`}</small></button>; })}</div><p className="dashboard-data-note">直接贡献率使用销售时冻结的直接成本；房租、人工等分摊不会混入本表。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>还没有已结转的商品销售</b><small>记录第一笔销售后，这里会按真实销售快照展示商品贡献。</small><button onClick={onPrimaryAction}>记录销售 <ArrowRight size={14} /></button></div>}</section>
 
@@ -676,7 +671,7 @@ function TrendRangePicker({ value, onChange }: { value: CashTrendRange; onChange
   return <div className="trend-range-switch" role="tablist" aria-label="选择现金趋势范围">{options.map((option) => <button key={option.value} role="tab" aria-selected={value === option.value} className={value === option.value ? "selected" : ""} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>;
 }
 
-export function MiniTrendChart({ series, rangeLabel, onOpenDetails }: { series: Array<{ date?: string; label: string; income: number; expenses: number }>; rangeLabel: string; onOpenDetails?: (date: string) => void }) {
+export function MiniTrendChart({ series, rangeLabel }: { series: Array<{ label: string; income: number; expenses: number }>; rangeLabel: string }) {
   const [selectedIndex, setSelectedIndex] = useState(Math.max(series.length - 1, 0));
   useEffect(() => setSelectedIndex(Math.max(series.length - 1, 0)), [series.length, series.at(-1)?.label]);
   const values = series.flatMap((item) => [item.income, item.expenses]);
@@ -686,8 +681,7 @@ export function MiniTrendChart({ series, rangeLabel, onOpenDetails }: { series: 
   const axisIndexes = Array.from(new Set([0, 1, 2, 3, 4].map((step) => Math.round((Math.max(series.length - 1, 0) * step) / 4))));
   if (!hasData) return <div className="mini-chart-empty"><BarChart3 size={20} /><span>{rangeLabel}暂无现金收付</span></div>;
   const selected = series[selectedIndex] ?? series.at(-1)!;
-  const openSelectedDay = () => { if (selected.date) onOpenDetails?.(selected.date); };
-  return <div className="mini-trend-wrap"><svg className="mini-trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${rangeLabel}现金收款与付款趋势`}><line x1="0" y1="92" x2="100" y2="92" /><polyline className="trend-income" points={points("income")} /><polyline className="trend-expense" points={points("expenses")} />{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; const selectedPoint = index === selectedIndex; const openPoint = () => { setSelectedIndex(index); if (item.date) onOpenDetails?.(item.date); }; return <g className={selectedPoint ? "is-selected" : ""} key={item.label} onClick={openPoint} role={onOpenDetails && item.date ? "button" : undefined} tabIndex={onOpenDetails && item.date ? 0 : undefined} onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && onOpenDetails && item.date) { event.preventDefault(); openPoint(); } }}><circle className="trend-income-dot" cx={x} cy={92 - (item.income / max) * 76} r={selectedPoint ? "2.5" : "1.35"} /><circle className="trend-expense-dot" cx={x} cy={92 - (item.expenses / max) * 76} r={selectedPoint ? "2.5" : "1.35"} /></g>; })}</svg><div className="mini-chart-axis" aria-hidden="true">{axisIndexes.map((index) => <span className={index === 0 ? "first" : index === series.length - 1 ? "last" : ""} style={{ left: `${(index / Math.max(series.length - 1, 1)) * 100}%` }} key={series[index]?.label}>{series[index]?.label}</span>)}</div><div className="chart-tooltip mini-trend-tooltip"><div><b>{selected.label}</b><small>当天实际收付</small></div><span><i className="income-dot" />收款 {formatCurrency(selected.income)}</span><span><i className="expense-dot" />付款 {formatCurrency(selected.expenses)}</span><strong>净收付 {formatCurrency(selected.income - selected.expenses)}</strong></div><div className="trend-date-select"><button type="button" aria-label="查看前一天现金收付" disabled={selectedIndex <= 0} onClick={() => setSelectedIndex((index) => Math.max(index - 1, 0))}><ChevronLeft size={16} /></button><label><span>查看日期</span><select aria-label="选择现金收付日期" value={selectedIndex} onChange={(event) => setSelectedIndex(Number(event.currentTarget.value))}>{series.map((item, index) => <option value={index} key={item.label}>{item.label}</option>)}</select></label><button type="button" aria-label="查看后一天现金收付" disabled={selectedIndex >= series.length - 1} onClick={() => setSelectedIndex((index) => Math.min(index + 1, series.length - 1))}><ChevronRight size={16} /></button></div>{onOpenDetails && selected.date && <button type="button" className="trend-detail-action" onClick={openSelectedDay} aria-label={`查看${selected.label}现金流水`}><ReceiptText size={16} />查看当日流水<ChevronRight size={16} /></button>}<div className="mini-chart-legend"><span><i className="income-dot" />收款</span><span><i className="expense-dot" />付款</span></div></div>;
+  return <div className="mini-trend-wrap"><svg className="mini-trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`${rangeLabel}现金收款与付款趋势`}><line x1="0" y1="92" x2="100" y2="92" /><polyline className="trend-income" points={points("income")} /><polyline className="trend-expense" points={points("expenses")} />{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; const selectedPoint = index === selectedIndex; return <g className={selectedPoint ? "is-selected" : ""} key={item.label}><circle className="trend-income-dot" cx={x} cy={92 - (item.income / max) * 76} r={selectedPoint ? "2.5" : "1.35"} /><circle className="trend-expense-dot" cx={x} cy={92 - (item.expenses / max) * 76} r={selectedPoint ? "2.5" : "1.35"} /></g>; })}</svg><div className="mini-chart-axis" aria-hidden="true">{axisIndexes.map((index) => <span className={index === 0 ? "first" : index === series.length - 1 ? "last" : ""} style={{ left: `${(index / Math.max(series.length - 1, 1)) * 100}%` }} key={series[index]?.label}>{series[index]?.label}</span>)}</div><div className="chart-tooltip mini-trend-tooltip"><div><b>{selected.label}</b><small>当天实际收付</small></div><span><i className="income-dot" />收款 {formatCurrency(selected.income)}</span><span><i className="expense-dot" />付款 {formatCurrency(selected.expenses)}</span><strong>净收付 {formatCurrency(selected.income - selected.expenses)}</strong></div><div className="trend-date-select"><button type="button" aria-label="查看前一天现金收付" disabled={selectedIndex <= 0} onClick={() => setSelectedIndex((index) => Math.max(index - 1, 0))}><ChevronLeft size={16} /></button><label><span>查看日期</span><select aria-label="选择现金收付日期" value={selectedIndex} onChange={(event) => setSelectedIndex(Number(event.currentTarget.value))}>{series.map((item, index) => <option value={index} key={item.label}>{item.label}</option>)}</select></label><button type="button" aria-label="查看后一天现金收付" disabled={selectedIndex >= series.length - 1} onClick={() => setSelectedIndex((index) => Math.min(index + 1, series.length - 1))}><ChevronRight size={16} /></button></div><div className="mini-chart-legend"><span><i className="income-dot" />收款</span><span><i className="expense-dot" />付款</span></div></div>;
 }
 
 export function CostCompositionChart({ product, operatingCost, fullCost }: { product: LedgerProduct; operatingCost: number; fullCost: number }) {
@@ -871,13 +865,6 @@ export function CashRecordsSheet({ period, records, onClose, onDelete }: { perio
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet cash-records-sheet" role="dialog" aria-modal="true" aria-label="本期现金流水明细" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">{formatBusinessPeriod(period)}</span><h2>现金流水明细</h2></div><button className="icon-button" onClick={onClose}>×</button></header><div className="cost-setting-note"><Info size={17} /><p>每笔金额都来自已保存的流水。手工和采购流水可删除；销售和退款流水请在“销售记录”中退款或撤销，确保收入、成本和库存同步更正。</p></div>{periodRecords.length ? <div className="cash-record-list">{periodRecords.map((record) => { const linkedToSale = recordSource(record); const pending = pendingDeleteId === record.id; return <article className="cash-record-row" key={record.id}><div><span className={record.type === "income" ? "record-type income" : "record-type expense"}>{record.type === "income" ? "收款" : "付款"}</span><b>{record.category}</b><small>{record.date}{record.note ? ` · ${record.note}` : ""}{linkedToSale ? " · 由销售记录生成" : record.source === "purchase" ? " · 材料采购时记录" : " · 手工录入"}</small></div><div className="cash-record-action"><strong>{record.type === "income" ? "+" : "−"}{formatCurrency(record.amount)}</strong>{linkedToSale ? <small>请在销售记录中更正</small> : pending ? <span><button className="secondary-action" onClick={() => setPendingDeleteId(null)}>取消</button><button className="danger-action" onClick={() => onDelete(record.id)}>删除</button></span> : <button className="text-action" aria-label={`删除${record.category}流水`} onClick={() => setPendingDeleteId(record.id)}>删除</button>}</div></article>; })}</div> : <div className="message-empty"><ReceiptText size={22} /><b>本期暂无现金流水</b><small>从“记一笔”或材料采购开始记录。</small></div>}</section></div>;
 }
 
-export function DailyCashDetailSheet({ date, ledger, onClose }: { date: string; ledger: LedgerData; onClose: () => void }) {
-  const detail = getCashDayDetail(ledger, date);
-  const dateLabel = `${Number(date.slice(5, 7))}月${Number(date.slice(8, 10))}日`;
-  const sourceLabel = (record: LedgerRecord) => record.source === "sale" || record.source === "refund" || record.category === "销售收入" || record.category === "销售退款" ? "销售记录生成" : record.source === "purchase" ? "材料采购时记录" : "手工录入";
-  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet daily-cash-detail-sheet" role="dialog" aria-modal="true" aria-label={`${dateLabel}现金流水明细`} onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">{date}</span><h2>{dateLabel}现金明细</h2></div><button className="icon-button" aria-label="关闭当日现金明细" onClick={onClose}>×</button></header><div className="daily-cash-summary"><span><small>当日收款</small><b>{formatCurrency(detail.income)}</b></span><i>−</i><span><small>当日付款</small><b>{formatCurrency(detail.expenses)}</b></span><i>=</i><span className={detail.net < 0 ? "loss" : "result"}><small>净收付</small><b>{formatCurrency(detail.net)}</b></span></div><div className="cost-setting-note"><Info size={17} /><p>这里仅列出当天已保存的实际现金流水，包含销售收款、退款和本金还款；不包含销售利润或预计分摊。</p></div>{detail.records.length ? <div className="daily-cash-record-list">{detail.records.map((record) => <article key={record.id}><span className={record.type === "income" ? "record-type income" : "record-type expense"}>{record.type === "income" ? "收款" : "付款"}</span><div><b>{record.category}</b><small>{record.note || "未填写备注"} · {sourceLabel(record)}</small></div><strong className={record.type === "income" ? "income" : "expense"}>{record.type === "income" ? "+" : "−"}{formatCurrency(record.amount)}</strong></article>)}</div> : <div className="daily-cash-empty"><ReceiptText size={22} /><b>当天暂无已保存现金流水</b><small>图表日期会保留在趋势范围内；待录入收款或付款后，这里会显示逐笔明细。</small></div>}<button className="secondary-action sheet-action" onClick={onClose}>返回现金趋势</button></section></div>;
-}
-
 export function BusinessView({ summary, productCount, period, onPeriodChange, onPricing, onRecord, onSale, onCashRecords, sales, products, onRefund, onDeleteSale }: { summary: ReturnType<typeof summarizeLedger>; productCount: number; period: string; onPeriodChange: (period: string) => void; onPricing: () => void; onRecord: () => void; onSale: () => void; onCashRecords: () => void; sales: SalesRecord[]; products: LedgerProduct[]; onRefund: (saleId: string) => void; onDeleteSale: (saleId: string) => void }) {
   const [showCashDetails, setShowCashDetails] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -923,8 +910,7 @@ export function BusinessView({ summary, productCount, period, onPeriodChange, on
   );
 }
 
-export function ProfileView({ storeName, industry, categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt, onMonthlyReport }: { storeName: string; industry: IndustryKey; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void; onMonthlyReport?: () => void }) {
-  const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+export function ProfileView({ storeName, industry, template = resolveIndustryTemplate(industry), categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt, onMonthlyReport }: { storeName: string; industry: IndustryKey; template?: IndustryTemplate; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void; onMonthlyReport?: () => void }) {
   const industryName = template.label;
   return (
     <div className="page-content profile-content">
@@ -965,8 +951,8 @@ export function DataManagementSheet({ isAuthenticated, cloudAvailable, backupAt,
 }
 
 function IndustryChangeSheet({ current, next, onClose, onConfirm }: { current: IndustryKey; next: IndustryKey; onClose: () => void; onConfirm: () => void }) {
-  const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === current) ?? INDUSTRY_TEMPLATES[0];
-  const nextTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === next) ?? INDUSTRY_TEMPLATES[0];
+  const currentTemplate = resolveIndustryTemplate(current);
+  const nextTemplate = resolveIndustryTemplate(next);
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet industry-change-sheet" role="dialog" aria-modal="true" aria-label="确认切换行业" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">经营资料</span><h2>切换为{nextTemplate.label}</h2></div><button className="icon-button" onClick={onClose}>×</button></header><p className="industry-change-lead">从{currentTemplate.label}切换后，只影响之后的新录入。</p><div className="impact-list"><p><b>将改变</b> 默认成本分类、商品成本名称、快速成本预设和模板隐形成本分类。</p><p><b>不会改变</b> 已有商品、材料、流水、销售、成本版本和自定义成本口径。</p></div><button className="primary-action sheet-action" onClick={onConfirm}><CheckBadge />确认切换行业</button></section></div>;
 }
 

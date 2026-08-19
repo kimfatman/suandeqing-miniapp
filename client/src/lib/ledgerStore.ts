@@ -1,23 +1,9 @@
 /** 商户账簿工作台：以本地账本服务集中管理店铺、材料、BOM与流水，页面不散写业务数据。 */
-export type IndustryKey = "catering" | "retail" | "stall" | "handmade";
+import { DEFAULT_INDUSTRY_KEY, getOfficialIndustryTemplate, INDUSTRY_TEMPLATES, INDUSTRY_TEMPLATE_VERSION, normalizeIndustryTemplateOverrides, resolveIndustryTemplate } from "./industryTemplates";
+import type { IndustryKey, IndustryTemplate, IndustryTemplateUserOverrides } from "./industryTemplates";
 
-export type IndustryTemplate = {
-  key: IndustryKey;
-  label: string;
-  shortLabel: string;
-  description: string;
-  categories: string[];
-  hiddenCostCategory: string;
-  hiddenCostDescription: string;
-  fundingCostDescription: string;
-  productCostLabel: string;
-  productCostAction: string;
-  productCostEmpty: string;
-  /** 快速成本录入只显示一主一辅两项，名称与单位由行业预设。 */
-  quickPrimaryLabel: string;
-  quickSecondaryOptions: string[];
-  quickUnit: string;
-};
+export { DEFAULT_INDUSTRY_KEY, getOfficialIndustryTemplate, INDUSTRY_TEMPLATES, INDUSTRY_TEMPLATE_VERSION, normalizeIndustryTemplateOverrides, resolveIndustryTemplate } from "./industryTemplates";
+export type { IndustryCapabilities, IndustryCostItem, IndustryKey, IndustryMetric, IndustryMetricKey, IndustryTemplate, IndustryTemplateUserOverrides } from "./industryTemplates";
 
 export type Material = {
   id: string;
@@ -352,6 +338,10 @@ export type LedgerData = {
   profile: {
     storeName: string;
     industry: IndustryKey;
+    /** 官方模板版本用于未来结构演进；旧账本缺失时按当前官方版本兼容。 */
+    industryTemplateVersion?: number;
+    /** 用户个性化仅作为账本上的覆盖层，不会修改官方模板。 */
+    industryTemplateOverrides?: IndustryTemplateUserOverrides;
     onboarded: boolean;
     monthlyBudget: number;
   };
@@ -392,16 +382,9 @@ export type LedgerSummary = {
   dailySeries: Array<{ label: string; income: number; expenses: number }>;
 };
 
-export const INDUSTRY_TEMPLATES: IndustryTemplate[] = [
-  { key: "catering", label: "餐饮饮品", shortLabel: "餐饮", description: "配方、损耗、包装与人工", hiddenCostCategory: "平台服务", hiddenCostDescription: "店主工时、配送、平台抽佣和设备占用", fundingCostDescription: "外卖平台服务费、短期周转利息和融资费用", productCostLabel: "商品配方", productCostAction: "编辑配方", productCostEmpty: "还没有配方材料，先添加一项食材。", quickPrimaryLabel: "食材成本", quickSecondaryOptions: ["包装费", "单件人工"], quickUnit: "份", categories: ["食材采购", "包装耗材", "平台服务", "房租水电", "人工分摊"] },
-  { key: "retail", label: "社区零售", shortLabel: "零售", description: "进货、促销、配送与平台", hiddenCostCategory: "物流配送", hiddenCostDescription: "补货配送、促销让利、货架占用和平台服务", fundingCostDescription: "进货周转借款、供应商账期费用和融资费用", productCostLabel: "进货明细", productCostAction: "编辑进货明细", productCostEmpty: "还没有进货明细，先添加一项货品。", quickPrimaryLabel: "进货价", quickSecondaryOptions: ["单件配送费", "促销让利"], quickUnit: "件", categories: ["货品采购", "物流配送", "促销让利", "摊位房租", "平台服务"] },
-  { key: "stall", label: "商贸摆摊", shortLabel: "摆摊", description: "进货、摊位、交通与尾货", hiddenCostCategory: "交通配送", hiddenCostDescription: "摊位、交通、尾货损耗和临时人工", fundingCostDescription: "进货周转、摊位押金借款和融资费用", productCostLabel: "货品成本", productCostAction: "编辑货品成本", productCostEmpty: "还没有货品成本明细，先添加一项进货。", quickPrimaryLabel: "拿货价", quickSecondaryOptions: ["摊位交通分摊", "尾货损耗"], quickUnit: "件", categories: ["进货成本", "摊位费用", "交通配送", "货品损耗", "尾货折价"] },
-  { key: "handmade", label: "手作生产", shortLabel: "手作", description: "材料、工时、工具与试做", hiddenCostCategory: "手工工时", hiddenCostDescription: "手工工时、设备折旧、试做报废和包材", fundingCostDescription: "材料备货借款、设备分期利息和融资费用", productCostLabel: "制作成本", productCostAction: "编辑制作成本", productCostEmpty: "还没有制作成本明细，先添加一项材料。", quickPrimaryLabel: "材料成本", quickSecondaryOptions: ["直接人工", "包材费"], quickUnit: "件", categories: ["材料采购", "包材耗材", "手工工时", "设备工具", "试做报废"] },
-];
-
 export type IndustrySampleData = { materials: Material[]; products: LedgerProduct[] };
 
-export const INDUSTRY_SAMPLE_DATA: Record<IndustryKey, IndustrySampleData> = {
+export const INDUSTRY_SAMPLE_DATA: Partial<Record<IndustryKey, IndustrySampleData>> = {
   catering: {
     materials: [
       { id: "catering-milk", name: "鲜牛奶", unit: "毫升", unitCost: 0.009, source: "社区批发" },
@@ -450,6 +433,7 @@ export const INDUSTRY_SAMPLE_DATA: Record<IndustryKey, IndustrySampleData> = {
 
 export const getIndustrySampleData = (industry: IndustryKey): IndustrySampleData => {
   const source = INDUSTRY_SAMPLE_DATA[industry] ?? INDUSTRY_SAMPLE_DATA.catering;
+  if (!source) return { materials: [], products: [] };
   return { materials: source.materials.map((material) => ({ ...material })), products: source.products.map((product) => ({ ...product, bom: product.bom.map((item) => ({ ...item })) })) };
 };
 
@@ -477,7 +461,7 @@ export const calculateUnitCost = (purchaseAmount: number, purchaseQuantity: numb
 };
 
 export const seedLedger = (): LedgerData => ({
-  profile: { storeName: "巷口奶茶铺", industry: "catering", onboarded: false, monthlyBudget: 18000 },
+  profile: { storeName: "巷口奶茶铺", industry: DEFAULT_INDUSTRY_KEY, industryTemplateVersion: INDUSTRY_TEMPLATE_VERSION, onboarded: false, monthlyBudget: 18000 },
   costs: { fixedCost: 0.92, hiddenCost: 1.3, hiddenCostBasis: "perUnit", hiddenCostSource: "manual", hiddenCostCategory: "交通配送", allocationPeriod: getBusinessPeriod(), fundingCost: 0.28, fundingSource: "manual", feeRate: 3 },
   categories: INDUSTRY_TEMPLATES[0].categories,
   categoryStatus: Object.fromEntries(INDUSTRY_TEMPLATES[0].categories.map((category) => [category, true])),
@@ -501,7 +485,7 @@ export const seedLedger = (): LedgerData => ({
 
 /** 首次打开只展示行业选择，正式账本不会自动带入任何商品、流水或成本金额。 */
 export const createEmptyLedger = (): LedgerData => ({
-  profile: { storeName: "", industry: "catering", onboarded: false, monthlyBudget: 0 },
+  profile: { storeName: "", industry: DEFAULT_INDUSTRY_KEY, industryTemplateVersion: INDUSTRY_TEMPLATE_VERSION, onboarded: false, monthlyBudget: 0 },
   costs: { fixedCost: 0, hiddenCost: 0, hiddenCostBasis: "perUnit", hiddenCostSource: "manual", hiddenCostCategory: INDUSTRY_TEMPLATES[0].hiddenCostCategory, hiddenCostCategorySource: "template", allocationPeriod: getBusinessPeriod(), fundingCost: 0, fundingSource: "manual", feeRate: 0, monthlyIndirectPlans: [] },
   categories: INDUSTRY_TEMPLATES[0].categories,
   categoryStatus: Object.fromEntries(INDUSTRY_TEMPLATES[0].categories.map((category) => [category, true])),
@@ -572,7 +556,7 @@ export const loadLedger = (): LedgerData => {
 
 /** 对已有本地账本做轻量迁移：带BOM的商品始终以当前BOM重算，避免种子值与配方不一致。 */
 export const normalizeLedger = (ledger: LedgerData): LedgerData => {
-  const template = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
+  const template = resolveIndustryTemplate(ledger.profile.industry, ledger.profile.industryTemplateOverrides);
   const categorySource = ledger.costs.hiddenCostCategorySource
     ?? (ledger.costs.hiddenCostCategory && ledger.costs.hiddenCostCategory !== template.hiddenCostCategory ? "custom" : "template");
   const monthlyIndirectPlans = (ledger.costs.monthlyIndirectPlans ?? []).map((plan) => ({
@@ -584,6 +568,7 @@ export const normalizeLedger = (ledger: LedgerData): LedgerData => {
   const activePlan = monthlyIndirectPlans.find((plan) => plan.period === (ledger.costs.allocationPeriod ?? getBusinessPeriod()));
   return {
     ...ledger,
+    profile: { ...ledger.profile, industry: template.key, industryTemplateVersion: ledger.profile.industryTemplateVersion ?? template.version, industryTemplateOverrides: normalizeIndustryTemplateOverrides(ledger.profile.industryTemplateOverrides) },
     costs: {
       ...ledger.costs,
       hiddenCost: Math.max(Number(ledger.costs.hiddenCost) || 0, 0),
@@ -619,13 +604,15 @@ export const initializeIndustryLedger = (ledger: LedgerData, storeName: string, 
 };
 
 export const applyIndustryTemplate = (ledger: LedgerData, industry: IndustryKey): LedgerData => {
-  const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
-  const allDefaultCategories = INDUSTRY_TEMPLATES.flatMap((item) => item.categories);
-  const customCategories = ledger.categories.filter((category) => !allDefaultCategories.includes(category));
+  const userOverrides = ledger.profile.industry === industry ? normalizeIndustryTemplateOverrides(ledger.profile.industryTemplateOverrides) : undefined;
+  const template = resolveIndustryTemplate(industry, userOverrides);
+  /** 只以旧版已发布模板识别默认分类，避免新增行业的同名分类误删除用户历史自定义项。 */
+  const legacyDefaultCategories = INDUSTRY_TEMPLATES.filter((item) => ["catering", "retail", "stall", "handmade"].includes(item.key)).flatMap((item) => item.categories);
+  const customCategories = ledger.categories.filter((category) => !legacyDefaultCategories.includes(category));
   const nextCategories = [...template.categories, ...customCategories];
   return {
     ...ledger,
-    profile: { ...ledger.profile, industry: template.key },
+    profile: { ...ledger.profile, industry: template.key, industryTemplateVersion: template.version, industryTemplateOverrides: userOverrides },
     categories: nextCategories,
     categoryStatus: Object.fromEntries(nextCategories.map((category) => [category, ledger.categoryStatus?.[category] !== false])),
     costs: {
@@ -635,6 +622,21 @@ export const applyIndustryTemplate = (ledger: LedgerData, industry: IndustryKey)
         : template.hiddenCostCategory,
       hiddenCostCategorySource: ledger.costs.hiddenCostCategorySource ?? "template",
     },
+  };
+};
+
+/** 保存用户个性化覆盖的唯一入口；官方模板始终保持只读。 */
+export const applyIndustryTemplateOverrides = (ledger: LedgerData, overrides?: IndustryTemplateUserOverrides): LedgerData => {
+  const userOverrides = normalizeIndustryTemplateOverrides(overrides);
+  const template = resolveIndustryTemplate(ledger.profile.industry, userOverrides);
+  const officialCategories = INDUSTRY_TEMPLATES.flatMap((item) => item.categories);
+  const preservedCategories = ledger.categories.filter((category) => !officialCategories.includes(category));
+  const nextCategories = [...template.categories, ...preservedCategories.filter((category) => !template.categories.includes(category))];
+  return {
+    ...ledger,
+    profile: { ...ledger.profile, industryTemplateVersion: template.version, industryTemplateOverrides: userOverrides },
+    categories: nextCategories,
+    categoryStatus: Object.fromEntries(nextCategories.map((category) => [category, ledger.categoryStatus?.[category] !== false])),
   };
 };
 
@@ -860,17 +862,6 @@ export const getCashTrendSeries = (ledger: LedgerData, selectedPeriod: string, r
     else bucket.expenses += amount;
   });
   return Array.from(buckets.entries()).map(([date, values]) => ({ date, label: `${date.slice(5, 7)}/${date.slice(8, 10)}`, income: money(values.income), expenses: money(values.expenses) }));
-};
-
-/**
- * 选定日期的现金明细与趋势图使用同一份已保存流水。这里不读取销售利润、成本快照或预计分摊，
- * 本金还款和销售退款均保留为实际付款，便于商家将图表回溯到逐笔现金事实。
- */
-export const getCashDayDetail = (ledger: LedgerData, date: string) => {
-  const records = ledger.records.filter((record) => record.date === date);
-  const income = money(records.filter((record) => record.type === "income").reduce((total, record) => total + (Number.isFinite(record.amount) ? record.amount : 0), 0));
-  const expenses = money(records.filter((record) => record.type === "expense").reduce((total, record) => total + (Number.isFinite(record.amount) ? record.amount : 0), 0));
-  return { date, records, income, expenses, net: money(income - expenses) };
 };
 
 export const summarizeLedger = (ledger: LedgerData, selectedPeriod = ledger.costs.allocationPeriod ?? getBusinessPeriod()): LedgerSummary => {
