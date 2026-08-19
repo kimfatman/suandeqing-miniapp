@@ -11,3 +11,8 @@ export function BrandMark({ size = 40 }: { size?: number }) {
     />
   );
 }
+
+/** 加号、等号和微笑曲线组成的轻量品牌签名，用于账本关键节点而非每一处装饰。 */
+export function BrandSignature({ tone = "blue", compact = false }: { tone?: "blue" | "ink" | "inverse"; compact?: boolean }) {
+  return <span className={`brand-signature ${tone} ${compact ? "compact" : ""}`} aria-hidden="true"><i className="brand-signature-plus">+</i><i className="brand-signature-equals">=</i><i className="brand-signature-smile" /></span>;
+}

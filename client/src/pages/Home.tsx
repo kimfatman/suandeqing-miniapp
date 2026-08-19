@@ -32,7 +32,7 @@ import {
   Send,
   Upload,
 } from "lucide-react";
-import { BrandMark } from "@/components/BrandMark";
+import { BrandMark, BrandSignature } from "@/components/BrandMark";
 import { MetricCard } from "@/components/MetricCard";
 import { PricingPanel, type PricingCostLine } from "@/components/PricingPanel";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
@@ -494,7 +494,7 @@ function HomeView({
 
       <section className="hero-ledger-card">
         <div className="hero-card-top"><span className="ledger-tab">{formatBusinessPeriod(period)} · 本月经营结论</span><span className={hasSalesResult ? "ledger-stamp" : "ledger-stamp pending"}>{hasSalesResult ? "已结转" : "待结转"}</span></div>
-        <div className="ledger-card-heading"><span>{resultTitle}</span><BookOpenCheck size={18} /></div>
+        <div className="ledger-card-heading"><span>{resultTitle}</span><span className="hero-brand-lockup"><BrandSignature tone="inverse" compact /><BookOpenCheck size={18} /></span></div>
         <strong>{hasSalesResult ? formatCurrency(operatingResult) : "暂无法判断"}</strong>
         <p><b>{resultDetail}</b></p>
         {hasSalesResult ? <div className="hero-calculation-trail"><span>销售收入<b>{formatCurrency(summary.salesRevenue)}</b></span><i>−</i><span>已结转成本<b>{formatCurrency(resultCost)}</b></span><i>=</i><span className="trail-result">经营结果<b>{formatCurrency(operatingResult)}</b></span></div> : <div className="hero-calculation-trail incomplete"><span>已收现金<b>{formatCurrency(summary.income)}</b></span><i>−</i><span>已付现金<b>{formatCurrency(summary.cashOutflow)}</b></span><i>=</i><span className="trail-result">现金结余<b>{formatCurrency(summary.cashBalance)}</b></span></div>}
@@ -578,7 +578,7 @@ export function ProductsView({ products, activeProductId, fundingCost, onSelect,
         })}
       </section>
       <section className="product-detail-card">
-        <div className="detail-card-title"><div><h2>{selected.name}</h2></div><span className={needsCost ? "status-pill warning" : "status-pill"}>{needsCost ? `待补${productCostLabel}` : needsPricing ? "待定价" : "已核算"}</span></div>
+        <div className="detail-card-title"><div><div className="detail-brand-line"><BrandSignature tone="inverse" compact /><span>商品单件账</span></div><h2>{selected.name}</h2></div><span className={needsCost ? "status-pill warning" : "status-pill"}>{needsCost ? `待补${productCostLabel}` : needsPricing ? "待定价" : "已核算"}</span></div>
         <div className="product-chart-summary"><span>成本 <b>{formatCurrency(selected.operating)}</b></span><span>利润率 <b>{selected.price ? `${margin.toFixed(1)}%` : "—"}</b></span><span>库存 <b>{selected.stockQuantity === undefined ? "未启用" : selected.stockQuantity}</b></span></div>
         <CostCompositionChart product={selected} operatingCost={selected.operating} fullCost={selected.operating + fundingCost} />
         <div className="product-action-pair"><button className="primary-action quick-cost-entry" onClick={onQuickCost}><Coins size={18} /><span>{needsCost ? "录入成本" : "更新成本"}<small>最多两项</small></span></button><button className={!needsCost && needsPricing ? "primary-action" : "secondary-card-action"} onClick={onPricing}><Sparkles size={18} /> {needsPricing ? "设置售价" : "查看定价"}</button><button className="secondary-card-action" aria-expanded={showMoreActions} onClick={() => setShowMoreActions((current) => !current)}>更多操作<ChevronRight size={16} /></button>{showMoreActions && <div className="product-more-actions"><button onClick={onBom}><ClipboardList size={16} /> {productCostAction}</button>{onInventory && <button onClick={() => onInventory(selected)}><ShoppingBag size={16} />库存设置</button>}{onDelete && <button className="danger" onClick={() => onDelete(selected)}><Trash2 size={16} />删除商品</button>}</div>}</div>
@@ -594,7 +594,7 @@ export function QuickEntrySheet({ hasProducts, onClose, onChoose }: { hasProduct
     { kind: "purchase" as const, icon: <PackagePlus size={21} />, title: "采购材料", detail: "更新材料成本，可同时记采购付款", tone: "purchase" },
     { kind: "product" as const, icon: <Plus size={21} />, title: "新建商品", detail: "先建商品，再补成本和设置售价", tone: "product" },
   ];
-  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet quick-entry-sheet" role="dialog" aria-modal="true" aria-label="记一笔" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">今天发生了什么</span><h2>记一笔</h2></div><button className="icon-button" onClick={onClose} aria-label="关闭">×</button></header><p className="quick-entry-intro">选择最接近的一项，系统会带你进入对应表单，并保留收入、成本、库存和日期的核算规则。</p><div className="quick-entry-grid">{entries.map((entry) => <button className={`quick-entry-option ${entry.tone}`} type="button" key={entry.kind} onClick={() => onChoose(entry.kind)}><span className="quick-entry-icon">{entry.icon}</span><span><b>{entry.title}</b><small>{entry.detail}</small></span><ChevronRight size={17} /></button>)}</div></section></div>;
+  return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet quick-entry-sheet" role="dialog" aria-modal="true" aria-label="记一笔" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">今天发生了什么</span><div className="sheet-title-lockup"><h2>记一笔</h2><BrandSignature tone="blue" compact /></div></div><button className="icon-button" onClick={onClose} aria-label="关闭">×</button></header><p className="quick-entry-intro">选择最接近的一项，系统会带你进入对应表单，并保留收入、成本、库存和日期的核算规则。</p><div className="quick-entry-grid">{entries.map((entry) => <button className={`quick-entry-option ${entry.tone}`} type="button" key={entry.kind} onClick={() => onChoose(entry.kind)}><span className="quick-entry-icon">{entry.icon}</span><span><b>{entry.title}</b><small>{entry.detail}</small></span><ChevronRight size={17} /></button>)}</div></section></div>;
 }
 
 export function getRefundableSaleQuantity(sale: SalesRecord) { return Math.max(sale.quantity - (sale.refunds ?? []).reduce((sum, refund) => sum + Math.max(refund.quantity, 0), 0), 0); }
@@ -667,7 +667,7 @@ export function ProfileView({ storeName, industry, categories, categoryStatus, u
   const industryName = template.label;
   return (
     <div className="page-content profile-content">
-      <section className="profile-hero"><div className="profile-mark"><BrandMark size={54} /></div><div><span>{industryName}</span><h1>{storeName}</h1></div></section>
+      <section className="profile-hero"><div className="profile-mark"><BrandMark size={54} /></div><div><span>{industryName}</span><div className="profile-title-lockup"><h1>{storeName}</h1><BrandSignature tone="blue" compact /></div></div></section>
       <section className="account-status-card" aria-label="账户与数据">
         <div className="account-status-icon">{user ? <ShieldCheck size={21} /> : <Cloud size={21} />}</div><div className="account-status-copy"><b>{authLoading ? "检查账户状态" : user ? (user.name || "已登录账号") : "本机账本"}</b><small>{authLoading ? "请稍候" : user ? (cloudAvailable && backupAt ? `最近备份：${new Date(backupAt).toLocaleDateString("zh-CN")}` : "尚未创建云端备份") : "登录后可备份并在新设备恢复"}</small></div>
         {user ? <button className="text-action" onClick={onDataManagement}>数据管理<ChevronRight size={15} /></button> : <button className="account-login" onClick={onLogin}><LogIn size={15} />登录并备份</button>}
