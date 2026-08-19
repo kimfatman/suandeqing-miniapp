@@ -1399,3 +1399,146 @@
   }
 
 }
+
+/* P0 经营分析驾驶舱：所有状态均需保留口径说明，避免把现金、预计或利润混为一谈。 */
+.dashboard-pulse-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.dashboard-goal-card,
+.dashboard-today-card,
+.analytics-trend-card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid #e3eaf2;
+  border-radius: var(--radius-ledger-reverse);
+  background: #fff;
+  box-shadow: 0 5px 18px rgb(11 24 54 / .035);
+}
+
+.dashboard-goal-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.dashboard-goal-ring {
+  display: grid;
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.dashboard-goal-ring::before {
+  content: "";
+  grid-area: 1 / 1;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.dashboard-goal-ring b {
+  position: relative;
+  z-index: 1;
+  color: #087ff5;
+  font-family: "DM Sans", "Noto Sans SC", sans-serif;
+  font-size: 11px;
+  letter-spacing: -.04em;
+}
+
+.dashboard-goal-body > div { display: grid; min-width: 0; gap: 2px; }
+.dashboard-goal-body b { overflow: hidden; color: #17233c; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-goal-body b small { color: #8292a2; font-family: "Noto Sans SC", sans-serif; font-size: 9px; font-weight: 500; }
+.dashboard-goal-body span { color: #52778f; font-size: var(--font-secondary); }
+.dashboard-goal-card > small { display: block; margin-top: var(--space-3); padding-top: var(--space-2); color: #8292a2; border-top: 1px solid #edf1f5; font-size: 9px; line-height: 1.45; }
+
+.dashboard-goal-editor { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.dashboard-goal-editor label > span { display: block; margin-bottom: var(--space-1); color: #718094; font-size: var(--font-secondary); }
+.dashboard-goal-editor .money-input { height: var(--button-md-height); }
+.dashboard-goal-editor .primary-action { min-height: var(--button-md-height); margin: 0; font-size: var(--font-secondary); }
+.dashboard-goal-empty, .dashboard-summary-empty { display: grid; gap: var(--space-1); min-height: 75px; align-content: center; color: #718094; }
+.dashboard-goal-empty { grid-template-columns: 20px minmax(0, 1fr); align-items: start; }
+.dashboard-goal-empty b, .dashboard-summary-empty b { color: #24324b; font-size: var(--font-secondary); }
+.dashboard-goal-empty small, .dashboard-summary-empty small { color: #8292a2; font-size: 9px; line-height: 1.45; }
+.dashboard-goal-empty button { grid-column: 2; justify-self: start; min-height: var(--button-sm-height); padding: 0 var(--space-2); color: #087ff5; border: 0; border-radius: var(--radius-2); background: #edf7ff; font-size: 9px; font-weight: 800; }
+
+.dashboard-today-card > b { display: block; margin-top: var(--space-2); color: #168968; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 22px; letter-spacing: -.045em; }
+.dashboard-today-card > b.loss { color: #c64d43; }
+.dashboard-today-card > small { display: block; margin-top: 3px; color: #718094; font-size: 9px; line-height: 1.45; }
+.dashboard-today-card > em { display: inline-flex; margin-top: var(--space-2); padding: 3px 6px; color: #168968; border-radius: var(--radius-pill); background: #e8f8f1; font-size: 8px; font-style: normal; font-weight: 800; }
+
+.dashboard-health-score { display: flex; align-items: baseline; gap: 2px; margin-top: var(--space-2); }
+.dashboard-health-score b { color: #087ff5; font-family: "DM Sans", sans-serif; font-size: 28px; letter-spacing: -.06em; }
+.dashboard-health-score span { color: #8292a2; font-size: 10px; }
+.dashboard-health-card > strong { display: block; color: #24324b; font-size: var(--font-card-title); }
+.dashboard-health-card details { margin-top: var(--space-2); color: #718094; font-size: 9px; line-height: 1.5; }
+.dashboard-health-card summary { min-height: var(--tap-target); display: flex; align-items: center; color: #087ff5; cursor: pointer; font-weight: 800; }
+.dashboard-health-card details span { display: block; padding-top: 3px; }
+
+.dashboard-sales-trends { display: grid; gap: var(--space-4); margin-top: var(--space-4); }
+.analytics-trend-card .chart-heading { align-items: flex-start; }
+.analytics-trend-card .chart-summary-value.loss { color: #c64d43; }
+.analytics-trend-svg { display: block; width: 100%; height: 138px; margin-top: var(--space-3); overflow: visible; }
+.analytics-trend-svg polyline { fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.analytics-zero-line { stroke: #dce5ef; stroke-width: .9; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+.analytics-profit-line { stroke: #168968; }
+.analytics-income-line { stroke: #087ff5; }
+.analytics-cost-line { stroke: #cb8b27; }
+.analytics-profit-dot, .analytics-income-dot, .analytics-cost-dot { cursor: pointer; vector-effect: non-scaling-stroke; }
+.analytics-profit-dot { fill: #168968; stroke: #e7f8f0; stroke-width: 1.5; }
+.analytics-income-dot { fill: #087ff5; stroke: #eaf4ff; stroke-width: 1.5; }
+.analytics-cost-dot { fill: #cb8b27; stroke: #fff6df; stroke-width: 1.5; }
+.analytics-trend-tooltip { display: grid; gap: 4px; margin-top: var(--space-3); }
+.analytics-trend-tooltip > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.analytics-trend-tooltip b { color: #24324b; font-size: var(--font-secondary); }
+.analytics-trend-tooltip small { color: #8292a2; font-size: 9px; }
+.analytics-trend-tooltip span, .analytics-trend-tooltip strong { color: #526477; font-size: 10px; }
+.analytics-trend-tooltip strong { color: #168968; font-family: "DM Sans", "Noto Sans SC", sans-serif; }
+.analytics-trend-card > p { margin: var(--space-3) 0 0; padding-top: var(--space-2); color: #8292a2; border-top: 1px solid #edf1f5; font-size: 9px; line-height: 1.45; }
+.analytics-trend-card.analytics-empty { min-height: 180px; }
+.profit-dot, .cost-dot { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; }
+.profit-dot { background: #168968; }
+.cost-dot { background: #cb8b27; }
+
+@media (max-width: 390px) {
+  .dashboard-pulse-grid { gap: var(--space-2); }
+  .dashboard-goal-card, .dashboard-today-card, .analytics-trend-card { padding: var(--space-3); }
+  .dashboard-goal-body { gap: var(--space-2); }
+  .dashboard-goal-ring { width: 48px; height: 48px; }
+  .dashboard-goal-ring::before { width: 36px; height: 36px; }
+  .dashboard-today-card > b { font-size: 18px; }
+  .analytics-trend-svg { height: 122px; }
+}
+
+.sale-profit-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid #cfe3fb;
+  border-radius: var(--radius-ledger-reverse);
+  background: #f7fbff;
+}
+
+.sale-profit-preview > div {
+  min-width: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-2);
+  background: #fff;
+}
+
+.sale-profit-preview span,
+.sale-profit-preview b { display: block; }
+.sale-profit-preview span { color: #718094; font-size: 9px; }
+.sale-profit-preview b { margin-top: 2px; overflow: hidden; color: #24324b; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.sale-profit-preview > div.profit b { color: #168968; }
+.sale-profit-preview > div.loss b { color: #c64d43; }
+.sale-profit-preview > p { grid-column: 1 / -1; margin: 0; color: #718094; font-size: 9px; line-height: 1.5; }

@@ -864,6 +864,135 @@ export const getCashTrendSeries = (ledger: LedgerData, selectedPeriod: string, r
   return Array.from(buckets.entries()).map(([date, values]) => ({ date, label: `${date.slice(5, 7)}/${date.slice(8, 10)}`, income: money(values.income), expenses: money(values.expenses) }));
 };
 
+/** 已结转销售口径的按日分析序列；现金流水仍由 getCashTrendSeries 单独表达。 */
+export type SalesTrendPoint = {
+  date: string;
+  label: string;
+  revenue: number;
+  cost: number;
+  profit: number;
+  grossProfit: number;
+  salesCount: number;
+};
+
+const getTrendDateWindow = (selectedPeriod: string, range: CashTrendRange) => {
+  const [year, month] = selectedPeriod.split("-").map(Number);
+  const today = getBusinessDate();
+  const isCurrentPeriod = selectedPeriod === today.slice(0, 7);
+  const monthEnd = new Date(year, month, 0);
+  const periodEnd = isCurrentPeriod ? new Date(`${today}T12:00:00`) : monthEnd;
+  const periodStart = new Date(year, month - 1, 1);
+  const requestedDays = range === "7d" ? 7 : range === "30d" ? 30 : periodEnd.getDate();
+  const candidateStart = new Date(periodEnd);
+  candidateStart.setDate(periodEnd.getDate() - requestedDays + 1);
+  const start = range === "month" || candidateStart < periodStart ? periodStart : candidateStart;
+  return { start: formatTrendDate(start), end: formatTrendDate(periodEnd) };
+};
+
+/**
+ * 仅从销售结转快照、退款和对应已记录费用构建经营趋势。
+ * 手工/分摊快照按销售数量计入；ledger 来源的隐形成本与资金成本按实际费用业务日期计入，
+ * 因而整月累计可与 summarizeSales() 的经营结果口径对齐，但不会混入本金还款或普通现金流。
+ */
+export const getSalesTrendSeries = (ledger: LedgerData, selectedPeriod: string, range: CashTrendRange): SalesTrendPoint[] => {
+  const { start, end } = getTrendDateWindow(selectedPeriod, range);
+  const buckets = new Map<string, Omit<SalesTrendPoint, "date" | "label">>();
+  const cursor = new Date(`${start}T12:00:00`);
+  const endDate = new Date(`${end}T12:00:00`);
+  while (cursor <= endDate) {
+    buckets.set(formatTrendDate(cursor), { revenue: 0, cost: 0, profit: 0, grossProfit: 0, salesCount: 0 });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  const inWindow = (date: string) => date >= start && date <= end;
+  const salesInWindow = (ledger.sales ?? []).filter((sale) => inWindow(sale.date) || (sale.refunds ?? []).some((refund) => inWindow(refund.date)));
+  const needsLedgerHidden = salesInWindow.some((sale) => inWindow(sale.date) && sale.quantity > 0 && (sale.hiddenCostSourceSnapshot ?? ledger.costs.hiddenCostSource) === "ledger");
+  const needsLedgerFunding = salesInWindow.some((sale) => inWindow(sale.date) && sale.quantity > 0 && (sale.fundingSourceSnapshot ?? ledger.costs.fundingSource) === "ledger");
+
+  const addSaleImpact = (date: string, revenue: number, directCost: number, completeCost: number, salesCount = 0) => {
+    const bucket = buckets.get(date);
+    if (!bucket) return;
+    bucket.revenue += revenue;
+    bucket.cost += completeCost;
+    bucket.grossProfit += revenue - directCost;
+    bucket.salesCount += salesCount;
+  };
+
+  salesInWindow.forEach((sale) => {
+    const product = ledger.products.find((entry) => entry.id === sale.productId);
+    const quantity = Math.max(Number(sale.quantity) || 0, 0);
+    if (!product || quantity <= 0) return;
+    const unitPrice = Math.max(Number(sale.unitPrice) || 0, 0);
+    const directUnit = Math.max(sale.unitDirectCostSnapshot ?? calculateDirectCost(product, ledger.materials), 0);
+    const fixedUnit = Math.max(sale.fixedCostSnapshot ?? ledger.costs.fixedCost, 0);
+    const hiddenAmount = Math.max(sale.hiddenCostSnapshot ?? ledger.costs.hiddenCost, 0);
+    const hiddenSource = sale.hiddenCostSourceSnapshot ?? ledger.costs.hiddenCostSource ?? "manual";
+    const hiddenBasis = sale.hiddenCostBasisSnapshot ?? ledger.costs.hiddenCostBasis ?? "perUnit";
+    const fundingSource = sale.fundingSourceSnapshot ?? ledger.costs.fundingSource ?? "manual";
+    const fundingUnit = fundingSource === "manual" ? Math.max(sale.fundingCostSnapshot ?? ledger.costs.fundingCost, 0) : 0;
+    const indirectUnit = sale.allocatedIndirectCostSnapshot ?? (fixedUnit + (hiddenSource === "manual" ? (hiddenBasis === "perSale" ? hiddenAmount / quantity : hiddenAmount) : 0));
+    const completeUnit = directUnit + indirectUnit + fundingUnit;
+
+    if (inWindow(sale.date)) addSaleImpact(sale.date, quantity * unitPrice, directUnit * quantity, completeUnit * quantity, 1);
+    (sale.refunds ?? []).forEach((refund) => {
+      const refundQuantity = Math.min(Math.max(Number(refund.quantity) || 0, 0), quantity);
+      if (inWindow(refund.date) && refundQuantity > 0) addSaleImpact(refund.date, -Math.max(Number(refund.amount) || 0, 0), -directUnit * refundQuantity, -completeUnit * refundQuantity);
+    });
+  });
+
+  ledger.records.forEach((record) => {
+    if (!inWindow(record.date) || record.type !== "expense") return;
+    const bucket = buckets.get(record.date);
+    if (!bucket) return;
+    const amount = Math.max(Number(record.amount) || 0, 0);
+    const isLedgerHidden = needsLedgerHidden && record.category === (ledger.costs.hiddenCostCategory ?? "交通配送");
+    const isLedgerFunding = needsLedgerFunding && (record.category === "借款利息" || record.category === "融资服务费");
+    if (isLedgerHidden || isLedgerFunding) bucket.cost += amount;
+  });
+
+  return Array.from(buckets.entries()).map(([date, values]) => ({
+    date,
+    label: `${date.slice(5, 7)}/${date.slice(8, 10)}`,
+    revenue: money(values.revenue),
+    cost: money(values.cost),
+    profit: money(values.revenue - values.cost),
+    grossProfit: money(values.grossProfit),
+    salesCount: values.salesCount,
+  }));
+};
+
+export type RevenueGoalProgress = { target: number; actual: number; percentage: number; remaining: number } | null;
+
+/** monthlyBudget 经产品确认后统一解释为本月已结转销售收入目标。 */
+export const getRevenueGoalProgress = (monthlyBudget: number, salesRevenue: number): RevenueGoalProgress => {
+  const target = Math.max(Number(monthlyBudget) || 0, 0);
+  if (target <= 0) return null;
+  const actual = Math.max(Number(salesRevenue) || 0, 0);
+  return { target: money(target), actual: money(actual), percentage: money(actual / target * 100), remaining: money(Math.max(target - actual, 0)) };
+};
+
+export type DashboardHealthFactor = { key: "sales" | "productData" | "cash" | "profit"; label: string; score: number; maxScore: number; detail: string };
+export type DashboardHealth = { score: number; label: string; detail: string; factors: DashboardHealthFactor[] };
+
+/** 可解释而非预测性的健康度：销售结转、商品数据、现金及已结转经营结果各占固定权重。 */
+export const getDashboardHealth = (ledger: LedgerData, summary: ReturnType<typeof summarizeLedger>): DashboardHealth => {
+  const activeProducts = ledger.products.filter((product) => !product.archivedAt);
+  const readyProducts = activeProducts.filter((product) => product.price > 0 && (product.direct > 0 || product.bom.length > 0)).length;
+  const productRatio = activeProducts.length ? readyProducts / activeProducts.length : 0;
+  const salesScore = summary.profitReady ? 30 : 0;
+  const productScore = Math.round(productRatio * 30);
+  const cashScore = summary.cashBalance >= 0 ? 20 : 5;
+  const profitScore = !summary.profitReady ? 0 : summary.operatingResult > 0 ? 20 : summary.operatingResult === 0 ? 12 : 4;
+  const factors: DashboardHealthFactor[] = [
+    { key: "sales", label: "销售结转", score: salesScore, maxScore: 30, detail: summary.profitReady ? `已结转 ${summary.salesCount} 笔销售` : "尚无已结转销售" },
+    { key: "productData", label: "商品数据", score: productScore, maxScore: 30, detail: activeProducts.length ? `${readyProducts}/${activeProducts.length} 个商品已补成本并定价` : "尚未建立商品" },
+    { key: "cash", label: "现金情况", score: cashScore, maxScore: 20, detail: summary.cashBalance >= 0 ? "本期实际现金未为负" : "本期实际现金为负" },
+    { key: "profit", label: "经营结果", score: profitScore, maxScore: 20, detail: !summary.profitReady ? "待销售结转" : summary.operatingResult > 0 ? "已结转经营利润为正" : summary.operatingResult < 0 ? "已结转经营利润为负" : "已结转经营利润持平" },
+  ];
+  const score = factors.reduce((total, factor) => total + factor.score, 0);
+  const label = score >= 80 ? "经营状态良好" : score >= 55 ? "经营状态可关注" : "先补齐经营数据";
+  return { score, label, detail: "基于销售结转、商品数据、现金和已结转经营结果；不代表经营预测。", factors };
+};
+
 export const summarizeLedger = (ledger: LedgerData, selectedPeriod = ledger.costs.allocationPeriod ?? getBusinessPeriod()): LedgerSummary => {
   const categoryTotals: Record<string, number> = {};
   const byDate: Record<string, { income: number; expenses: number }> = {};
