@@ -48,6 +48,8 @@ import {   applyIndustryTemplate, applyQuickCost,
 import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
 import { startLogin } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { trpc } from "@/lib/trpc";
 import { getMessageLevelLabel, isMessageExpired, type MessageLevel } from "@shared/messagePolicy";
 
@@ -363,6 +365,8 @@ export default function Home() {
             products={activeProducts}
             activeProductId={activeProductId}
             fundingCost={currentCosts.fundingCost}
+            sales={ledger.sales}
+            period={selectedPeriod}
             onSelect={(id) => setActiveProductId(id)}
             onPricing={() => setShowPricing(true)}
             productCostAction={currentTemplate.productCostAction}
@@ -531,32 +535,100 @@ function PeriodPicker({ period, onChange }: { period: string; onChange: (period:
   return <label className="range-chip period-picker"><input aria-label="选择经营月份" type="month" value={period} onChange={(event) => onChange(event.target.value)} /></label>;
 }
 
+const cashChartConfig = {
+  income: { label: "收款", color: "#087ff5" },
+  expenses: { label: "付款", color: "#20b486" },
+} satisfies ChartConfig;
+
+export function getCostMixData(product: LedgerProduct, operatingCost: number, fullCost: number) {
+  const direct = Math.max(product.direct, 0);
+  const operating = Math.max(operatingCost - direct, 0);
+  const funding = Math.max(fullCost - operatingCost, 0);
+  return [
+    { key: "direct", label: "直接成本", amount: direct, tone: "blue" },
+    { key: "operating", label: "经营分摊", amount: operating, tone: "mint" },
+    { key: "funding", label: "资金成本", amount: funding, tone: "amber" },
+  ].filter((item) => item.amount > 0);
+}
+
+export function getProfitBridgeData(summary: Pick<ReturnType<typeof summarizeLedger>, "salesRevenue" | "costOfSales" | "allocatedIndirectCosts" | "financingCosts" | "operatingResult">) {
+  return [
+    { key: "revenue", label: "销售收入", amount: Math.max(summary.salesRevenue, 0), direction: "plus" as const },
+    { key: "direct", label: "直接成本", amount: Math.max(summary.costOfSales, 0), direction: "minus" as const },
+    { key: "allocation", label: "间接分摊", amount: Math.max(summary.allocatedIndirectCosts, 0), direction: "minus" as const },
+    { key: "funding", label: "资金成本", amount: Math.max(summary.financingCosts, 0), direction: "minus" as const },
+    { key: "result", label: "经营结果", amount: summary.operatingResult, direction: "result" as const },
+  ];
+}
+
+export function getProductContributionData(products: LedgerProduct[], sales: SalesRecord[], period: string) {
+  return products.map((product) => {
+    let revenue = 0;
+    let directCost = 0;
+    let quantity = 0;
+    sales.filter((sale) => sale.productId === product.id).forEach((sale) => {
+      const saleInPeriod = sale.date.startsWith(period);
+      const refunds = (sale.refunds ?? []).filter((refund) => refund.date.startsWith(period));
+      const refundedQuantity = Math.min(refunds.reduce((sum, refund) => sum + Math.max(Number(refund.quantity) || 0, 0), 0), sale.quantity);
+      const refundedAmount = Math.min(refunds.reduce((sum, refund) => sum + Math.max(Number(refund.amount) || 0, 0), 0), sale.quantity * sale.unitPrice);
+      if (!saleInPeriod && refundedQuantity <= 0 && refundedAmount <= 0) return;
+      const netQuantity = saleInPeriod ? sale.quantity - refundedQuantity : -refundedQuantity;
+      const netRevenue = saleInPeriod ? sale.quantity * sale.unitPrice - refundedAmount : -refundedAmount;
+      const unitDirectCost = sale.unitDirectCostSnapshot ?? product.direct;
+      revenue += netRevenue;
+      directCost += unitDirectCost * netQuantity;
+      quantity += netQuantity;
+    });
+    return { productId: product.id, name: product.name, revenue, directCost, contribution: revenue - directCost, quantity };
+  }).filter((item) => item.revenue !== 0 || item.directCost !== 0).sort((a, b) => b.revenue - a.revenue);
+}
+
 function MiniTrendChart({ series }: { series: ReturnType<typeof summarizeLedger>["dailySeries"] }) {
+  const [selectedIndex, setSelectedIndex] = useState(Math.max(series.length - 1, 0));
   const values = series.flatMap((item) => [item.income, item.expenses]);
   const max = Math.max(...values, 1);
   const points = (key: "income" | "expenses") => series.map((item, index) => `${(index / Math.max(series.length - 1, 1)) * 100},${92 - (item[key] / max) * 76}`).join(" ");
   const hasData = series.some((item) => item.income > 0 || item.expenses > 0);
   if (!hasData) return <div className="mini-chart-empty"><BarChart3 size={20} /><span>暂无现金收付</span></div>;
-  return <div className="mini-trend-wrap"><svg className="mini-trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="本月现金收款与付款趋势"><line x1="0" y1="92" x2="100" y2="92" /><polyline className="trend-income" points={points("income")} /><polyline className="trend-expense" points={points("expenses")} />{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; return <g key={item.label}><circle className="trend-income-dot" cx={x} cy={92 - (item.income / max) * 76} r="1.8" /><circle className="trend-expense-dot" cx={x} cy={92 - (item.expenses / max) * 76} r="1.8" /></g>; })}</svg><div className="mini-chart-labels"><span>{series[0]?.label ?? ""}</span><span>{series.at(-1)?.label ?? ""}</span></div><div className="mini-chart-legend"><span><i className="income-dot" />收款</span><span><i className="expense-dot" />付款</span></div></div>;
+  const selected = series[selectedIndex] ?? series.at(-1)!;
+  return <div className="mini-trend-wrap"><svg className="mini-trend-chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="本月现金收款与付款趋势"><line x1="0" y1="92" x2="100" y2="92" /><polyline className="trend-income" points={points("income")} /><polyline className="trend-expense" points={points("expenses")} />{series.map((item, index) => { const x = (index / Math.max(series.length - 1, 1)) * 100; return <g className={index === selectedIndex ? "is-selected" : ""} key={item.label}><circle className="trend-income-dot" cx={x} cy={92 - (item.income / max) * 76} r="1.8" /><circle className="trend-expense-dot" cx={x} cy={92 - (item.expenses / max) * 76} r="1.8" /></g>; })}</svg><div className="chart-tooltip mini-trend-tooltip"><b>{selected.label}</b><span><i className="income-dot" />收款 {formatCurrency(selected.income)}</span><span><i className="expense-dot" />付款 {formatCurrency(selected.expenses)}</span></div><div className="chart-point-tabs" role="tablist" aria-label="选择现金收付日期">{series.map((item, index) => <button role="tab" aria-selected={index === selectedIndex} className={index === selectedIndex ? "selected" : ""} key={item.label} onClick={() => setSelectedIndex(index)}>{item.label}</button>)}</div><div className="mini-chart-legend"><span><i className="income-dot" />收款</span><span><i className="expense-dot" />付款</span></div></div>;
 }
 
-function CostCompositionChart({ product, operatingCost, fullCost }: { product: LedgerProduct; operatingCost: number; fullCost: number }) {
-  const direct = Math.max(product.direct, 0);
-  const operatingAdd = Math.max(operatingCost - direct, 0);
-  const fundingAdd = Math.max(fullCost - operatingCost, 0);
-  const total = Math.max(fullCost, direct, 0);
+export function CostCompositionChart({ product, operatingCost, fullCost }: { product: LedgerProduct; operatingCost: number; fullCost: number }) {
+  const layers = getCostMixData(product, operatingCost, fullCost);
+  const total = layers.reduce((sum, item) => sum + item.amount, 0);
+  const [selectedKey, setSelectedKey] = useState(layers[0]?.key ?? "direct");
+  const selected = layers.find((item) => item.key === selectedKey) ?? layers[0];
   if (total <= 0) return <div className="cost-composition-empty"><BarChart3 size={20} /><strong>还没有成本</strong></div>;
-  return <div className="cost-composition-chart"><div className="composition-track" role="img" aria-label={`直接成本${formatCurrency(direct)}，经营分摊${formatCurrency(operatingAdd)}，资金成本${formatCurrency(fundingAdd)}`}><span className="composition-direct" style={{ width: `${direct / total * 100}%` }} /><span className="composition-operating" style={{ width: `${operatingAdd / total * 100}%` }} /><span className="composition-funding" style={{ width: `${fundingAdd / total * 100}%` }} /></div><div className="composition-legend"><span><i className="composition-direct-dot" />直接 <b>{formatCurrency(direct)}</b></span><span><i className="composition-operating-dot" />经营 <b>{formatCurrency(operatingAdd)}</b></span><span><i className="composition-funding-dot" />资金 <b>{formatCurrency(fundingAdd)}</b></span></div></div>;
+  return <div className="cost-composition-chart"><div className="composition-track" role="img" aria-label="点按成本层查看金额"><div className="composition-segments">{layers.map((layer) => <button key={layer.key} aria-label={`查看${layer.label}`} className={`composition-${layer.tone} ${selected?.key === layer.key ? "selected" : ""}`} style={{ width: `${layer.amount / total * 100}%` }} onClick={() => setSelectedKey(layer.key)} />)}</div></div><div className="chart-tooltip cost-mix-tooltip"><b>{selected?.label}</b><span>{formatCurrency(selected?.amount ?? 0)} · {(((selected?.amount ?? 0) / total) * 100).toFixed(1)}%</span></div><div className="composition-legend">{layers.map((layer) => <button className={selected?.key === layer.key ? "selected" : ""} key={layer.key} onClick={() => setSelectedKey(layer.key)}><i className={`composition-${layer.tone}-dot`} />{layer.label} <b>{formatCurrency(layer.amount)}</b></button>)}</div></div>;
 }
 
 function CashFlowChart({ series, onRecord }: { series: ReturnType<typeof summarizeLedger>["dailySeries"]; onRecord: () => void }) {
-  const max = Math.max(...series.flatMap((item) => [item.income, item.expenses]), 1);
+  const [selectedIndex, setSelectedIndex] = useState(Math.max(series.length - 1, 0));
   const hasData = series.some((item) => item.income > 0 || item.expenses > 0);
   if (!hasData) return <section className="cash-flow-chart chart-card"><div className="chart-heading"><div><span className="eyebrow">现金流</span><h2>暂无记录</h2></div></div><div className="chart-empty" role="status"><button type="button" onClick={onRecord}>记一笔 <ArrowRight size={14} /></button></div></section>;
-  return <section className="cash-flow-chart chart-card" aria-label="现金流走势"><div className="chart-heading"><div><span className="eyebrow">现金流</span><h2>收支</h2></div><span className="legend"><i />收入 <i className="green" />流出</span></div><div className="cash-flow-bars">{series.map((item) => <div className="cash-flow-day" key={item.label}><div className="cash-flow-columns"><span className="cash-income-bar" style={{ height: `${Math.max(item.income / max * 100, item.income ? 7 : 0)}%` }} title={`收入 ${formatCurrency(item.income)}`} /><span className="cash-expense-bar" style={{ height: `${Math.max(item.expenses / max * 100, item.expenses ? 7 : 0)}%` }} title={`流出 ${formatCurrency(item.expenses)}`} /></div><small>{item.label}</small></div>)}</div></section>;
+  const selected = series[selectedIndex] ?? series.at(-1)!;
+  return <section className="cash-flow-chart chart-card" aria-label="现金流走势"><div className="chart-heading"><div><span className="eyebrow">现金流</span><h2>收支走势</h2></div><span className="legend"><i />收款 <i className="green" />付款</span></div><ChartContainer config={cashChartConfig} className="cash-flow-dynamic-chart"><BarChart data={series} margin={{ left: -18, right: 3, top: 12, bottom: 0 }}><CartesianGrid vertical={false} strokeDasharray="3 3" /><XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} /><YAxis hide /><ChartTooltip content={<ChartTooltipContent labelFormatter={(value) => `${value} 现金收付`} formatter={(value, name) => <span>{name} {formatCurrency(Number(value))}</span>} />} /><Bar dataKey="income" fill="var(--color-income)" radius={[6, 6, 2, 2]} onClick={(_, index) => setSelectedIndex(index)} /><Bar dataKey="expenses" fill="var(--color-expenses)" radius={[6, 6, 2, 2]} onClick={(_, index) => setSelectedIndex(index)} /></BarChart></ChartContainer><div className="chart-tooltip cash-flow-selection"><b>{selected.label}</b><span><i className="income-dot" />收款 {formatCurrency(selected.income)}</span><span><i className="expense-dot" />付款 {formatCurrency(selected.expenses)}</span><strong>当日净额 {formatCurrency(selected.income - selected.expenses)}</strong></div><div className="chart-point-tabs" role="tablist" aria-label="选择现金收付日期">{series.map((item, index) => <button role="tab" aria-selected={index === selectedIndex} className={index === selectedIndex ? "selected" : ""} key={item.label} onClick={() => setSelectedIndex(index)}>{item.label}</button>)}</div></section>;
 }
 
-export function ProductsView({ products, activeProductId, fundingCost, onSelect, onPricing, productCostAction, productCostLabel, onQuickCost, onBom, onAdd, onDelete, onInventory }: { products: LedgerProduct[]; activeProductId: number; fundingCost: number; onSelect: (id: number) => void; onPricing: () => void; productCostAction: string; productCostLabel: string; onQuickCost: () => void; onBom: () => void; onAdd: () => void; onDelete?: (product: LedgerProduct) => void; onInventory?: (product: LedgerProduct) => void }) {
+function ProfitBridgeChart({ summary }: { summary: ReturnType<typeof summarizeLedger> }) {
+  const rows = getProfitBridgeData(summary);
+  const [selectedKey, setSelectedKey] = useState("revenue");
+  const selected = rows.find((row) => row.key === selectedKey) ?? rows[0];
+  const max = Math.max(...rows.map((row) => Math.abs(row.amount)), 1);
+  return <section className="profit-bridge-card" aria-label="销售结转利润桥图"><div className="chart-heading"><div><span className="eyebrow">利润桥</span><h2>销售结转如何变成利润</h2></div><span className="chart-summary-value">{formatCurrency(summary.operatingResult)} <small>经营结果</small></span></div><div className="profit-bridge-bars">{rows.map((row) => <button className={`${row.direction} ${selected.key === row.key ? "selected" : ""}`} key={row.key} onClick={() => setSelectedKey(row.key)}><span>{row.direction === "plus" ? "+" : row.direction === "minus" ? "−" : "="}</span><i style={{ width: `${Math.max(Math.abs(row.amount) / max * 100, row.amount ? 6 : 2)}%` }} /><b>{row.label}</b><strong>{formatCurrency(row.amount)}</strong></button>)}</div><div className="chart-tooltip profit-bridge-tooltip"><b>{selected.label}</b><span>{selected.direction === "plus" ? "增加" : selected.direction === "minus" ? "扣减" : "最终结果"} {formatCurrency(selected.amount)}；数据来自已结转销售快照。</span></div></section>;
+}
+
+function ProductContributionChart({ products, sales, period }: { products: LedgerProduct[]; sales: SalesRecord[]; period: string }) {
+  const rows = getProductContributionData(products, sales, period);
+  const [selectedId, setSelectedId] = useState(rows[0]?.productId ?? 0);
+  const selected = rows.find((item) => item.productId === selectedId) ?? rows[0];
+  const max = Math.max(...rows.map((item) => Math.abs(item.revenue)), 1);
+  if (!rows.length) return null;
+  return <section className="product-contribution-chart" aria-label="商品销售贡献图"><div className="section-heading compact"><div><span className="eyebrow">商品经营</span><h2>销售贡献</h2></div><small>仅含已结转直接成本</small></div><div className="contribution-bars">{rows.map((item) => <button key={item.productId} className={selected?.productId === item.productId ? "selected" : ""} onClick={() => setSelectedId(item.productId)}><span>{item.name}</span><i><b style={{ width: `${Math.max(Math.abs(item.revenue) / max * 100, 5)}%` }} /></i><strong>{formatCurrency(item.revenue)}</strong></button>)}</div><div className="chart-tooltip product-contribution-tooltip"><b>{selected?.name}</b><span>销售收入 {formatCurrency(selected?.revenue ?? 0)} · 已结转直接成本 {formatCurrency(selected?.directCost ?? 0)}</span><strong>直接贡献 {formatCurrency(selected?.contribution ?? 0)}</strong><small>{selected?.quantity ?? 0} 件净销量；房租、人工等分摊请在“成本分析”查看。</small></div></section>;
+}
+
+export function ProductsView({ products, activeProductId, fundingCost, sales, period, onSelect, onPricing, productCostAction, productCostLabel, onQuickCost, onBom, onAdd, onDelete, onInventory }: { products: LedgerProduct[]; activeProductId: number; fundingCost: number; sales: SalesRecord[]; period: string; onSelect: (id: number) => void; onPricing: () => void; productCostAction: string; productCostLabel: string; onQuickCost: () => void; onBom: () => void; onAdd: () => void; onDelete?: (product: LedgerProduct) => void; onInventory?: (product: LedgerProduct) => void }) {
   const [showMoreActions, setShowMoreActions] = useState(false);
   if (!products.length) return <div className="page-content product-content empty-product-page"><section className="empty-state-card"><span className="eyebrow">商品</span><h1>还没有商品</h1><button className="primary-action" onClick={onAdd}><Plus size={18} /> 新建商品</button></section></div>;
   const selected = products.find((product) => product.id === activeProductId) ?? products[0];
@@ -577,6 +649,7 @@ export function ProductsView({ products, activeProductId, fundingCost, onSelect,
           </button>;
         })}
       </section>
+      <ProductContributionChart products={products} sales={sales} period={period} />
       <section className="product-detail-card">
         <div className="detail-card-title"><div><div className="detail-brand-line"><BrandSignature tone="inverse" compact /><span>商品单件账</span></div><h2>{selected.name}</h2></div><span className={needsCost ? "status-pill warning" : "status-pill"}>{needsCost ? `待补${productCostLabel}` : needsPricing ? "待定价" : "已核算"}</span></div>
         <div className="product-chart-summary"><span>成本 <b>{formatCurrency(selected.operating)}</b></span><span>利润率 <b>{selected.price ? `${margin.toFixed(1)}%` : "—"}</b></span><span>库存 <b>{selected.stockQuantity === undefined ? "未启用" : selected.stockQuantity}</b></span></div>
@@ -614,20 +687,16 @@ export function CashRecordsSheet({ period, records, onClose, onDelete }: { perio
 }
 
 export function BusinessView({ summary, productCount, period, onPeriodChange, onPricing, onRecord, onSale, onCashRecords, sales, products, onRefund, onDeleteSale }: { summary: ReturnType<typeof summarizeLedger>; productCount: number; period: string; onPeriodChange: (period: string) => void; onPricing: () => void; onRecord: () => void; onSale: () => void; onCashRecords: () => void; sales: SalesRecord[]; products: LedgerProduct[]; onRefund: (saleId: string) => void; onDeleteSale: (saleId: string) => void }) {
-  const [activeLabel, setActiveLabel] = useState(summary.dailySeries.at(-1)?.label ?? "");
   const [showCashDetails, setShowCashDetails] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [view, setView] = useState<"cash" | "analysis">("cash");
   const chartKey = summary.dailySeries.map((item) => `${item.label}:${item.income}:${item.expenses}`).join("|");
-  const maxValue = Math.max(...summary.dailySeries.flatMap((item) => [item.income, item.expenses]), 1);
-  const activeItem = summary.dailySeries.find((item) => item.label === activeLabel) ?? summary.dailySeries.at(-1);
   const hasTrendData = summary.dailySeries.some((item) => item.income > 0 || item.expenses > 0);
   const materialTotal = Object.entries(summary.categoryTotals).filter(([category]) => /采购|进货|材料|货品/.test(category)).reduce((total, [, value]) => total + value, 0);
   const hiddenTotal = Math.max(summary.expenses - materialTotal, 0);
   const periodSales = sales.filter((sale) => sale.date.startsWith(period) || (sale.refunds ?? []).some((refund) => refund.date.startsWith(period))).slice(0, 6);
 
   useEffect(() => {
-    setActiveLabel(summary.dailySeries.at(-1)?.label ?? "");
     setIsRefreshing(true);
     const timer = window.setTimeout(() => setIsRefreshing(false), 420);
     return () => window.clearTimeout(timer);
@@ -648,7 +717,7 @@ export function BusinessView({ summary, productCount, period, onPeriodChange, on
       </>}
       {view === "analysis" && <>
       <section className="cost-analysis-intro"><Info size={18} /><div><b>{summary.profitReady ? "利润仅来自已结转销售" : "本期还没有销售结转利润"}</b><p>{summary.profitReady ? "下列成本均按销售当时冻结的快照计算，不会把现金付款直接当作利润。" : "房租、人工等月度分摊可用于定价预估，但不是本期已付现金；记录销售后才会结转利润。"}</p></div></section>
-      {summary.profitReady ? <section className="sales-result-card"><div><span className="eyebrow">销售结转</span><h2>{summary.salesCount} 笔销售 · {summary.salesQuantity} 份</h2></div><div className="sales-result-grid"><span>销售收入 <b>{formatCurrency(summary.salesRevenue)}</b></span><span>销货成本 <b>{formatCurrency(summary.costOfSales)}</b></span><span>商品毛利 <b>{formatCurrency(summary.grossProfit)}</b></span><span>经营结果 <b>{formatCurrency(summary.operatingResult)}</b></span></div></section> : <section className="analysis-readiness chart-card"><span className="eyebrow">利润准备度</span><h2>先记录一笔商品销售</h2><p>销售会将收入和当时的商品成本一起结转，之后这里才会显示利润。</p><button type="button" className="primary-action" onClick={productCount ? onSale : onRecord}>{productCount ? "记录第一笔销售" : "先新建商品"}<ArrowRight size={15} /></button></section>}
+      {summary.profitReady ? <><section className="sales-result-card"><div><span className="eyebrow">销售结转</span><h2>{summary.salesCount} 笔销售 · {summary.salesQuantity} 份</h2></div><div className="sales-result-grid"><span>销售收入 <b>{formatCurrency(summary.salesRevenue)}</b></span><span>销货成本 <b>{formatCurrency(summary.costOfSales)}</b></span><span>商品毛利 <b>{formatCurrency(summary.grossProfit)}</b></span><span>经营结果 <b>{formatCurrency(summary.operatingResult)}</b></span></div></section><ProfitBridgeChart summary={summary} /></> : <section className="analysis-readiness chart-card"><span className="eyebrow">利润准备度</span><h2>先记录一笔商品销售</h2><p>销售会将收入和当时的商品成本一起结转，之后这里才会显示利润。</p><button type="button" className="primary-action" onClick={productCount ? onSale : onRecord}>{productCount ? "记录第一笔销售" : "先新建商品"}<ArrowRight size={15} /></button></section>}
       {periodSales.length > 0 && <section className="sales-history-card"><div className="section-heading compact"><div><span className="eyebrow">销售记录</span><h2>客户退款或录错删除</h2></div></div><div className="sales-history-list">{periodSales.map((sale) => { const product = products.find((item) => item.id === sale.productId); const remaining = getRefundableSaleQuantity(sale); const refunded = (sale.refunds ?? []).reduce((sum, refund) => sum + refund.amount, 0); return <article className="sales-history-row" key={sale.id}><div><b>{product?.name ?? "已归档商品"}</b><small>{sale.date} · {sale.quantity} 件 · {formatCurrency(sale.quantity * sale.unitPrice)}{refunded > 0 ? ` · 已退 ${formatCurrency(refunded)}` : ""}</small></div><div className="sales-history-actions">{remaining > 0 ? <button onClick={() => onRefund(sale.id)}>客户退款 <ChevronRight size={14} /></button> : <span className="sale-voided">已撤销</span>}<button className="sale-delete-action" aria-label={`删除${product?.name ?? "销售"}录入`} onClick={() => onDeleteSale(sale.id)}><Trash2 size={14} />录错删除</button></div></article>; })}</div></section>}
       <section className="section-heading compact"><div><span className="eyebrow">成本</span><h2>{formatBusinessPeriod(period)}销售快照成本</h2></div></section>
       <section className="ledger-lines">

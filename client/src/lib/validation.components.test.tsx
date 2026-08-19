@@ -9,8 +9,16 @@ import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
 import { OnboardingFlow } from "@/components/OnboardingFlow";
 import { QuickRecordSheet } from "@/components/QuickRecordSheet";
 import { PricingPanel } from "@/components/PricingPanel";
-import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getHiddenCostAllocation, getHomeAttentionItems, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
+import { BusinessView, CashRecordsSheet, CategorySheet, DataManagementSheet, DeleteProductSheet, DeleteSaleSheet, getCostMixData, getHiddenCostAllocation, getHomeAttentionItems, getProductContributionData, getProfitBridgeData, getRefundableSaleQuantity, ImportantMessageBanner, MaterialSheet, MessageInboxSheet, ProductNameSheet, ProductsView, ProfileView, QuickEntrySheet, SaleRefundSheet, SalesRecordSheet } from "@/pages/Home";
 import { emptyMonthlyFixedCosts, INDUSTRY_TEMPLATES, makeBomVersionSnapshot, seedLedger, summarizeLedger } from "./ledgerStore";
+
+class TestResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+if (!globalThis.ResizeObserver) vi.stubGlobal("ResizeObserver", TestResizeObserver);
 
 describe("OnboardingFlow industry initialization", () => {
   it("submits a non-catering industry with the store name", () => {
@@ -48,6 +56,29 @@ describe("Home conclusion attention priority", () => {
   it("shows cash pressure when product setup does not block accounting", () => {
     const items = getHomeAttentionItems({ missingCostProductCount: 0, unpricedProductCount: 0, cashBalance: -1 });
     expect(items).toEqual([expect.objectContaining({ tone: "cash", action: "business" })]);
+  });
+});
+
+describe("Dynamic chart accounting boundaries", () => {
+  it("keeps direct, allocated and funding costs separate in the product cost mix", () => {
+    const product = { ...seedLedger().products[0], direct: 8, operating: 11 };
+    expect(getCostMixData(product, 11, 12.5)).toEqual([
+      expect.objectContaining({ key: "direct", amount: 8 }),
+      expect.objectContaining({ key: "operating", amount: 3 }),
+      expect.objectContaining({ key: "funding", amount: 1.5 }),
+    ]);
+  });
+
+  it("uses only sales snapshots in the profit bridge and does not treat cash payments as profit costs", () => {
+    const rows = getProfitBridgeData({ salesRevenue: 100, costOfSales: 42, allocatedIndirectCosts: 18, financingCosts: 5, operatingResult: 35 });
+    expect(rows.map((row) => [row.key, row.amount])).toEqual([["revenue", 100], ["direct", 42], ["allocation", 18], ["funding", 5], ["result", 35]]);
+    expect(rows.find((row) => row.key === "result")?.direction).toBe("result");
+  });
+
+  it("aggregates a product contribution from the sale-time direct-cost snapshot and period refunds", () => {
+    const product = { ...seedLedger().products[0], id: 42, name: "快照商品", direct: 99 };
+    const sales = [{ id: "sale-1", productId: 42, date: "2026-08-12", quantity: 3, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [{ id: "refund-1", date: "2026-08-13", quantity: 1, amount: 20, note: "客户退款", restock: true }] }];
+    expect(getProductContributionData([product], sales, "2026-08")).toEqual([expect.objectContaining({ name: "快照商品", revenue: 40, directCost: 16, contribution: 24, quantity: 2 })]);
   });
 });
 
@@ -422,7 +453,7 @@ describe("QuickCostSheet interactions", () => {
     const ledger = seedLedger();
     const onQuickCost = vi.fn();
     const onBom = vi.fn();
-    render(<ProductsView products={ledger.products} activeProductId={ledger.products[0].id} fundingCost={0} onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={onQuickCost} onBom={onBom} onAdd={vi.fn()} />);
+    render(<ProductsView products={ledger.products} activeProductId={ledger.products[0].id} fundingCost={0} sales={ledger.sales} period="2026-08" onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={onQuickCost} onBom={onBom} onAdd={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /更新成本|录入成本/ }));
     expect(onQuickCost).toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
