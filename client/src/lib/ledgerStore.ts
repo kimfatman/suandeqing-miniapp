@@ -993,6 +993,127 @@ export const getDashboardHealth = (ledger: LedgerData, summary: ReturnType<typeo
   return { score, label, detail: "基于销售结转、商品数据、现金和已结转经营结果；不代表经营预测。", factors };
 };
 
+export type InventoryHealthStatus = "insufficient" | "normal" | "high" | "slow" | "noVelocity";
+export type InventoryHealthItem = {
+  productId: number;
+  name: string;
+  stockQuantity: number;
+  unitOperatingCost: number;
+  inventoryValue: number;
+  netSalesLast30Days: number;
+  averageDailySales: number;
+  sellableDays: number | null;
+  status: InventoryHealthStatus;
+  label: string;
+  detail: string;
+};
+export type InventoryHealthSummary = {
+  trackedProductCount: number;
+  untrackedProductCount: number;
+  totalInventoryValue: number;
+  insufficientCount: number;
+  highCount: number;
+  slowCount: number;
+  items: InventoryHealthItem[];
+};
+
+/**
+ * 只分析已启用 stockQuantity 的商品。销售速度以截至业务日的近30日净销售数量计算，
+ * 退款会冲减销量；无销售速度时不臆测可售天数或补货建议。
+ */
+export const getInventoryHealth = (ledger: LedgerData, asOfDate = getBusinessDate()): InventoryHealthSummary => {
+  const end = new Date(`${asOfDate}T12:00:00`);
+  const start = new Date(end);
+  start.setDate(start.getDate() - 29);
+  const startDate = formatTrendDate(start);
+  const netSalesByProduct = new Map<number, number>();
+  const inWindow = (date: string) => date >= startDate && date <= asOfDate;
+  (ledger.sales ?? []).forEach((sale) => {
+    const quantity = Math.max(Number(sale.quantity) || 0, 0);
+    if (inWindow(sale.date)) netSalesByProduct.set(sale.productId, (netSalesByProduct.get(sale.productId) ?? 0) + quantity);
+    (sale.refunds ?? []).forEach((refund) => {
+      if (!inWindow(refund.date)) return;
+      netSalesByProduct.set(sale.productId, (netSalesByProduct.get(sale.productId) ?? 0) - Math.max(Number(refund.quantity) || 0, 0));
+    });
+  });
+  const activeProducts = ledger.products.filter((product) => !product.archivedAt);
+  const tracked = activeProducts.filter((product) => product.stockQuantity !== undefined);
+  const items = tracked.map((product): InventoryHealthItem => {
+    const stockQuantity = Math.max(Number(product.stockQuantity) || 0, 0);
+    const netSalesLast30Days = Math.max(netSalesByProduct.get(product.id) ?? 0, 0);
+    const averageDailySales = netSalesLast30Days / 30;
+    const sellableDays = averageDailySales > 0 ? money(stockQuantity / averageDailySales) : null;
+    const unitOperatingCost = Math.max(Number(product.operating) || 0, Number(product.direct) || 0, 0);
+    const inventoryValue = money(stockQuantity * unitOperatingCost);
+    const status: InventoryHealthStatus = sellableDays === null ? "noVelocity" : sellableDays <= 3 ? "insufficient" : sellableDays <= 30 ? "normal" : sellableDays <= 60 ? "high" : "slow";
+    const label = status === "insufficient" ? "不足" : status === "normal" ? "正常" : status === "high" ? "偏多" : status === "slow" ? "滞销风险" : "待观察";
+    const detail = status === "noVelocity" ? "近30日暂无净销售，暂不估算可售天数。" : `近30日净销 ${money(netSalesLast30Days)} 件，按当前速度约可售 ${sellableDays} 天。`;
+    return { productId: product.id, name: product.name, stockQuantity, unitOperatingCost, inventoryValue, netSalesLast30Days: money(netSalesLast30Days), averageDailySales: money(averageDailySales), sellableDays, status, label, detail };
+  }).sort((left, right) => right.inventoryValue - left.inventoryValue);
+  return {
+    trackedProductCount: tracked.length,
+    untrackedProductCount: activeProducts.length - tracked.length,
+    totalInventoryValue: money(items.reduce((total, item) => total + item.inventoryValue, 0)),
+    insufficientCount: items.filter((item) => item.status === "insufficient").length,
+    highCount: items.filter((item) => item.status === "high").length,
+    slowCount: items.filter((item) => item.status === "slow").length,
+    items,
+  };
+};
+
+export type OperatingReminderAction = "products" | "business" | "record";
+export type OperatingReminder = {
+  id: string;
+  severity: "warning" | "risk" | "info";
+  title: string;
+  summary: string;
+  action: OperatingReminderAction;
+  actionLabel: string;
+};
+
+const getSnapshotWindow = (ledger: LedgerData, startDate: string, endDate: string) => {
+  let revenue = 0;
+  let directCost = 0;
+  (ledger.sales ?? []).forEach((sale) => {
+    if (sale.status === "voided" || sale.date < startDate || sale.date > endDate) return;
+    const quantity = Math.max(Number(sale.quantity) || 0, 0);
+    const unitPrice = Math.max(Number(sale.unitPrice) || 0, 0);
+    const refundedQuantity = (sale.refunds ?? []).filter((refund) => refund.date >= startDate && refund.date <= endDate).reduce((total, refund) => total + Math.max(Number(refund.quantity) || 0, 0), 0);
+    const refundedAmount = (sale.refunds ?? []).filter((refund) => refund.date >= startDate && refund.date <= endDate).reduce((total, refund) => total + Math.max(Number(refund.amount) || 0, 0), 0);
+    const netQuantity = Math.max(quantity - refundedQuantity, 0);
+    revenue += Math.max(quantity * unitPrice - refundedAmount, 0);
+    directCost += Math.max(sale.unitDirectCostSnapshot ?? 0, 0) * netQuantity;
+  });
+  return { revenue: money(revenue), directCost: money(directCost), margin: revenue > 0 ? (revenue - directCost) / revenue : null };
+};
+
+/**
+ * 经营提醒为每次打开时从本机事实重新推导的只读提示：不创建用户消息、不影响未读数，
+ * 也不把当前成本、预计分摊或现金流水误认为历史销售利润。
+ */
+export const getOperatingReminders = (ledger: LedgerData, options: { asOfDate?: string; inventoryEnabled?: boolean } = {}): OperatingReminder[] => {
+  const asOfDate = options.asOfDate ?? getBusinessDate();
+  const asOf = new Date(`${asOfDate}T12:00:00`);
+  const dateBefore = (days: number) => { const result = new Date(asOf); result.setDate(result.getDate() - days); return formatTrendDate(result); };
+  const reminders: OperatingReminder[] = [];
+  const missingCost = ledger.products.filter((product) => !product.archivedAt && product.direct <= 0 && product.bom.length === 0);
+  if (missingCost.length) reminders.push({ id: "missing-cost", severity: "warning", title: `${missingCost.length} 个商品未录入成本`, summary: "未补成本的商品无法形成可解释的销售利润。", action: "products", actionLabel: "补成本" });
+  if (options.inventoryEnabled) {
+    const inventory = getInventoryHealth(ledger, asOfDate);
+    const insufficient = inventory.items.find((item) => item.status === "insufficient");
+    const slow = inventory.items.find((item) => item.status === "slow");
+    if (insufficient) reminders.push({ id: `inventory-insufficient-${insufficient.productId}`, severity: "warning", title: `${insufficient.name} 库存不足`, summary: `${insufficient.detail} 系统不会自动生成采购。`, action: "products", actionLabel: "查看库存" });
+    if (slow) reminders.push({ id: `inventory-slow-${slow.productId}`, severity: "risk", title: `${slow.name} 存在滞销风险`, summary: `当前库存成本占用 ${money(slow.inventoryValue)} 元；${slow.detail}`, action: "products", actionLabel: "查看商品" });
+  }
+  const historicalSales = (ledger.sales ?? []).filter((sale) => sale.status !== "voided");
+  const latestSaleDate = historicalSales.map((sale) => sale.date).sort().at(-1);
+  if (latestSaleDate && latestSaleDate < dateBefore(6)) reminders.push({ id: "sales-stale", severity: "info", title: "已连续 7 天未记录销售", summary: `最近一笔已记录销售为 ${latestSaleDate.slice(5).replace("-", "/")}；如有发生请及时补录业务日期。`, action: "record", actionLabel: "记录销售" });
+  const previous = getSnapshotWindow(ledger, dateBefore(13), dateBefore(7));
+  const current = getSnapshotWindow(ledger, dateBefore(6), asOfDate);
+  if (previous.margin !== null && current.margin !== null && previous.revenue > 0 && current.revenue > 0 && current.margin < previous.margin - 0.05) reminders.push({ id: "gross-margin-down", severity: "risk", title: "近7日直接毛利率下降", summary: `近7日 ${(current.margin * 100).toFixed(1)}%，前7日 ${(previous.margin * 100).toFixed(1)}%；仅基于销售快照的收入与直接成本。`, action: "business", actionLabel: "查看经营" });
+  return reminders.slice(0, 5);
+};
+
 export const summarizeLedger = (ledger: LedgerData, selectedPeriod = ledger.costs.allocationPeriod ?? getBusinessPeriod()): LedgerSummary => {
   const categoryTotals: Record<string, number> = {};
   const byDate: Record<string, { income: number; expenses: number }> = {};

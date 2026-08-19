@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getCashTrendSeries, getDashboardHealth, getIndustrySampleData, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, getRevenueGoalProgress, getSalesTrendSeries, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
+import { applyIndustryTemplate, applyQuickCost, calculateBomVersionDirectCost, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, calculateMonthlyIndirectTotal, calculateProductIndirectAllocations, calculateUnitCost, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, createEmptyLedger, deleteSaleTransaction, emptyMonthlyFixedCosts, getActiveCategories, getCashTrendSeries, getDashboardHealth, getIndustrySampleData, getInventoryHealth, getMonthlyIndirectPlan, getMonthlyIndirectPlanTiming, getOperatingReminders, getRevenueGoalProgress, getSalesTrendSeries, INDUSTRY_TEMPLATES, initializeIndustryLedger, isMonthlyIndirectPlanActiveOn, makeBomVersionSnapshot, normalizeLedger, removeLegacyDemoData, renameLedgerCategory, seedLedger, summarizeLedger, summarizeSales } from "./ledgerStore";
 import { getReadiness } from "@/pages/Home";
 
 describe("summarizeLedger", () => {
@@ -109,6 +109,47 @@ describe("summarizeLedger", () => {
     expect(health.score).toBeGreaterThan(0);
     expect(health.factors.map((factor) => factor.key)).toEqual(["sales", "productData", "cash", "profit"]);
     expect(health.detail).toContain("不代表经营预测");
+  });
+
+  it("derives inventory health only for tracked products and uses net sales after refunds for sellable days", () => {
+    const ledger = createEmptyLedger();
+    ledger.products = [
+      { id: 1, name: "有库存商品", category: "测试", price: 20, direct: 8, operating: 10, change: "", packaging: 0, directLabor: 0, bom: [], stockQuantity: 3 },
+      { id: 2, name: "未启用库存", category: "测试", price: 20, direct: 8, operating: 10, change: "", packaging: 0, directLabor: 0, bom: [] },
+    ];
+    ledger.sales = [{ id: "sale-stock", productId: 1, quantity: 12, unitPrice: 20, date: "2026-08-18", note: "", refunds: [{ id: "refund-stock", quantity: 2, amount: 40, date: "2026-08-19", note: "" }] }];
+
+    const inventory = getInventoryHealth(ledger, "2026-08-19");
+
+    expect(inventory).toMatchObject({ trackedProductCount: 1, untrackedProductCount: 1, totalInventoryValue: 30, insufficientCount: 0 });
+    expect(inventory.items[0]).toMatchObject({ name: "有库存商品", netSalesLast30Days: 10, averageDailySales: 0.33, sellableDays: 9, status: "normal", label: "正常" });
+  });
+
+  it("does not infer inventory turnover without recent sales and marks low stock from observed sales speed", () => {
+    const ledger = createEmptyLedger();
+    ledger.products = [
+      { id: 1, name: "低库存商品", category: "测试", price: 20, direct: 8, operating: 10, change: "", packaging: 0, directLabor: 0, bom: [], stockQuantity: 1 },
+      { id: 2, name: "静态库存商品", category: "测试", price: 20, direct: 8, operating: 10, change: "", packaging: 0, directLabor: 0, bom: [], stockQuantity: 12 },
+    ];
+    ledger.sales = [{ id: "sale-low", productId: 1, quantity: 12, unitPrice: 20, date: "2026-08-19", note: "" }];
+
+    const inventory = getInventoryHealth(ledger, "2026-08-19");
+
+    expect(inventory.insufficientCount).toBe(1);
+    expect(inventory.items.find((item) => item.productId === 1)).toMatchObject({ status: "insufficient", sellableDays: 2.5 });
+    expect(inventory.items.find((item) => item.productId === 2)).toMatchObject({ status: "noVelocity", sellableDays: null, label: "待观察" });
+  });
+
+  it("derives operating reminders from ledger facts and omits inventory alerts for industries without inventory capability", () => {
+    const ledger = createEmptyLedger();
+    ledger.products = [{ id: 1, name: "待补货商品", category: "测试", price: 20, direct: 8, operating: 10, change: "", packaging: 0, directLabor: 0, bom: [], stockQuantity: 0 }];
+    ledger.sales = [{ id: "recent-sale", productId: 1, quantity: 12, unitPrice: 20, date: "2026-08-19", note: "" }];
+
+    const reminders = getOperatingReminders(ledger, { asOfDate: "2026-08-19", inventoryEnabled: true });
+    const noInventoryReminders = getOperatingReminders(ledger, { asOfDate: "2026-08-19", inventoryEnabled: false });
+
+    expect(reminders).toEqual(expect.arrayContaining([expect.objectContaining({ id: "inventory-insufficient-1", action: "products" })]));
+    expect(noInventoryReminders.map((reminder) => reminder.id)).not.toContain("inventory-insufficient-1");
   });
 });
 
