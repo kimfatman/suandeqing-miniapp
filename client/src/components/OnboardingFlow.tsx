@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ArrowRight, Check, ChevronLeft, Store } from "lucide-react";
 import { BrandMark, BrandSignature } from "@/components/BrandMark";
-import { INDUSTRY_TEMPLATES, IndustryKey } from "@/lib/ledgerStore";
+import { INDUSTRY_TEMPLATES, IndustryKey, resolveIndustryTemplate } from "@/lib/ledgerStore";
 
 type OnboardingFlowProps = {
   initialName: string;
@@ -13,7 +13,7 @@ export function OnboardingFlow({ initialName, onComplete }: OnboardingFlowProps)
   const [step, setStep] = useState<1 | 2>(1);
   const [industry, setIndustry] = useState<IndustryKey>("catering");
   const [storeName, setStoreName] = useState(initialName);
-  const selected = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+  const selected = resolveIndustryTemplate(industry);
 
   return (
     <div className="onboarding-stage">

@@ -46,7 +46,7 @@ import { CostInputs, formatCurrency, getScopeCost } from "@/lib/costEngine";
 import * as XLSX from "xlsx";
 import {   applyIndustryTemplate, applyQuickCost,
   applyMonthlyIndirectPlan, calculateDirectCost, calculateEquipmentDepreciation, calculateMonthlyIndirectPlanTotal, getMonthlyIndirectPlanTiming, calculateProductIndirectAllocations, calculateUnitDirectCostDetails, calculateUnitIndirectCostDetails, emptyMonthlyFixedCosts,
-  formatBusinessPeriod, getActiveCategories, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getCashTrendSeries, INDUSTRY_TEMPLATES, AllocationMethod, CashTrendRange, HiddenCostItem, IndustryKey, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
+  formatBusinessPeriod, getActiveCategories, getMonthlyIndirectPlan, calculateUnitCost, getBusinessDate, getBusinessPeriod, getCashTrendSeries, INDUSTRY_TEMPLATES, AllocationMethod, CashTrendRange, HiddenCostItem, IndustryKey, IndustryTemplate, LedgerData, LedgerRecord, clearLocalLedgerStorage, createEmptyLedger, deleteSaleTransaction, initializeIndustryLedger, LedgerProduct, MonthlyFixedCosts, MonthlyIndirectCostPlan, ProductAllocationInput, loadLedger, makeBomVersionSnapshot, makeId, Material, normalizeLedger, persistLedger, recalculateProduct, renameLedgerCategory, resolveIndustryTemplate, SaleRefund, SalesRecord, summarizeLedger } from "@/lib/ledgerStore";
 import { validateCategoryName, validateMaterialDraft, validateProductName, validateSaleDraft } from "@/lib/validation";
 import { startLogin } from "@/const";
 import { useAuth } from "@/hooks/useAuth";
@@ -159,7 +159,7 @@ export default function Home() {
     displayedBannerRef.current = visibleImportantBanner.id;
     markMessageDisplayed.mutate({ userMessageId: visibleImportantBanner.id });
   }, [visibleImportantBanner?.id]);
-  const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === ledger.profile.industry) ?? INDUSTRY_TEMPLATES[0];
+  const currentTemplate = resolveIndustryTemplate(ledger.profile.industry, ledger.profile.industryTemplateOverrides);
   const [currentCosts, setCurrentCosts] = useState<CostInputs>(() => ({ ...initialCostInputs, ...(ledger.costs ?? {}) }));
   const [selectedPeriod, setSelectedPeriod] = useState(() => getBusinessPeriod());
   const [toast, setToast] = useState<string | null>(null);
@@ -259,7 +259,7 @@ export default function Home() {
 
   const confirmIndustryChange = () => {
     if (!pendingIndustry) return;
-    const label = INDUSTRY_TEMPLATES.find((item) => item.key === pendingIndustry)?.label ?? "新行业";
+    const label = resolveIndustryTemplate(pendingIndustry).label;
     setLedger((current) => {
       const next = applyIndustryTemplate(current, pendingIndustry);
       persistLedger(next);
@@ -329,7 +329,7 @@ export default function Home() {
   };
 
   const completeOnboarding = ({ storeName, industry }: { storeName: string; industry: IndustryKey }) => {
-    const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+    const template = resolveIndustryTemplate(industry);
     setLedger((current) => {
       const next = initializeIndustryLedger(current, storeName, industry);
       persistLedger(next);
@@ -418,7 +418,7 @@ export default function Home() {
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} productCount={activeProducts.length} period={selectedPeriod} onPeriodChange={setSelectedPeriod} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} onCashRecords={() => setShowCashRecords(true)} sales={ledger.sales} products={ledger.products} onRefund={(saleId) => setRefundSaleId(saleId)} onDeleteSale={(saleId) => setDeletingSaleId(saleId)} />}
-        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
+        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} template={currentTemplate} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
         </>}
       </main>
 
@@ -910,8 +910,7 @@ export function BusinessView({ summary, productCount, period, onPeriodChange, on
   );
 }
 
-export function ProfileView({ storeName, industry, categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt, onMonthlyReport }: { storeName: string; industry: IndustryKey; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void; onMonthlyReport?: () => void }) {
-  const template = INDUSTRY_TEMPLATES.find((item) => item.key === industry) ?? INDUSTRY_TEMPLATES[0];
+export function ProfileView({ storeName, industry, template = resolveIndustryTemplate(industry), categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt, onMonthlyReport }: { storeName: string; industry: IndustryKey; template?: IndustryTemplate; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void; onMonthlyReport?: () => void }) {
   const industryName = template.label;
   return (
     <div className="page-content profile-content">
@@ -952,8 +951,8 @@ export function DataManagementSheet({ isAuthenticated, cloudAvailable, backupAt,
 }
 
 function IndustryChangeSheet({ current, next, onClose, onConfirm }: { current: IndustryKey; next: IndustryKey; onClose: () => void; onConfirm: () => void }) {
-  const currentTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === current) ?? INDUSTRY_TEMPLATES[0];
-  const nextTemplate = INDUSTRY_TEMPLATES.find((item) => item.key === next) ?? INDUSTRY_TEMPLATES[0];
+  const currentTemplate = resolveIndustryTemplate(current);
+  const nextTemplate = resolveIndustryTemplate(next);
   return <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}><section className="pricing-sheet industry-change-sheet" role="dialog" aria-modal="true" aria-label="确认切换行业" onMouseDown={(event) => event.stopPropagation()}><div className="sheet-grabber" /><header className="sheet-header"><div><span className="eyebrow">经营资料</span><h2>切换为{nextTemplate.label}</h2></div><button className="icon-button" onClick={onClose}>×</button></header><p className="industry-change-lead">从{currentTemplate.label}切换后，只影响之后的新录入。</p><div className="impact-list"><p><b>将改变</b> 默认成本分类、商品成本名称、快速成本预设和模板隐形成本分类。</p><p><b>不会改变</b> 已有商品、材料、流水、销售、成本版本和自定义成本口径。</p></div><button className="primary-action sheet-action" onClick={onConfirm}><CheckBadge />确认切换行业</button></section></div>;
 }
 
