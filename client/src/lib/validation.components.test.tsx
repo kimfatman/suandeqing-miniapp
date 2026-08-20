@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
@@ -37,8 +37,10 @@ describe("ProfileView industry template interactions", () => {
     const onIndustryChange = vi.fn();
     const onToggleCategory = vi.fn();
     render(<ProfileView storeName="测试小店" industry="catering" categories={["食材采购"]} categoryStatus={{ "食材采购": true }} user={null} authLoading={false} cloudAvailable={false} onLogin={vi.fn()} onLogout={vi.fn()} isLoggingOut={false} onDataManagement={vi.fn()} onIndustryChange={onIndustryChange} onAddCategory={vi.fn()} onEditCategory={vi.fn()} onToggleCategory={onToggleCategory} onHiddenCost={vi.fn()} onDebt={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /经营行业/ }));
     fireEvent.click(screen.getByRole("button", { name: /社区零售/ }));
     expect(onIndustryChange).toHaveBeenCalledWith("retail");
+    fireEvent.click(screen.getByRole("button", { name: /成本项目/ }));
     fireEvent.click(screen.getByRole("button", { name: /停用食材采购/ }));
     expect(onToggleCategory).toHaveBeenCalledWith("食材采购");
   });
@@ -155,6 +157,7 @@ describe("Dynamic chart accounting boundaries", () => {
 
 describe("HomeView decision dashboard", () => {
   it("presents sales-snapshot profit separately from actual cash in the redesigned homepage", () => {
+    vi.useFakeTimers();
     const ledger = seedLedger();
     ledger.records = [
       { id: "home-income", type: "income", amount: 100, category: "销售收入", note: "已收", date: "2026-08-08", source: "sale", sourceId: "home-sale" },
@@ -162,20 +165,52 @@ describe("HomeView decision dashboard", () => {
     ];
     ledger.sales = [{ id: "home-sale", productId: ledger.products[0]!.id, date: "2026-08-08", quantity: 5, unitPrice: 20, note: "", unitDirectCostSnapshot: 8, refunds: [] }];
     const summary = summarizeLedger(ledger, "2026-08");
-    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
+    const onRecord = vi.fn();
+    const onSale = vi.fn();
+    const onPricing = vi.fn();
+    const onBusiness = vi.fn();
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={onPricing} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={onRecord} onSale={onSale} onBusiness={onBusiness} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
     expect(screen.getByLabelText("本月经营结果")).toBeTruthy();
-    expect(screen.getByText("本月经营利润")).toBeTruthy();
-    expect(screen.getByText("销售收入")).toBeTruthy();
-    expect(screen.getByText("经营健康度")).toBeTruthy();
-    expect(screen.getByText("本月收入目标")).toBeTruthy();
+    expect(screen.getByText("今天经营得怎么样？")).toBeTruthy();
+    expect(screen.getAllByText("销售收入").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("商品成本").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("经营费用").length).toBeGreaterThan(0);
+    expect(screen.getByText(/本期经营利润/)).toBeTruthy();
+    expect(screen.getByLabelText("销售收入减商品成本减经营费用")).toBeTruthy();
+    expect(screen.getByRole("img", { name: /经营利润率 \d+\.\d+%/ })).toBeTruthy();
+    expect(screen.getByText("收入")).toBeTruthy();
+    expect(screen.getAllByText("利润").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("本期经营状态")).toBeTruthy();
     expect(screen.getByText("现金结余")).toBeTruthy();
-    expect(screen.getByLabelText("近7日利润趋势")).toBeTruthy();
-    expect(screen.getByText("看收入、成本与现金明细")).toBeTruthy();
-    expect(screen.queryByText("现金情况")).toBeNull();
-    expect(screen.queryByText("收入与成本对比")).toBeNull();
+    expect(screen.getByLabelText("商品表现")).toBeTruthy();
+    expect(screen.queryByLabelText("近7日利润趋势")).toBeNull();
     expect(screen.getByLabelText("库存健康")).toBeTruthy();
     expect(screen.getByText("还没有启用库存的商品")).toBeTruthy();
-    expect(screen.getByText("快速操作")).toBeTruthy();
+    expect(screen.getByLabelText("快捷记账")).toBeTruthy();
+    expect(screen.getByLabelText("算得清产品能力轮播")).toBeTruthy();
+    expect(screen.getByText("算得清，生意才算得明白")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "查看 03 PRICING" }));
+    expect(screen.getByText("卖多少钱，才是真的赚钱？")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /去算一个价格/ }));
+    expect(onPricing).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("tab", { name: "查看 04 PROFIT" }));
+    fireEvent.click(screen.getByRole("button", { name: /查看经营分析/ }));
+    expect(onBusiness).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: /记销售/ }));
+    expect(onSale).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: /记收支/ }));
+    expect(onRecord).toHaveBeenCalledOnce();
+    act(() => { vi.advanceTimersByTime(15000); });
+    expect(screen.getByText("提前发现问题，比事后算亏损更重要")).toBeTruthy();
+  });
+
+  it("keeps the formula structure but marks the independent profit ring as pending before a sales snapshot exists", () => {
+    const ledger = { ...seedLedger(), sales: [], records: [] };
+    const summary = summarizeLedger(ledger, "2026-08");
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onSale={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "sale", label: "等待第一笔销售", title: "先记录销售", description: "销售结转后才能计算经营利润。", actionLabel: "记录销售" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
+    expect(screen.getByLabelText("销售收入减商品成本减经营费用")).toBeTruthy();
+    expect(screen.getByLabelText("经营利润率待结转")).toBeTruthy();
+    expect(screen.getAllByText("待结转").length).toBeGreaterThan(0);
   });
 
   it("switches the homepage product contribution ranking without changing the monthly issue calculation", () => {
@@ -186,12 +221,12 @@ describe("HomeView decision dashboard", () => {
       { id: "sale-late", productId: 2, date: "2026-07-30", quantity: 2, unitPrice: 15, note: "", unitDirectCostSnapshot: 2, refunds: [] },
     ];
     const summary = summarizeLedger(ledger, "2026-07");
-    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-07" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-07" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={vi.fn()} onSale={vi.fn()} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
 
     expect(screen.getByRole("group", { name: "选择商品贡献范围" })).toBeTruthy();
-    expect(screen.getByText("商品赚钱能力 · 本月 TOP 2")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /商品表现/ }).textContent).toContain("TOP 2");
     fireEvent.click(screen.getByRole("button", { name: "7天" }));
-    expect(screen.getByText("商品赚钱能力 · 7天 TOP 1")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /商品表现/ }).textContent).toContain("TOP 1");
     expect(screen.getByText("月底商品")).toBeTruthy();
     expect(screen.queryByText("月初商品")).toBeNull();
   });
@@ -627,11 +662,23 @@ describe("QuickCostSheet interactions", () => {
     const onQuickCost = vi.fn();
     const onBom = vi.fn();
     render(<ProductsView products={ledger.products} activeProductId={ledger.products[0].id} fundingCost={0} sales={ledger.sales} period="2026-08" onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={onQuickCost} onBom={onBom} onAdd={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /更新成本|录入成本/ }));
+    expect(screen.getAllByText("单件利润").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("毛利率").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "打开直接成本录入" }));
     expect(onQuickCost).toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
     fireEvent.click(screen.getByRole("button", { name: /编辑配方/ }));
     expect(onBom).toHaveBeenCalled();
+  });
+
+  it("keeps list and selected-detail unit price, cost, profit and margin on the same product calculation", () => {
+    const ledger = seedLedger();
+    const product = { ...ledger.products[0], price: 100, operating: 40, direct: 40, bom: [] };
+    render(<ProductsView products={[product]} activeProductId={product.id} fundingCost={0} sales={[]} period="2026-08" onSelect={vi.fn()} onPricing={vi.fn()} productCostAction="编辑配方" productCostLabel="商品配方" onQuickCost={vi.fn()} onBom={vi.fn()} onAdd={vi.fn()} />);
+    expect(screen.getAllByText("¥100.00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("¥40.00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("¥60.00").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("60.0%").length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -653,9 +700,10 @@ describe("BusinessView cash and cost-analysis layers", () => {
     const ledger = { ...seedLedger(), records: [{ id: "cash-1", type: "expense" as const, amount: 88, category: "房租", note: "8月房租", date: "2026-08-18", source: "manual" as const }], sales: [] };
     const summary = summarizeLedger(ledger, "2026-08");
     render(<BusinessView summary={summary} productCount={ledger.products.length} period="2026-08" onPeriodChange={vi.fn()} onPricing={vi.fn()} onRecord={vi.fn()} onSale={vi.fn()} onCashRecords={vi.fn()} sales={ledger.sales} products={ledger.products} onRefund={vi.fn()} onDeleteSale={vi.fn()} />);
+    expect(screen.getByLabelText("本期经营利润")).toBeTruthy();
     expect(screen.getByText("本期现金结余")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /销售快照成本/ })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: /成本分析/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /利润分析/ }));
     expect(screen.getByText("本期还没有销售结转利润")).toBeTruthy();
     expect(screen.getByRole("heading", { name: /销售快照成本/ })).toBeTruthy();
   });

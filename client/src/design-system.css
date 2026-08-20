@@ -465,7 +465,7 @@
 
 /* Home dashboard: a calm decision surface where result, cash and next action lead the page. */
 .home-content {
-  padding-bottom: calc(var(--space-12) + var(--header-height));
+  padding-bottom: var(--space-4);
   background: #f7f9fc;
 }
 
@@ -1604,6 +1604,685 @@
 .dashboard-status-item > b { overflow: hidden; color: #24324b; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 16px; line-height: 1.18; letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-status-item > b small { margin-left: 1px; color: #8292a2; font-size: 9px; font-weight: 600; letter-spacing: 0; }
 .dashboard-status-item > small { overflow: hidden; color: #8292a2; font-size: 8px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 三大核心页：以留白、数据层级和克制的 + / = 品牌符号替代堆叠卡片。 */
+.core-page-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.core-page-heading h1 {
+  margin: 0;
+  color: #17233c;
+  font-size: clamp(24px, 6.8vw, 28px);
+  letter-spacing: -.06em;
+}
+
+.core-page-heading .core-subtitle {
+  margin: var(--space-1) 0 0;
+  color: #8492a1;
+  font-size: var(--font-secondary);
+  line-height: 1.5;
+}
+
+.core-add-action,
+.core-outline-action {
+  flex: 0 0 auto;
+  min-height: var(--button-md-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-3);
+  font-size: var(--font-secondary);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.core-add-action {
+  color: #fff;
+  border: 0;
+  background: #087ff5;
+  box-shadow: 0 8px 16px rgb(8 127 245 / .16);
+}
+
+.core-outline-action {
+  color: #087ff5;
+  border: 1px solid #cfe3fb;
+  background: #fff;
+}
+
+.core-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.core-section-heading h2 {
+  margin: 0;
+  color: #17233c;
+  font-size: var(--font-section-title);
+  letter-spacing: -.035em;
+}
+
+.core-section-heading small,
+.core-section-heading > span {
+  color: #8492a1;
+  font-size: var(--font-secondary);
+}
+
+.core-section-heading > button {
+  min-height: var(--tap-target);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-1);
+  color: #087ff5;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-secondary);
+  font-weight: 800;
+}
+
+.core-segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-3);
+  background: #edf2f7;
+}
+
+.core-segmented button {
+  min-height: 40px;
+  color: #718094;
+  border: 0;
+  border-radius: var(--radius-2);
+  background: transparent;
+  font-size: var(--font-body);
+  font-weight: 800;
+}
+
+.core-segmented button[aria-selected="true"] {
+  color: #087ff5;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(11 24 54 / .08);
+}
+
+.core-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin-top: var(--space-4);
+  border-top: 1px solid #e9eef3;
+  border-bottom: 1px solid #e9eef3;
+}
+
+.core-kpi-grid > span {
+  min-width: 0;
+  padding: var(--space-3) var(--space-2);
+}
+
+.core-kpi-grid > span + span {
+  border-left: 1px solid #edf1f5;
+}
+
+.core-kpi-grid small,
+.core-kpi-grid b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-kpi-grid small { color: #8492a1; font-size: 9px; }
+.core-kpi-grid b { margin-top: 3px; color: #17233c; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 15px; letter-spacing: -.045em; }
+.core-kpi-grid .positive b { color: #168968; }
+.core-kpi-grid .brand b { color: #087ff5; }
+.core-kpi-grid .risk b { color: #c64d43; }
+
+.core-brand-equation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  color: #087ff5;
+  border-radius: var(--radius-2);
+  background: #edf7ff;
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (max-width: 390px) {
+  .core-page-heading { margin-bottom: var(--space-3); }
+  .core-add-action, .core-outline-action { padding-inline: var(--space-2); }
+  .core-kpi-grid > span { padding-inline: var(--space-1); }
+  .core-kpi-grid b { font-size: 13px; }
+}
+
+/* 商品：每一笔金额均绑定售价、成本、利润或毛利率，选中详情保持轻量。 */
+.product-page-heading { margin-bottom: var(--space-3); }
+.product-list-heading { margin-top: 0; }
+.product-list-heading h2 { font-size: var(--font-section-title); }
+.product-list-heading h2 small { color: #8492a1; font-family: "DM Sans", sans-serif; font-size: var(--font-body); font-weight: 700; }
+.product-list {
+  margin-top: var(--space-2);
+  border: 1px solid #e6ecf2;
+  border-radius: var(--radius-ledger-reverse);
+  box-shadow: 0 4px 14px rgb(11 24 54 / .025);
+}
+.product-row {
+  grid-template-columns: 38px minmax(0, 1fr) 18px;
+  align-items: start;
+  min-height: 92px;
+  padding: var(--space-3);
+}
+.product-symbol { width: 38px; height: 38px; color: #51647d; border-radius: var(--radius-2); background: #f0f4f8; }
+.product-row.selected { background: #f8fbff; }
+.product-main { min-width: 0; }
+.product-main > div:first-child { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.product-main strong { overflow: hidden; font-size: var(--font-card-title); text-overflow: ellipsis; white-space: nowrap; }
+.product-main em { flex: 0 0 auto; padding: 2px 5px; color: #168968; border-radius: var(--radius-2); background: #eaf8f2; font-size: 9px; font-style: normal; font-weight: 800; }
+.product-row:not(.selected) .product-main em { color: #7a8898; background: #f0f3f6; }
+.product-main > span { margin-top: 2px; font-size: 10px; }
+.product-row-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); margin-top: var(--space-2); }
+.product-row-metrics > span { min-width: 0; }
+.product-row-metrics small, .product-row-metrics b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-row-metrics small { color: #93a0ad; font-size: 8px; }
+.product-row-metrics b { margin-top: 1px; color: #263750; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 10px; letter-spacing: -.035em; }
+.product-row-metrics .profit b { color: #168968; }
+.product-row-metrics .brand b { color: #087ff5; }
+.product-row-metrics .loss b { color: #c64d43; }
+.product-row > svg { align-self: center; margin-top: var(--space-2); color: #99a7b5; }
+
+.product-detail-card {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  color: #17233c;
+  border: 1px solid #dce6f0;
+  border-radius: var(--radius-ledger-reverse);
+  background: #fff;
+  box-shadow: 0 6px 18px rgb(11 24 54 / .035);
+}
+.detail-card-title { align-items: center; }
+.detail-card-title .eyebrow { color: #8492a1; }
+.detail-card-title h2 { margin-top: 2px; color: #17233c; font-size: 20px; }
+.product-detail-card .status-pill { color: #168968; border: 0; border-radius: var(--radius-2); background: #eaf8f2; }
+.product-detail-card .status-pill.warning { color: #b57917; background: #fff4dc; }
+.product-kpi-grid { margin-top: var(--space-3); }
+.product-detail-card .cost-composition-chart { margin-top: var(--space-4); }
+.product-detail-card .product-chart-summary { display: none; }
+.product-action-pair { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin-top: var(--space-4); border-top: 1px solid #edf1f5; border-bottom: 1px solid #edf1f5; }
+.product-action-pair .secondary-card-action {
+  min-width: 0;
+  min-height: 62px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
+  color: #526477;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 10px;
+}
+.product-action-pair .secondary-card-action + .secondary-card-action { border-left: 1px solid #edf1f5; }
+.product-action-pair .secondary-card-action svg { color: #087ff5; }
+.product-action-pair .cost-analysis-entry { color: #087ff5; border: 0; background: transparent; }
+.product-action-pair .cost-analysis-entry:disabled { color: #96a2af; opacity: .7; }
+.product-more-actions { grid-column: 1 / -1; display: grid; gap: 1px; margin: var(--space-2) 0 0; padding: var(--space-2) 0 0; border-top: 1px solid #edf1f5; background: transparent; }
+.product-more-actions button { min-height: var(--tap-target); display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-1); color: #526477; border: 0; background: transparent; text-align: left; font-size: var(--font-secondary); }
+.product-more-actions button.danger { color: #c64d43; }
+.empty-product-page .empty-state-card h2 { margin-top: var(--space-3); color: #17233c; font-size: var(--font-section-title); }
+.empty-product-page .empty-state-card p { margin-top: var(--space-2); color: #718094; font-size: var(--font-secondary); line-height: 1.5; }
+
+@media (max-width: 390px) {
+  .product-detail-card { padding: var(--space-3); }
+  .product-row { padding: var(--space-2); }
+  .product-row-metrics { gap: 2px; }
+  .product-row-metrics b { font-size: 9px; }
+  .product-action-pair .secondary-card-action { font-size: 9px; }
+}
+
+/* 经营：先给出可追溯的本期利润，再按现金流或利润分析查看明细。 */
+.business-page-heading { margin-bottom: var(--space-3); }
+.business-page-heading .period-picker { flex: 0 0 auto; }
+.business-profit-card {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-4);
+  color: #fff;
+  border-radius: var(--radius-ledger);
+  background: linear-gradient(135deg, #167ff4 0%, #087ff5 54%, #2466ca 100%);
+  box-shadow: 0 14px 28px rgb(8 127 245 / .18);
+}
+.business-profit-card::after { content: ""; position: absolute; top: 16px; right: 16px; width: 64px; height: 64px; border: 6px solid rgb(255 255 255 / .78); border-left-color: rgb(255 255 255 / .18); border-bottom-color: rgb(255 255 255 / .18); border-radius: 50%; transform: rotate(-42deg); }
+.business-profit-card.loss { background: linear-gradient(135deg, #c85651, #b84d4b); box-shadow: 0 14px 28px rgb(184 77 75 / .16); }
+.business-profit-heading { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding-right: 76px; }
+.business-profit-heading > span:first-child { color: rgb(255 255 255 / .88); font-size: var(--font-body); font-weight: 800; }
+.business-profit-rate { display: grid; justify-items: end; color: #fff; font-family: "DM Sans", sans-serif; font-size: 19px; font-weight: 800; letter-spacing: -.045em; }
+.business-profit-rate small { margin-top: 1px; color: rgb(255 255 255 / .68); font-family: "Noto Sans SC", sans-serif; font-size: 9px; font-weight: 600; letter-spacing: 0; }
+.business-profit-card > strong { position: relative; z-index: 1; display: block; margin-top: var(--space-2); color: #fff; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: clamp(28px, 8vw, 34px); letter-spacing: -.07em; }
+.business-profit-period { position: relative; z-index: 1; display: block; margin-top: 2px; color: rgb(255 255 255 / .68); font-size: 10px; }
+.business-profit-breakdown { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 16px minmax(0, 1fr); gap: var(--space-1); margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid rgb(255 255 255 / .22); }
+.business-profit-breakdown span { min-width: 0; }
+.business-profit-breakdown small, .business-profit-breakdown b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.business-profit-breakdown small { color: rgb(255 255 255 / .65); font-size: 8px; }
+.business-profit-breakdown b { margin-top: 2px; color: #fff; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 11px; letter-spacing: -.04em; }
+.business-profit-breakdown i { align-self: end; padding-bottom: 1px; color: rgb(255 255 255 / .64); font-family: "DM Sans", sans-serif; font-size: 16px; font-style: normal; text-align: center; }
+.business-profit-breakdown .result b { color: #dff7ed; }
+.business-view-switch { margin-top: var(--space-4); }
+
+.business-cash-summary {
+  margin-top: var(--space-4);
+  color: #17233c;
+  border: 1px solid #e0e8f0;
+  border-radius: var(--radius-ledger-reverse);
+  background: #fff;
+  box-shadow: none;
+}
+.business-cash-summary .cash-flow-copy > span, .business-cash-summary .cash-flow-copy p { color: #8190a0; }
+.business-cash-summary .cash-flow-copy h2 { color: #17233c; font-size: 26px; }
+.business-cash-summary .cash-flow-detail { color: #526477; border-color: #dce7f0; background: #f8fbff; }
+.business-cash-summary .cash-records-link { padding-left: 0; color: #087ff5; }
+.business-cash-summary .cash-orbit { color: #087ff5; border-color: #cfe3fb; background: #edf7ff; }
+.business-cash-summary .cash-orbit::before { border-color: #cfe3fb; }
+.business-cash-summary .cash-orbit span { color: #8190a0; }
+.business-content .core-section-heading { margin-top: var(--space-5); }
+.business-content .ledger-lines { margin-top: var(--space-2); border-color: #e5ebf1; box-shadow: 0 3px 12px rgb(11 24 54 / .02); }
+.business-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); margin-top: var(--space-4); }
+.business-actions .primary-action, .business-actions .secondary-action { min-height: var(--button-lg-height); margin: 0; border-radius: var(--radius-3); font-size: var(--font-secondary); }
+.business-actions .primary-action { color: #fff; border: 0; background: #087ff5; }
+.business-actions .secondary-action { color: #168968; border-color: #bfe9da; background: #f5fcf9; }
+.business-content .cost-analysis-intro { margin-top: var(--space-4); color: #526477; border-color: #dce7f0; border-radius: var(--radius-3); background: #f8fbff; }
+.business-content .cost-analysis-intro > svg { color: #087ff5; }
+.business-content .sales-result-card { margin-top: var(--space-4); border-color: #e0e8f0; border-radius: var(--radius-ledger-reverse); box-shadow: 0 4px 14px rgb(11 24 54 / .025); }
+
+@media (max-width: 390px) {
+  .business-profit-card { padding: var(--space-3); }
+  .business-profit-breakdown { gap: 2px; }
+  .business-profit-breakdown b { font-size: 10px; }
+  .business-profit-breakdown i { font-size: 14px; }
+}
+
+/* 我的：店铺资料优先，经营和数据操作按功能分组，复杂配置按需展开。 */
+.profile-store-card {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) var(--tap-target);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid #e0e8f0;
+  border-radius: var(--radius-ledger-reverse);
+  background: #fff;
+  box-shadow: 0 5px 18px rgb(11 24 54 / .035);
+}
+.profile-store-title { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.profile-store-title h1 { overflow: hidden; margin: 0; color: #17233c; font-size: 19px; letter-spacing: -.045em; text-overflow: ellipsis; white-space: nowrap; }
+.profile-store-title span { flex: 0 0 auto; padding: 2px 5px; color: #087ff5; border-radius: var(--radius-2); background: #edf7ff; font-size: 9px; font-weight: 800; }
+.profile-store-card small { display: block; margin-top: 4px; color: #8492a1; font-size: var(--font-secondary); }
+.profile-store-arrow { width: var(--tap-target); height: var(--tap-target); display: grid; place-items: center; color: #738294; border: 0; border-radius: var(--radius-2); background: transparent; }
+.profile-content .account-status-card { margin-top: var(--space-3); border-color: #e3eaf2; border-radius: var(--radius-3); box-shadow: none; }
+.profile-content .account-logout { margin-top: var(--space-2); }
+.profile-section { margin-top: var(--space-5); }
+.profile-section .core-section-heading { margin-top: 0; }
+.profile-management-grid, .profile-data-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-3); }
+.profile-management-grid > button, .profile-data-grid > button {
+  min-width: 0;
+  min-height: 106px;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 4px;
+  padding: var(--space-3) var(--space-1);
+  color: #263750;
+  border: 1px solid #e4ebf2;
+  border-radius: var(--radius-3);
+  background: #fff;
+  text-align: center;
+}
+.profile-management-grid > button.active { border-color: #9ecbf6; background: #f7fbff; }
+.profile-management-grid b, .profile-management-grid small, .profile-data-grid b, .profile-data-grid small { display: block; overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; }
+.profile-management-grid b, .profile-data-grid b { margin-top: 1px; font-size: 10px; }
+.profile-management-grid small, .profile-data-grid small { color: #8492a1; font-size: 8px; line-height: 1.35; }
+.profile-grid-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: var(--radius-2); }
+.profile-grid-icon.industry { color: #087ff5; background: #eaf4ff; }
+.profile-grid-icon.category { color: #6757d8; background: #f0edff; }
+.profile-grid-icon.allocation { color: #168968; background: #e9fbf5; }
+.profile-grid-icon.funding { color: #c46b34; background: #fff0e8; }
+.profile-grid-icon.report { color: #087ff5; background: #eaf4ff; }
+.profile-grid-icon.products { color: #6757d8; background: #f0edff; }
+.profile-grid-icon.backup { color: #168968; background: #e9fbf5; }
+.profile-grid-icon.export { color: #c46b34; background: #fff0e8; }
+.profile-expand-panel { margin-top: var(--space-3); padding: var(--space-3); border: 1px solid #dce7f0; border-radius: var(--radius-3); background: #fafcff; }
+.profile-expand-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.profile-expand-heading b { color: #263750; font-size: var(--font-body); }
+.profile-expand-heading small { color: #8492a1; font-size: 9px; line-height: 1.4; }
+.profile-expand-heading .text-action { min-height: var(--tap-target); display: inline-flex; align-items: center; gap: 1px; padding: 0 var(--space-1); color: #087ff5; border: 0; background: transparent; font-size: var(--font-secondary); font-weight: 800; }
+.profile-expand-panel .industry-switcher, .profile-expand-panel .custom-category-list { margin-top: var(--space-3); }
+.profile-system-section .setting-item { border-color: #e5ebf1; }
+.profile-system-section .setting-icon { color: #526477; background: #f0f4f8; }
+.profile-version { margin: var(--space-3) var(--space-1) 0; color: #98a4b1; font-size: 9px; line-height: 1.45; text-align: center; }
+
+@media (max-width: 390px) {
+  .profile-store-card { padding: var(--space-3); }
+  .profile-management-grid, .profile-data-grid { gap: var(--space-1); }
+  .profile-management-grid > button, .profile-data-grid > button { min-height: 98px; padding-inline: 2px; }
+  .profile-management-grid b, .profile-data-grid b { font-size: 9px; }
+}
+
+/* 首页：用可复算的“收入－成本－费用＝利润”取代并列状态卡，首屏只保留经营结论。 */
+.home-content { background: #f8fafc; }
+.dashboard-page-heading { margin-bottom: var(--space-3); }
+.dashboard-page-heading h1 { margin-top: 0; }
+.dashboard-page-heading small { font-size: var(--font-body); }
+.dashboard-result-card { padding: var(--space-4); background: linear-gradient(135deg, #177ff7 0%, #087ff5 65%, #2567ca 100%); }
+.dashboard-result-card::before { width: 118px; height: 118px; right: -34px; top: 14px; border-width: 5px; border-left-color: rgb(255 255 255 / .18); border-bottom-color: rgb(255 255 255 / .18); }
+.dashboard-result-top > span:first-child { font-size: var(--font-card-title); }
+.dashboard-result-amount { align-items: flex-start; margin-top: var(--space-3); padding-right: 80px; }
+.dashboard-result-amount > div { display: grid; gap: 2px; }
+.dashboard-result-amount > div > small { color: rgb(255 255 255 / .78); font-size: 11px; font-weight: 700; }
+.dashboard-result-amount > strong, .dashboard-result-amount > div > strong { color: #fff; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: clamp(30px, 9vw, 38px); letter-spacing: -.07em; line-height: 1; }
+.dashboard-result-rate { position: absolute; top: 6px; right: 0; width: 64px; height: 64px; display: grid; place-content: center; color: #fff; border: 6px solid rgb(255 255 255 / .84); border-top-color: rgb(255 255 255 / .24); border-left-color: rgb(255 255 255 / .24); border-radius: 50%; font-family: "DM Sans", sans-serif; font-size: 14px; font-weight: 800; letter-spacing: -.04em; text-align: center; }
+.dashboard-result-rate small { display: block; margin-top: 1px; color: rgb(255 255 255 / .68); font-family: "Noto Sans SC", sans-serif; font-size: 8px; font-weight: 500; letter-spacing: 0; }
+.dashboard-result-card > p { margin-top: var(--space-2); font-size: 10px; }
+.dashboard-result-formula { margin-top: var(--space-3); padding-top: var(--space-3); }
+.dashboard-result-formula.four { grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr) 8px minmax(0, 1fr) 8px minmax(0, 1fr); }
+.dashboard-result-formula small { font-size: 8px; }
+.dashboard-result-formula b { font-size: 10px; }
+.dashboard-result-formula i { font-size: 14px; }
+.dashboard-result-foot { margin-top: var(--space-3); padding-top: var(--space-2); }
+
+.home-overview-card, .home-products-card, .home-quick-actions { margin-top: var(--space-4); padding: var(--space-4); border: 1px solid #e2eaf2; border-radius: var(--radius-ledger-reverse); background: #fff; box-shadow: 0 5px 18px rgb(11 24 54 / .03); }
+.home-section-heading { min-height: var(--tap-target); display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.home-section-heading h2 { margin: 0; color: #17233c; font-size: var(--font-section-title); letter-spacing: -.035em; }
+.home-section-heading h2 span { color: #526477; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: var(--font-body); }
+.home-section-heading > button { min-height: var(--tap-target); display: inline-flex; align-items: center; gap: 1px; padding: 0; color: #087ff5; border: 0; background: transparent; font-size: var(--font-secondary); font-weight: 800; }
+.home-overview-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: var(--space-3); }
+.home-overview-grid > span { min-width: 0; display: grid; align-content: start; gap: 3px; padding: 0 var(--space-2); border-left: 1px solid #e7edf3; }
+.home-overview-grid > span:first-child { padding-left: 0; border-left: 0; }
+.home-overview-grid > span:last-child { padding-right: 0; }
+.home-overview-grid i { width: 29px; height: 29px; display: grid; place-items: center; border-radius: var(--radius-2); font-style: normal; }
+.home-overview-grid i.blue { color: #087ff5; background: #eaf4ff; }
+.home-overview-grid i.green { color: #168968; background: #e9fbf5; }
+.home-overview-grid i.orange { color: #d77724; background: #fff2e8; }
+.home-overview-grid small, .home-overview-grid b, .home-overview-grid em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-overview-grid small { margin-top: var(--space-1); color: #66778a; font-size: 9px; }
+.home-overview-grid b { color: #17233c; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 12px; letter-spacing: -.055em; }
+.home-overview-grid em { color: #8492a1; font-size: 8px; font-style: normal; }
+.home-overview-grid > span:last-child b { color: #168968; }
+.home-overview-grid > span.loss:last-child b { color: #c64d43; }
+
+.home-products-card { padding-bottom: var(--space-3); }
+.home-products-card .trend-range-switch { margin: var(--space-2) 0 0; }
+.home-products-card .dashboard-product-head { grid-template-columns: minmax(0, 1fr) 56px 58px 42px; margin: var(--space-3) 0 0 var(--space-5); font-size: 9px; }
+.home-products-card .dashboard-product-list button { grid-template-columns: var(--space-4) minmax(0, 1fr) 56px 58px 42px; min-height: 68px; gap: var(--space-1); padding-block: var(--space-2); }
+.home-products-card .dashboard-product-list button > em { width: 18px; height: 18px; font-size: 9px; }
+.home-products-card .dashboard-product-list button > span > b { font-size: 12px; }
+.home-products-card .dashboard-product-list button > span > i { margin-top: 6px; }
+.home-products-card .dashboard-product-list button > strong, .home-products-card .dashboard-product-list button > small { align-self: center; font-size: 10px; }
+.home-products-card .dashboard-product-list button > small { min-height: auto; justify-content: flex-end; text-align: right; }
+.home-products-card .dashboard-product-list button > small:nth-of-type(2) { color: #087ff5; }
+.home-products-card .dashboard-data-note { padding-top: var(--space-2); font-size: 9px; }
+
+.home-quick-actions { padding: var(--space-4); }
+.home-quick-actions > div:last-child { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin-top: var(--space-3); }
+.home-quick-actions > div:last-child > button { min-width: 0; min-height: 76px; display: grid; grid-template-columns: 38px minmax(0, 1fr) 16px; align-items: center; gap: var(--space-2); padding: var(--space-3); border: 1px solid #dfe8f2; border-radius: var(--radius-3); background: #f6faff; text-align: left; }
+.home-quick-actions > div:last-child > button.expense { border-color: #d7eee5; background: #f4fcf8; }
+.home-quick-actions .quick-action-icon { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 50%; }
+.home-quick-actions .quick-action-icon.blue { color: #fff; background: #087ff5; }
+.home-quick-actions .quick-action-icon.mint { color: #fff; background: #20b486; }
+.home-quick-actions button > span:nth-child(2) { min-width: 0; display: grid; gap: 2px; }
+.home-quick-actions button b, .home-quick-actions button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-quick-actions button b { color: #263750; font-size: 12px; }
+.home-quick-actions button small { color: #8492a1; font-size: 9px; }
+.home-quick-actions button > svg { color: #087ff5; }
+.home-quick-actions button.expense > svg { color: #168968; }
+.home-focus-card { margin-top: var(--space-4); }
+.home-activity-card { margin-top: var(--space-4); padding: var(--space-3) var(--space-4); border: 1px solid #e2eaf2; border-radius: var(--radius-ledger-reverse); background: #fff; box-shadow: 0 5px 18px rgb(11 24 54 / .03); }
+.home-activity-card .home-section-heading { min-height: 38px; }.home-activity-card .home-section-heading h2 { font-size: 18px; }.home-activity-card .home-section-heading > div > small { display: block; margin-top: 1px; color: #8492a1; font-size: 10px; }.home-activity-card .home-section-heading > button { min-height: var(--tap-target); }
+.home-activity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: var(--space-2); }.home-activity-grid > span { display: grid; min-width: 0; gap: 2px; padding: 0 var(--space-3); border-right: 1px solid #edf1f5; }.home-activity-grid > span:first-child { padding-left: 0; }.home-activity-grid > span:last-child { padding-right: 0; border-right: 0; }.home-activity-grid i { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 8px; font-style: normal; }.home-activity-grid i.blue { color: #087ff5; background: #edf7ff; }.home-activity-grid i.green { color: #168968; background: #eaf9f2; }.home-activity-grid i.orange { color: #bd6b28; background: #fff5e9; }.home-activity-grid small { overflow: hidden; margin-top: 2px; color: #718094; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.home-activity-grid b { overflow: hidden; color: #203146; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }.home-activity-grid em { display: -webkit-box; overflow: hidden; color: #8492a1; font-size: 9px; font-style: normal; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }.home-activity-grid > span.warning b { color: #bd6b28; }
+
+@media (max-width: 390px) {
+  .dashboard-result-card { padding: var(--space-3); }
+  .dashboard-result-formula.four { gap: 1px; }
+  .dashboard-result-formula.four b { font-size: 9px; }
+  .home-overview-card, .home-products-card, .home-quick-actions { padding: var(--space-3); }
+  .home-activity-card { padding: var(--space-3); }
+  .home-activity-grid > span { padding-inline: var(--space-2); }
+  .home-activity-grid b { font-size: 12px; }
+  .home-overview-grid > span { padding-inline: 5px; }
+  .home-overview-grid b { font-size: 11px; }
+  .home-quick-actions > div:last-child { gap: var(--space-2); }
+  .home-quick-actions > div:last-child > button { grid-template-columns: 33px minmax(0, 1fr) 13px; padding: var(--space-2); }
+  .home-quick-actions .quick-action-icon { width: 32px; height: 32px; }
+}
+
+/* 全站组件合同：页面、表单、抽屉、列表和数据状态共享相同的表面、边框、触控与反馈语言。 */
+:root {
+  --ui-surface: #ffffff;
+  --ui-surface-muted: #f6f9fc;
+  --ui-line: #e1e9f1;
+  --ui-text: #17233c;
+  --ui-text-muted: #718094;
+  --ui-success: #168968;
+  --ui-warning: #c48819;
+  --ui-danger: #c64d43;
+  --ui-shadow-sm: 0 5px 18px rgb(11 24 54 / .035);
+  --ui-shadow-lg: 0 18px 38px rgb(11 24 54 / .12);
+  --chart-income: #087ff5;
+  --chart-cost: #20b486;
+  --chart-warning: #f2a93b;
+  --chart-risk: #e55b63;
+  --chart-grid: #e8eef5;
+}
+
+.page-content :where(button, input, select, textarea) { -webkit-tap-highlight-color: transparent; }
+.page-content :where(input, select, textarea) { color: var(--ui-text); border-color: var(--ui-line); background: #fff; }
+.page-content :where(input, select, textarea)::placeholder { color: #9aa7b5; }
+
+/* 高使用率页内容器、分段控件、空状态与状态标签 */
+.chart-card, .overview-chart-card, .analytics-trend-card, .cost-analysis-card, .cost-simulator-card, .cost-structure-card, .cost-anomaly-card, .profit-bridge-card, .inventory-sheet, .message-detail, .message-list, .profile-section, .data-management-sheet {
+  border: 1px solid var(--ui-line);
+  border-radius: var(--radius-ledger-reverse);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.trend-range-switch, .chart-point-tabs, .cost-trend-tabs, .record-type-switch, .message-filter-row {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid #e2eaf2;
+  border-radius: var(--radius-3);
+  background: #f2f6fa;
+}
+
+.trend-range-switch > button, .chart-point-tabs > button, .cost-trend-tabs > button, .record-type-switch > button, .message-filter-row > button {
+  min-height: var(--button-sm-height);
+  padding-inline: var(--space-3);
+  color: var(--ui-text-muted);
+  border: 0;
+  border-radius: var(--radius-2);
+  background: transparent;
+  font-size: var(--font-caption);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.trend-range-switch > button.selected, .chart-point-tabs > button.selected, .cost-trend-tabs > button.selected, .record-type-switch > button.selected, .message-filter-row > button.active {
+  color: #087ff5;
+  background: #fff;
+  box-shadow: 0 2px 7px rgb(11 24 54 / .08);
+}
+
+.status-pill, .message-level, .result-status, .inventory-health-list em, .dashboard-product-list small.risk {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding-inline: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.message-level.success, .status-pill.enabled, .inventory-health-list em.normal { color: var(--ui-success); border-color: #bfe6d8; background: #effbf6; }
+.message-level.warning, .inventory-health-list em.low, .status-pill.pending { color: var(--ui-warning); border-color: #f4d7a4; background: #fff8e9; }
+.message-level.danger, .inventory-health-list em.excess, .dashboard-product-list small.risk { color: var(--ui-danger); border-color: #f0c7c2; background: #fff3f1; }
+
+.dashboard-empty, .chart-empty, .cost-analysis-empty, .cost-composition-empty, .cost-profit-empty, .cost-trend-empty, .empty-state-card, .empty-product-page, .message-empty, .campaign-empty, .bom-empty, .pricing-cost-empty {
+  min-height: 132px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  color: var(--ui-text-muted);
+  border: 1px dashed #c9d7e5;
+  border-radius: var(--radius-4);
+  background: linear-gradient(135deg, #fafdff, #f4f8fc);
+  text-align: center;
+}
+
+.dashboard-empty > svg, .chart-empty > svg, .cost-analysis-empty > svg, .empty-state-card > svg, .message-empty > svg, .campaign-empty > svg, .bom-empty > svg { color: #087ff5; }
+.dashboard-empty b, .chart-empty b, .cost-analysis-empty b, .empty-state-card b, .message-empty b, .campaign-empty b, .bom-empty b { color: var(--ui-text); font-size: var(--font-body); }
+.dashboard-empty small, .chart-empty small, .cost-analysis-empty small, .empty-state-card small, .message-empty small, .campaign-empty small, .bom-empty small { max-width: 290px; color: var(--ui-text-muted); font-size: var(--font-secondary); line-height: 1.5; }
+
+/* 所有业务抽屉与表单统一为44px以上触控输入、固定底部操作区与清晰风险反馈。 */
+.sheet-backdrop { padding: var(--space-4); background: rgb(11 24 54 / .42); backdrop-filter: blur(3px); }
+.pricing-sheet, .quick-cost-sheet, .record-sheet, .material-sheet, .bom-sheet, .monthly-allocation-sheet, .monthly-report-sheet, .cash-records-sheet, .message-inbox-sheet, .message-detail-sheet, .data-management-sheet, .admin-message-sheet, .industry-change-sheet, .delete-product-sheet, .product-name-sheet, .hidden-cost-sheet {
+  max-height: min(88vh, 760px);
+  overflow: auto;
+  color: var(--ui-text);
+  border: 1px solid rgb(255 255 255 / .9);
+  border-radius: var(--radius-6) var(--radius-6) 0 0;
+  background: #fff;
+  box-shadow: var(--ui-shadow-lg);
+}
+
+.sheet-header, .pricing-sheet .sheet-header { padding-bottom: var(--space-3); border-bottom: 1px solid #edf1f5; }
+.sheet-header h2, .pricing-sheet .sheet-header h2 { color: var(--ui-text); font-size: var(--font-section-title); }
+.sheet-header .eyebrow { color: #718094; }
+.sheet-grabber { background: #c8d3df; }
+.field-block, .record-field-block, .compact-field, .admin-message-field, .onboarding-field, .bom-category-field, .business-date-field { display: grid; gap: var(--space-2); color: #526174; font-size: var(--font-secondary); font-weight: 700; }
+.field-block > :where(input, select, textarea), .record-field-block > :where(input, select, textarea), .compact-field > :where(input, select, textarea), .admin-message-field > :where(input, select, textarea), .onboarding-field > :where(input, select, textarea), .bom-category-field > :where(input, select, textarea), .business-date-field > :where(input, select, textarea) { min-height: var(--button-lg-height); padding-inline: var(--space-3); border: 1px solid #cbd8e5; border-radius: var(--radius-3); font: inherit; }
+.field-block > textarea, .record-field-block > textarea, .admin-message-field > textarea, .onboarding-field > textarea { min-height: 96px; padding-block: var(--space-3); resize: vertical; }
+.money-input, .record-amount, .number-input { min-height: var(--button-lg-height); border: 1px solid #cbd8e5; border-radius: var(--radius-3); background: #fff; }
+.form-error, .field-error { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); color: var(--ui-danger); border: 1px solid #f0c7c2; border-radius: var(--radius-3); background: #fff4f2; font-size: var(--font-secondary); line-height: 1.45; }
+.record-category-hint, .cost-setting-note, .allocation-step-hint, .report-period-note, .pricing-rate-guide, .quick-cost-boundary { padding: var(--space-3); color: #66778a; border: 1px solid #d9e8f7; border-radius: var(--radius-3); background: #f5faff; font-size: var(--font-secondary); line-height: 1.55; }
+.data-confirmation { padding: var(--space-4); color: var(--ui-text); border: 1px solid #f0c7c2; border-radius: var(--radius-4); background: #fff8f7; }
+.data-confirmation b { color: var(--ui-danger); }
+.data-confirmation p { margin-top: var(--space-2); color: #66778a; font-size: var(--font-secondary); line-height: 1.55; }
+
+/* 统一图表容器、图例、指标与提示层；数据颜色固定表达收入、成本、提示与风险。 */
+.chart-card, .overview-chart-card, .analytics-trend-card, .cost-trend-card, .cost-structure-card, .profit-bridge-card, .cash-flow-dynamic-chart, .product-contribution-chart {
+  overflow: hidden;
+  padding: var(--space-4);
+}
+.chart-heading, .analytics-trend-head, .cost-analysis-header, .profit-bridge-heading { min-height: var(--tap-target); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.chart-heading h3, .analytics-trend-head h3, .cost-analysis-header h2, .profit-bridge-heading h3 { color: var(--ui-text); font-size: var(--font-card-title); }
+.chart-heading small, .analytics-trend-head small, .profit-bridge-heading small { display: block; margin-top: 2px; color: var(--ui-text-muted); font-size: var(--font-secondary); line-height: 1.45; }
+.chart-tooltip, .cost-mix-tooltip, .profit-bridge-tooltip { color: var(--ui-text); border: 1px solid #dce6f0; border-radius: var(--radius-3); background: rgb(255 255 255 / .97); box-shadow: 0 10px 24px rgb(11 24 54 / .12); }
+.chart-tooltip b, .cost-mix-tooltip b, .profit-bridge-tooltip b { color: var(--ui-text); }
+.mini-chart-legend, .chart-legend, .analytics-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--ui-text-muted); font-size: var(--font-caption); }
+.mini-chart-legend i, .chart-legend i, .analytics-legend i { width: 8px; height: 8px; border-radius: 50%; }
+.income-dot, .legend-income { background: var(--chart-income); }.expense-dot, .legend-cost { background: var(--chart-cost); }.legend-warning { background: var(--chart-warning); }.legend-risk { background: var(--chart-risk); }
+.mini-trend-chart, .cost-trend-graph, .cash-flow-chart, .cost-composition-chart, .product-contribution-chart svg { min-width: 0; }
+.recharts-cartesian-grid line { stroke: var(--chart-grid); }
+.recharts-text, .recharts-cartesian-axis-tick-value { fill: #7e8b9b; font-size: 11px; }
+
+@media (max-width: 520px) {
+  .sheet-backdrop { padding: 0; }
+  .pricing-sheet, .quick-cost-sheet, .record-sheet, .material-sheet, .bom-sheet, .monthly-allocation-sheet, .monthly-report-sheet, .cash-records-sheet, .message-inbox-sheet, .message-detail-sheet, .data-management-sheet, .admin-message-sheet, .industry-change-sheet, .delete-product-sheet, .product-name-sheet, .hidden-cost-sheet { width: 100%; max-height: 91vh; }
+  .chart-card, .overview-chart-card, .analytics-trend-card, .cost-trend-card, .cost-structure-card, .profit-bridge-card, .cash-flow-dynamic-chart, .product-contribution-chart { padding: var(--space-3); }
+  .trend-range-switch, .chart-point-tabs, .cost-trend-tabs, .record-type-switch, .message-filter-row { overflow-x: auto; scrollbar-width: none; }
+  .trend-range-switch::-webkit-scrollbar, .chart-point-tabs::-webkit-scrollbar, .cost-trend-tabs::-webkit-scrollbar, .record-type-switch::-webkit-scrollbar, .message-filter-row::-webkit-scrollbar { display: none; }
+}
+
+.ui-contract .mobile-tabbar, .ui-contract .desktop-rail { border-color: var(--ui-line); background: rgb(255 255 255 / .96); box-shadow: 0 -6px 18px rgb(11 24 54 / .035); }
+.ui-contract .tab-item, .ui-contract .rail-item { min-height: var(--tap-target); border-radius: var(--radius-3); }
+.ui-contract .tab-item.active, .ui-contract .rail-item.active { color: #087ff5; background: #eff7ff; }
+.ui-contract .entry-tab-icon { box-shadow: 0 9px 20px rgb(8 127 245 / .22); }
+.ui-contract .product-list, .ui-contract .cash-record-list, .ui-contract .message-list, .ui-contract .campaign-list, .ui-contract .report-list, .ui-contract .allocation-product-list, .ui-contract .bom-list, .ui-contract .custom-category-list { border-color: var(--ui-line); border-radius: var(--radius-4); background: #fff; box-shadow: var(--ui-shadow-sm); }
+.ui-contract .product-row, .ui-contract .cash-record-row, .ui-contract .message-action, .ui-contract .campaign-list > button, .ui-contract .report-list > article, .ui-contract .allocation-product-row, .ui-contract .bom-row, .ui-contract .custom-category-row { min-height: var(--tap-target); }
+.ui-contract .product-row + .product-row, .ui-contract .cash-record-row + .cash-record-row, .ui-contract .message-action + .message-action, .ui-contract .report-list > article + article, .ui-contract .allocation-product-row + .allocation-product-row, .ui-contract .bom-row + .bom-row, .ui-contract .custom-category-row + .custom-category-row { border-color: #edf1f5; }
+.ui-contract [data-slot="dialog-content"] { border-color: #e1e9f1; border-radius: var(--radius-6); box-shadow: var(--ui-shadow-lg); }
+.ui-contract .danger-action { min-height: var(--button-lg-height); border-radius: var(--radius-4); }
+
+/* 首页经营结论：严格采用“输入项计算 → 独立结果卡”的图二层级，避免整块蓝色趋势卡。 */
+.dashboard-formula-card {
+  overflow: hidden;
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  color: var(--ui-text);
+  border: 1px solid #dce9f6;
+  border-radius: var(--radius-6);
+  background: linear-gradient(120deg, #e9f4ff 0%, #f8fbff 64%, #eaf5ff 100%);
+  box-shadow: 0 10px 25px rgb(8 127 245 / .08);
+}
+.dashboard-formula-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.dashboard-formula-heading > span:first-child { color: #19335d; font-size: var(--font-card-title); font-weight: 800; }
+.dashboard-formula-card .result-status { min-height: 25px; padding-inline: 9px; }
+.dashboard-formula-card .result-status.pending { color: #a16d10; border: 1px solid #f3d598; background: #fff8e8; }
+.dashboard-formula-layout { display: grid; grid-template-columns: minmax(0, 2.05fr) 18px minmax(116px, 1.05fr); align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+.dashboard-formula-inputs { display: grid; grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr) 12px minmax(0, 1fr); align-items: center; gap: var(--space-1); }
+.formula-metric { min-width: 0; min-height: 140px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--space-2) 4px; text-align: center; border: 1px solid rgb(221 231 241 / .94); border-radius: var(--radius-4); background: rgb(255 255 255 / .94); box-shadow: 0 4px 11px rgb(11 24 54 / .04); }
+.formula-metric small { color: #44546a; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.formula-metric i { width: 28px; height: 28px; display: grid; place-items: center; margin-block: 10px; border-radius: var(--radius-3); font-style: normal; }
+.formula-metric.revenue i { color: #087ff5; background: #eaf5ff; }.formula-metric.cost i { color: #168968; background: #eaf9f3; }.formula-metric.expense i { color: #c77b16; background: #fff4e5; }
+.formula-metric b { width: 100%; overflow: hidden; color: #14233d; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: clamp(12px, 3.5vw, 16px); letter-spacing: -.05em; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-formula-inputs > em, .formula-equals { color: #173c83; font-family: "DM Sans", sans-serif; font-size: 21px; font-style: normal; font-weight: 800; text-align: center; }
+.formula-equals { align-self: center; font-size: 26px; }
+.dashboard-profit-result { position: relative; min-height: 176px; overflow: hidden; padding: var(--space-3); color: #fff; border-radius: var(--radius-5); background: linear-gradient(145deg, #1486f9, #0874e8); box-shadow: 0 11px 20px rgb(8 127 245 / .2); }
+.dashboard-profit-result > small { display: block; color: rgb(255 255 255 / .84); font-size: 11px; font-weight: 700; }
+.dashboard-profit-result > strong { display: block; overflow: hidden; margin-top: var(--space-2); color: #fff; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: clamp(22px, 7vw, 31px); line-height: 1; letter-spacing: -.07em; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-profit-result > span { display: block; margin-top: 6px; color: rgb(255 255 255 / .82); font-size: 12px; font-weight: 700; }
+.dashboard-profit-ring { position: absolute; right: 12px; bottom: 12px; width: 72px; height: 72px; display: grid; place-items: center; border-radius: 50%; }
+.dashboard-profit-ring::before { content: ""; position: absolute; inset: 8px; border-radius: 50%; background: #137fee; }
+.dashboard-profit-ring > div { position: relative; z-index: 1; text-align: center; }.dashboard-profit-ring b { display: block; color: #fff; font-family: "DM Sans", sans-serif; font-size: 14px; letter-spacing: -.05em; }.dashboard-profit-ring small { display: block; margin-top: 2px; color: rgb(255 255 255 / .72); font-size: 8px; }
+.dashboard-formula-caption { display: flex; align-items: center; justify-content: center; gap: var(--space-3); margin-top: var(--space-3); padding-top: var(--space-3); color: #285091; border-top: 1px solid rgb(49 115 206 / .18); font-size: 13px; font-weight: 800; }
+.dashboard-formula-caption i { font-style: normal; }.dashboard-formula-caption b { color: #087ff5; }
+.dashboard-formula-card > p { margin-top: var(--space-2); color: #667992; font-size: 10px; line-height: 1.45; text-align: center; }
+.dashboard-formula-card.loss { border-color: #f1c8c3; background: linear-gradient(120deg, #fff4f3, #fffafa); }.dashboard-formula-card.loss .dashboard-profit-result { background: linear-gradient(145deg, #d55e56, #b94c48); }.dashboard-formula-card.loss .dashboard-profit-ring::before { background: #ca554f; }
+.dashboard-formula-card.pending .dashboard-profit-result { background: linear-gradient(145deg, #6e8ab0, #5d789e); }.dashboard-formula-card.pending .dashboard-profit-ring::before { background: #6682a8; }
+@media (max-width: 390px) {
+  .dashboard-formula-card { padding: var(--space-3); }
+  .dashboard-formula-layout { grid-template-columns: minmax(0, 2.08fr) 14px minmax(106px, 1fr); gap: 4px; }
+  .dashboard-formula-inputs { grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr) 8px minmax(0, 1fr); gap: 2px; }
+  .formula-metric { min-height: 126px; padding-inline: 2px; }.formula-metric small { font-size: 10px; }.formula-metric i { margin-block: 8px; }.formula-metric b { font-size: 12px; }
+  .dashboard-profit-result { min-height: 160px; padding: 10px; }.dashboard-profit-result > strong { font-size: 23px; }.dashboard-profit-ring { right: 9px; bottom: 9px; width: 64px; height: 64px; }.dashboard-profit-ring::before { inset: 7px; }
+  .dashboard-formula-caption { gap: var(--space-2); font-size: 12px; }
+}
+
+/* 首页底部品牌信息橱窗：统一米白底、数学暗纹、线性进度与数据结果锚点。 */
+.brand-insight-carousel { position: relative; min-height: 158px; overflow: hidden; margin-top: var(--space-4); margin-bottom: calc(var(--space-6) + env(safe-area-inset-bottom)); padding: 18px 20px; color: #1f2937; border: 1px solid #e4e9ef; border-radius: 18px; background: linear-gradient(135deg, #fbfaf7 0%, #f4f8fc 100%); box-shadow: 0 5px 16px rgb(20 36 58 / .05); isolation: isolate; }
+.brand-symbol-texture { position: absolute; z-index: -1; top: -26px; right: -32px; width: 240px; color: #087ff5; font-family: "DM Sans", sans-serif; font-size: 42px; font-weight: 800; line-height: 1.45; letter-spacing: 14px; opacity: .045; transform: rotate(-9deg); word-spacing: 15px; }
+.brand-banner-copy { position: relative; z-index: 2; width: 55%; min-width: 0; }.brand-banner-tag { display: block; color: #087ff5; font-family: "DM Sans", sans-serif; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.brand-banner-copy h2 { max-width: 215px; margin: 7px 0 4px; color: #1f2937; font-size: 19px; font-weight: 700; letter-spacing: -.025em; line-height: 1.25; animation: brandTitleIn 380ms var(--ease-out, cubic-bezier(.23,1,.32,1)) both; }
+.brand-banner-copy p { display: -webkit-box; overflow: hidden; max-width: 220px; margin: 0; color: #64748b; font-size: 12px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.brand-banner-footer { display: flex; align-items: center; gap: var(--space-2); min-height: 34px; margin-top: 7px; color: #52657a; font-size: 10px; font-weight: 600; line-height: 1.3; }.brand-banner-footer > span { max-width: 144px; }.brand-banner-footer button { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; gap: 2px; margin: -5px 0 -5px -7px; padding: 0 7px; color: #087ff5; border: 0; background: transparent; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.brand-banner-visual { position: absolute; z-index: 1; top: 35px; right: 15px; width: 40%; height: 105px; animation: brandVisualIn 440ms var(--ease-out, cubic-bezier(.23,1,.32,1)) both; }
+.brand-carousel-progress { position: absolute; z-index: 3; top: 13px; right: 16px; display: flex; align-items: center; gap: 5px; color: #7b8a9e; font-family: "DM Sans", sans-serif; font-size: 10px; font-weight: 800; }.brand-carousel-progress > div { display: flex; gap: 3px; }.brand-carousel-progress button { width: 13px; min-width: 13px; height: 24px; padding: 0; border: 0; background: transparent; }.brand-carousel-progress button i { display: block; width: 100%; height: 2px; border-radius: 999px; background: #c7d5e3; transition: width 240ms ease, background-color 240ms ease; }.brand-carousel-progress button[aria-selected="true"] { width: 35px; }.brand-carousel-progress button[aria-selected="true"] i { background: #087ff5; }
+.brand-banner-brand-visual { position: relative; width: 100%; height: 100%; }.brand-banner-brand-visual .brand-node { position: absolute; display: grid; width: 30px; height: 30px; place-items: center; color: #087ff5; border: 1px solid #cce2f8; border-radius: 10px; background: #fff; font-family: "DM Sans", sans-serif; font-size: 19px; font-weight: 800; box-shadow: 0 3px 9px rgb(8 127 245 / .08); }.brand-node.n1 { top: 12px; left: 4px; }.brand-node.n2 { top: 45px; left: 40px; color: #23a66f; }.brand-node.n3 { top: 10px; left: 76px; color: #c37a20; }.brand-banner-brand-visual i { position: absolute; top: 46px; left: 21px; width: 72px; height: 1px; background: #a9cdec; transform: rotate(-17deg); }.brand-banner-brand-visual > b { position: absolute; right: 5px; bottom: 5px; color: #087ff5; font-family: "DM Sans", sans-serif; font-size: 56px; font-weight: 800; letter-spacing: -.08em; }
+.brand-banner-equation { display: flex; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; color: #5b6c80; font-size: 9px; line-height: 1.2; text-align: center; }.brand-banner-equation > span { padding: 7px 4px; border-radius: 8px; background: rgb(255 255 255 / .72); }.brand-banner-equation b { display: block; margin-top: 3px; color: #203146; font-family: "DM Sans", sans-serif; font-size: 11px; }.brand-banner-equation i { color: #5c7eaa; font-family: "DM Sans", sans-serif; font-size: 15px; font-style: normal; }.brand-banner-equation strong { position: relative; display: grid; min-width: 55px; min-height: 59px; align-content: center; padding: 5px; color: #087ff5; border: 1px solid #b8daf8; border-radius: 10px; background: #edf7ff; font-family: "DM Sans", sans-serif; font-size: 18px; text-align: left; }.brand-banner-equation strong small { display: block; margin-left: 17px; color: #547092; font-family: "Noto Sans SC", sans-serif; font-size: 8px; font-weight: 600; }.brand-banner-equation strong b { margin-left: 17px; color: #087ff5; font-size: 12px; }.brand-banner-equation.pricing { padding-top: 14px; }.brand-banner-equation.pricing > span { min-width: 43px; }
+.brand-banner-profit { display: grid; align-content: center; gap: 5px; height: 100%; padding: 3px 0 0 12px; color: #64748b; font-size: 9px; }.brand-banner-profit span { display: flex; justify-content: space-between; gap: 6px; }.brand-banner-profit b { color: #26384e; font-family: "DM Sans", sans-serif; font-size: 10px; }.brand-banner-profit strong { display: block; margin-top: 3px; padding-top: 5px; color: #087ff5; border-top: 1px solid #cce2f8; font-family: "DM Sans", sans-serif; font-size: 18px; letter-spacing: -.04em; }.brand-banner-profit small { display: block; margin-top: 2px; color: #168968; font-family: "Noto Sans SC", sans-serif; font-size: 9px; }
+.brand-banner-warning { display: grid; align-content: center; gap: 7px; height: 100%; padding-left: 12px; color: #64748b; font-size: 10px; }.brand-banner-warning span { display: flex; justify-content: space-between; gap: 8px; }.brand-banner-warning b { color: #bd5b49; font-family: "DM Sans", sans-serif; }.brand-banner-warning small { display: inline-flex; align-items: center; gap: 3px; width: max-content; margin-top: 3px; padding: 4px 6px; color: #a65b2e; border-radius: 6px; background: #fff3eb; font-size: 9px; }
+@keyframes brandTitleIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }@keyframes brandVisualIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .brand-banner-copy h2, .brand-banner-visual { animation: none; }.brand-carousel-progress button i { transition: none; } }
+@media (max-width: 390px) { .brand-insight-carousel { min-height: 155px; padding-inline: 18px; }.brand-banner-copy { width: 53%; }.brand-banner-copy h2 { font-size: 18px; }.brand-banner-copy p { font-size: 11px; }.brand-banner-visual { right: 8px; width: 43%; }.brand-banner-footer > span { max-width: 126px; }.brand-banner-equation { gap: 1px; }.brand-banner-equation > span { padding-inline: 2px; font-size: 8px; }.brand-banner-equation b { font-size: 10px; }.brand-banner-equation.cost > span { min-width: 29px; }.brand-banner-equation strong { min-width: 48px; padding-inline: 3px; }.brand-banner-equation strong small, .brand-banner-equation strong b { margin-left: 14px; } }
 .dashboard-status-item.goal { border-color: #cfe4fb; background: #f8fbff; }
 .dashboard-status-item.goal > b { color: #087ff5; }
 .dashboard-status-item.health.healthy > b { color: #168968; }

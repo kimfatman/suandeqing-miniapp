@@ -347,7 +347,7 @@ export default function Home() {
   if (!ledger.profile.onboarded) return <OnboardingFlow initialName={ledger.profile.storeName} onComplete={completeOnboarding} />;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell ui-contract">
       <aside className="desktop-rail" aria-label="主导航">
         <div className="rail-brand"><BrandMark size={42} /><span>算得清</span></div>
         <div className="rail-nav">
@@ -390,6 +390,7 @@ export default function Home() {
             onAddMaterial={() => { setEditingMaterialId(null); setShowMaterialPanel(true); }}
             onEditMaterial={(material) => { setEditingMaterialId(material.id); setShowMaterialPanel(true); }}
             onRecord={() => setShowQuickRecord(true)}
+            onSale={() => setShowSaleRecord(true)}
             onBusiness={() => navigate("business")}
             onProducts={() => navigate("products")}
             readiness={readiness}
@@ -428,7 +429,7 @@ export default function Home() {
           />
         )}
         {activeTab === "business" && <BusinessView summary={summary} productCount={activeProducts.length} period={selectedPeriod} onPeriodChange={setSelectedPeriod} onPricing={() => setShowPricing(true)} onRecord={() => setShowQuickRecord(true)} onSale={() => setShowSaleRecord(true)} onCashRecords={() => setShowCashRecords(true)} sales={ledger.sales} products={ledger.products} onRefund={(saleId) => setRefundSaleId(saleId)} onDeleteSale={(saleId) => setDeletingSaleId(saleId)} />}
-        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} template={currentTemplate} categories={ledger.categories} categoryStatus={ledger.categoryStatus} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} />}
+        {activeTab === "profile" && <ProfileView storeName={ledger.profile.storeName} industry={ledger.profile.industry} template={currentTemplate} categories={ledger.categories} categoryStatus={ledger.categoryStatus} productCount={activeProducts.length} user={user} authLoading={authLoading} backupAt={cloudLedger.data?.backedUpAt} cloudAvailable={Boolean(cloudLedger.data)} onLogin={startLogin} onLogout={async () => { await logout(); notify("已退出账号；本机账本仍保留在当前设备"); }} isLoggingOut={isLoggingOut} onDataManagement={() => setShowDataManagement(true)} onAdminMessages={() => setShowAdminMessages(true)} onIndustryChange={requestIndustryChange} onAddCategory={() => { setEditingCategory(""); }} onEditCategory={(category) => setEditingCategory(category)} onToggleCategory={(category) => { setLedger((current) => { const next = { ...current, categoryStatus: { ...current.categoryStatus, [category]: current.categoryStatus?.[category] === false } }; persistLedger(next); return next; }); notify(currentCategoryIsActive(ledger, category) ? `已停用“${category}”，新记账不会再出现` : `已启用“${category}”，可继续用于记账`); }} onHiddenCost={() => setShowMonthlyAllocation(true)} onDebt={() => setCostEditor("funding")} onMonthlyReport={() => setShowCostReport(true)} onProducts={() => navigate("products")} />}
         </>}
       </main>
 
@@ -530,6 +531,7 @@ export function HomeView({
   onAddMaterial,
   onEditMaterial,
   onRecord,
+  onSale,
   onBusiness,
   onProducts,
   readiness,
@@ -550,21 +552,18 @@ export function HomeView({
   onAddMaterial: () => void;
   onEditMaterial: (material: Material) => void;
   onRecord: () => void;
+  onSale: () => void;
   onBusiness: () => void;
   onProducts: () => void;
   readiness: Readiness;
   onSaveRevenueGoal: (monthlyBudget: number) => void;
   onPrimaryAction: () => void;
 }) {
-  const [editingRevenueGoal, setEditingRevenueGoal] = useState(false);
-  const [revenueGoalInput, setRevenueGoalInput] = useState(ledger.profile.monthlyBudget > 0 ? String(ledger.profile.monthlyBudget) : "");
   const [contributionRange, setContributionRange] = useState<CashTrendRange>("month");
   const hasSalesResult = summary.profitReady;
-  const hasProduct = product.id !== 0;
   const operatingResult = summary.operatingResult;
-  const resultTitle = !hasSalesResult ? "本月利润待销售结转" : operatingResult > 0 ? "本月经营有盈利" : operatingResult < 0 ? "本月经营亏损" : "本月经营持平";
-  const resultDetail = !hasSalesResult ? "当前显示的是已收与已付现金；补一笔销售后，才会按商品成本计算利润。" : `已按 ${summary.salesCount} 笔销售结转，现金结余不等于利润。`;
-  const resultCost = Math.max(summary.salesRevenue - operatingResult, 0);
+  const operatingExpenses = summary.allocatedIndirectCosts + summary.financingCosts;
+  const operatingMargin = hasSalesResult && summary.salesRevenue > 0 ? operatingResult / summary.salesRevenue * 100 : null;
   const missingCostProductCount = products.filter((item) => item.direct <= 0 && item.bom.length === 0).length;
   const unpricedProductCount = products.filter((item) => item.price <= 0).length;
   const monthlyContributions = useMemo(() => getProductContributionData(products, sales, period), [products, sales, period]);
@@ -576,68 +575,123 @@ export function HomeView({
   const topContributions = contributions.slice(0, 5);
   const maxContributionRevenue = Math.max(...topContributions.map((item) => Math.abs(item.revenue)), 1);
   const grossMargin = summary.salesRevenue > 0 ? summary.grossProfit / summary.salesRevenue * 100 : null;
-  const salesTrendSeries = useMemo(() => getSalesTrendSeries(ledger, period, "7d"), [ledger, period]);
-  const health = useMemo(() => getDashboardHealth(ledger, summary), [ledger, summary]);
-  const revenueGoal = useMemo(() => getRevenueGoalProgress(ledger.profile.monthlyBudget, summary.salesRevenue), [ledger.profile.monthlyBudget, summary.salesRevenue]);
-  const saveRevenueGoal = () => {
-    const nextGoal = Math.max(Number(revenueGoalInput) || 0, 0);
-    onSaveRevenueGoal(nextGoal);
-    setRevenueGoalInput(nextGoal > 0 ? String(nextGoal) : "");
-    setEditingRevenueGoal(false);
-  };
+  const profitRingProgress = operatingMargin === null ? 0 : Math.min(Math.max(operatingMargin, 0), 100);
   const primaryInsight = dashboardInsights[0];
   const performDashboardAction = (action: DashboardAction) => {
     if (action === "products") onProducts();
     else if (action === "business") onBusiness();
     else onPrimaryAction();
   };
-  const unitCost = Math.max(fullCost, operatingCost, product.direct, 0);
-  const unitProfit = product.price > 0 ? product.price - unitCost : null;
-  const unitMargin = product.price > 0 ? unitProfit! / product.price * 100 : null;
-  const purchaseTotals = Object.entries(summary.categoryTotals).filter(([category]) => /采购|进货|材料/.test(category));
-  const purchaseAmount = purchaseTotals.reduce((total, [, amount]) => total + amount, 0);
-  const linkedMaterialIds = new Set(products.flatMap((item) => item.bom.map((part) => part.materialId)));
-  const unlinkedMaterialCount = materials.filter((material) => !linkedMaterialIds.has(material.id)).length;
   const primaryIcon = readiness.stage === "record" ? <ReceiptText size={19} /> : readiness.stage === "product" ? <Plus size={19} /> : readiness.stage === "cost" ? <PackagePlus size={19} /> : readiness.stage === "pricing" ? <Sparkles size={19} /> : readiness.stage === "sale" ? <ShoppingBag size={19} /> : <BarChart3 size={19} />;
   return (
     <div className="page-content home-content">
       <section className="period-row dashboard-page-heading">
-        <div><span className="eyebrow">{formatBusinessPeriod(period)}</span><h1>经营总览</h1><small>把生意算清楚</small></div>
+        <div><h1>首页</h1><small>让生意账目更清晰，经营更轻松</small></div>
         <PeriodPicker period={period} onChange={onPeriodChange} />
       </section>
 
-      <section className={`dashboard-result-card ${hasSalesResult ? operatingResult < 0 ? "loss" : "ready" : "pending"}`} aria-label="本月经营结果">
-        <div className="dashboard-result-top"><span>{hasSalesResult ? "本月经营利润" : "本月现金结余"}</span><span className={hasSalesResult ? "result-status" : "result-status pending"}>{hasSalesResult ? "已结转" : "待结转"}</span></div>
-        <div className="dashboard-result-amount"><strong>{hasSalesResult ? formatCurrency(operatingResult) : formatCurrency(summary.cashBalance)}</strong><span className="dashboard-result-signature"><BrandSignature tone="inverse" compact /><BookOpenCheck size={18} /></span></div>
-        <p>{hasSalesResult ? `已按 ${summary.salesCount} 笔销售快照结转；现金结余不等于利润。` : "尚未结转销售，当前仅展示实际现金收付。"}</p>
-        {hasSalesResult ? <div className="dashboard-result-formula"><span><small>销售收入</small><b>{formatCurrency(summary.salesRevenue)}</b></span><i>−</i><span><small>已结转成本</small><b>{formatCurrency(resultCost)}</b></span><i>=</i><span className="result"><small>经营利润</small><b>{formatCurrency(operatingResult)}</b></span></div> : <div className="dashboard-result-formula"><span><small>已收现金</small><b>{formatCurrency(summary.income)}</b></span><i>−</i><span><small>已付现金</small><b>{formatCurrency(summary.cashOutflow)}</b></span><i>=</i><span className="result"><small>现金结余</small><b>{formatCurrency(summary.cashBalance)}</b></span></div>}
-        <div className="dashboard-result-foot"><span>{hasSalesResult && grossMargin !== null ? `毛利率 ${grossMargin.toFixed(1)}%` : "完成销售后即可判断利润"}</span><button onClick={onBusiness}>查看经营分析 <ArrowRight size={15} /></button></div>
+      <section className={`dashboard-formula-card ${hasSalesResult ? operatingResult < 0 ? "loss" : "ready" : "pending"}`} aria-label="本月经营结果">
+        <div className="dashboard-formula-heading"><span>今天经营得怎么样？</span><span className={hasSalesResult ? "result-status" : "result-status pending"}>{hasSalesResult ? "已结转" : "待结转"}</span></div>
+        <div className="dashboard-formula-layout">
+          <div className="dashboard-formula-inputs" aria-label="销售收入减商品成本减经营费用">
+            <span className="formula-metric revenue"><small>销售收入</small><i><TrendingUp size={18} /></i><b>{formatCurrency(summary.salesRevenue)}</b></span>
+            <em>−</em>
+            <span className="formula-metric cost"><small>商品成本</small><i><ShoppingBag size={18} /></i><b>{formatCurrency(summary.costOfSales)}</b></span>
+            <em>−</em>
+            <span className="formula-metric expense"><small>经营费用</small><i><WalletCards size={18} /></i><b>{formatCurrency(operatingExpenses)}</b></span>
+          </div>
+          <em className="formula-equals">=</em>
+          <div className="dashboard-profit-result">
+            <small>本期经营利润</small>
+            <strong>{hasSalesResult ? formatCurrency(operatingResult) : "—"}</strong>
+            <span>利润率 {operatingMargin === null ? "待结转" : `${operatingMargin.toFixed(1)}%`}</span>
+            <div className="dashboard-profit-ring" role="img" aria-label={operatingMargin === null ? "经营利润率待结转" : `经营利润率 ${operatingMargin.toFixed(1)}%`} style={{ background: `conic-gradient(#ffffff 0 ${profitRingProgress}%, rgb(255 255 255 / .24) ${profitRingProgress}% 100%)` }}>
+              <div><b>{operatingMargin === null ? "—" : `${operatingMargin.toFixed(1)}%`}</b><small>利润率</small></div>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-formula-caption"><span>收入</span><i>−</i><span>成本</span><i>−</i><span>费用</span><i>=</i><b>利润</b></div>
+        <p>{hasSalesResult ? `已按 ${summary.salesCount} 笔销售快照结转；现金结余不等于利润。` : "记录商品销售后，系统才会按当时成本快照计算利润。"}</p>
       </section>
 
-      <section className="dashboard-status-strip" aria-label="经营状态摘要">
-        <button className="dashboard-status-item goal" onClick={() => { setRevenueGoalInput(revenueGoal ? String(revenueGoal.target) : ""); setEditingRevenueGoal((current) => !current); }}><span>本月收入目标</span>{revenueGoal ? <><b>{revenueGoal.percentage.toFixed(0)}%</b><small>{formatCurrency(revenueGoal.actual)} / {formatCurrency(revenueGoal.target)}</small></> : <><b>未设置</b><small>点此设置</small></>}</button>
-        <button className={`dashboard-status-item health ${hasSalesResult ? operatingResult < 0 ? "loss" : "healthy" : "pending"}`} onClick={onBusiness}><span>经营健康度</span><b>{health.score}<small>/100</small></b><small>{health.label}</small></button>
-        <button className={`dashboard-status-item cash ${summary.cashBalance < 0 ? "loss" : ""}`} onClick={onBusiness}><span>现金结余</span><b>{formatCurrency(summary.cashBalance)}</b><small>{summary.cashBalance < 0 ? "本期需关注" : "查看现金明细"}</small></button>
+      <section className="home-activity-card" aria-label="本期经营状态">
+        <div className="home-section-heading"><div><h2>经营状态</h2><small>补充现金、结转与待处理信息</small></div><button onClick={onBusiness}>查看经营 <ChevronRight size={15} /></button></div>
+        <div className="home-activity-grid">
+          <span><i className="blue"><BookOpenCheck size={18} /></i><small>结转进度</small><b>{summary.salesCount ? `${summary.salesCount} 笔` : "待记录"}</b><em>{hasSalesResult ? "销售成本已冻结" : "记录销售后生成利润"}</em></span>
+          <span><i className="green"><Banknote size={18} /></i><small>现金结余</small><b>{formatCurrency(summary.cashBalance)}</b><em>实际收付款，不等于利润</em></span>
+          <span className={dashboardIssues.length ? "warning" : ""}><i className={dashboardIssues.length ? "orange" : "blue"}>{dashboardIssues.length ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}</i><small>{dashboardIssues.length ? "待处理" : "数据状态"}</small><b>{dashboardIssues.length ? `${dashboardIssues.length} 项` : hasSalesResult ? "已结转" : "待补录"}</b><em>{dashboardIssues[0]?.title ?? "继续记录经营事实"}</em></span>
+        </div>
       </section>
 
-      {editingRevenueGoal && <section className="dashboard-goal-editor compact" aria-label="设置本月收入目标"><label><span>本月收入目标</span><div className="money-input"><input aria-label="月收入目标" type="number" min="0" step="1" value={revenueGoalInput} onChange={(event) => setRevenueGoalInput(event.target.value)} /><b>元</b></div></label><div><button className="secondary-action" onClick={() => setEditingRevenueGoal(false)}>取消</button><button className="primary-action" onClick={saveRevenueGoal}>保存目标</button></div></section>}
-
-      <section className="dashboard-primary-trend" aria-label="近7日利润趋势">
-        <SalesTrendChart compact series={salesTrendSeries} mode="profit" title="近7日利润" description="销售快照口径" />
-        <button className="dashboard-trend-more" onClick={onBusiness}>看收入、成本与现金明细 <ArrowRight size={14} /></button>
-      </section>
-
-      <section className="dashboard-products-card" aria-label="商品赚钱能力"><div className="section-heading compact"><div><span className="eyebrow">商品赚钱能力 · {getContributionRangeLabel(contributionRange)} TOP {Math.min(topContributions.length || 5, 5)}</span><h2>本期销售贡献</h2></div><button onClick={onProducts}>全部商品 <ChevronRight size={14} /></button></div><ContributionRangeSwitch range={contributionRange} onChange={setContributionRange} />{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献率</span></div><div className="dashboard-product-list">{topContributions.map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{risk ? "需关注" : `${rate.toFixed(1)}%`}</small></button>; })}</div><p className="dashboard-data-note">按业务日期汇总销售快照与退款；直接贡献率不含房租、人工等分摊。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>{getContributionRangeLabel(contributionRange)}没有已结转的商品销售</b><small>可切换范围查看已记录销售；收入与直接成本均来自销售快照。</small><button onClick={onPrimaryAction}>记录销售 <ArrowRight size={14} /></button></div>}</section>
+      <section className="dashboard-products-card home-products-card" aria-label="商品表现"><div className="home-section-heading"><h2>商品表现 <span>TOP {Math.min(topContributions.length || 3, 3)}</span></h2><button onClick={onProducts}>查看更多 <ChevronRight size={15} /></button></div><ContributionRangeSwitch range={contributionRange} onChange={setContributionRange} />{topContributions.length ? <><div className="dashboard-product-head"><span>商品</span><span>销售额</span><span>直接贡献</span><span>贡献率</span></div><div className="dashboard-product-list">{topContributions.slice(0, 3).map((item, index) => { const rate = item.revenue ? item.contribution / item.revenue * 100 : 0; const risk = item.contribution < 0 || rate < 10; return <button key={item.productId} className={risk ? "risk" : ""} onClick={onProducts}><em>{index + 1}</em><span><b>{item.name}</b><i><strong style={{ width: `${Math.max(Math.abs(item.revenue) / maxContributionRevenue * 100, 5)}%` }} /></i></span><strong>{formatCurrency(item.revenue)}</strong><small className={risk ? "risk" : ""}>{formatCurrency(item.contribution)}</small><small className={risk ? "risk" : ""}>{risk ? "需关注" : `${rate.toFixed(1)}%`}</small></button>; })}</div><p className="dashboard-data-note">按业务日期汇总销售快照与退款；直接贡献不含房租、人工等分摊。</p></> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>{getContributionRangeLabel(contributionRange)}没有已结转的商品销售</b><small>记录销售后，可按商品查看销售额与直接贡献。</small><button onClick={onSale}>记录销售 <ArrowRight size={14} /></button></div>}</section>
 
       {currentTemplate.capabilities.inventory && <section className="dashboard-inventory-card" aria-label="库存健康"><div className="section-heading compact"><div><span className="eyebrow">库存经营</span><h2>库存健康</h2></div><button onClick={onProducts}>库存设置 <ChevronRight size={14} /></button></div>{inventory.trackedProductCount ? <><div className="inventory-summary"><span><small>资金占用</small><b>{formatCurrency(inventory.totalInventoryValue)}</b></span><span><small>已启用库存</small><b>{inventory.trackedProductCount} 个</b></span><span className={inventory.insufficientCount ? "warning" : ""}><small>需补货</small><b>{inventory.insufficientCount} 个</b></span></div><div className="inventory-health-list">{inventory.items.slice(0, 3).map((item) => <button key={item.productId} className={item.status} onClick={onProducts}><span><b>{item.name}</b><small>{item.detail}</small></span><strong>{formatCurrency(item.inventoryValue)}</strong><em>{item.label}</em></button>)}</div><p className="dashboard-data-note">资金占用按当前完整成本估算；可售天数只参考近30日净销量，不是补货预测。</p>{inventory.untrackedProductCount > 0 && <p className="inventory-untracked-note">还有 {inventory.untrackedProductCount} 个商品未启用库存，不参与本卡分析。</p>}</> : <div className="dashboard-empty"><ShoppingBag size={18} /><b>还没有启用库存的商品</b><small>在商品“更多操作”中设置可售库存后，系统才会计算资金占用和可售天数。</small><button onClick={onProducts}>去设置库存 <ArrowRight size={14} /></button></div>}</section>}
 
       <section className="dashboard-issues-card" aria-label="经营异常"><div className="section-heading compact"><div><span className="eyebrow">经营异常{dashboardIssues.length ? ` ${dashboardIssues.length}` : ""}</span><h2>{dashboardIssues.length ? "需要处理的事项" : "当前没有经营异常"}</h2></div>{dashboardIssues.length ? <AlertTriangle size={18} /> : <BrandSignature tone="blue" compact />}</div>{dashboardIssues.length ? <div className="dashboard-issue-list">{dashboardIssues.map((issue) => <button className={issue.tone} key={issue.id} onClick={() => performDashboardAction(issue.action)}><AlertTriangle size={17} /><span><b>{issue.title}</b><small>{issue.detail}</small><em>{issue.impact}</em></span><ChevronRight size={16} /></button>)}</div> : <div className="dashboard-no-issues"><span>╰</span><div><b>当前经营正常</b><small>继续记录销售、退款和成本，系统会自动提示需要关注的变化。</small></div></div>}</section>
 
-      <section className="dashboard-focus-card" aria-label="下一步行动"><div><span className="eyebrow">今天值得关注</span><b>{primaryInsight?.title ?? readiness.title}</b><small>{primaryInsight?.text ?? readiness.description}</small></div><button onClick={() => performDashboardAction(primaryInsight?.action ?? "record")}>{primaryInsight?.action === "business" ? <BarChart3 size={18} /> : primaryIcon}{primaryInsight?.action === "business" ? "查看经营" : readiness.actionLabel}</button></section>
+      <section className="dashboard-quick-actions home-quick-actions" aria-label="快捷记账"><div className="home-section-heading"><h2>快捷记账</h2></div><div><button className="sale" onClick={onSale}><span className="quick-action-icon blue"><Plus size={21} /></span><span><b>记销售</b><small>记录一笔商品销售</small></span><ChevronRight size={18} /></button><button className="expense" onClick={onRecord}><span className="quick-action-icon mint"><Plus size={21} /></span><span><b>记收支</b><small>记录一笔收入或支出</small></span><ChevronRight size={18} /></button></div></section>
 
-      <section className="dashboard-quick-actions" aria-label="快速操作"><div className="section-heading compact"><div><span className="eyebrow">快速操作</span><h2>记一笔，算清楚</h2></div></div><div><button onClick={onProducts}><span className="quick-action-icon blue"><Plus size={18} /></span><b>新建商品</b></button><button onClick={onRecord}><span className="quick-action-icon mint"><ReceiptText size={18} /></span><b>记收支</b></button><button onClick={onAddMaterial}><span className="quick-action-icon amber">−</span><b>采购材料</b></button><button onClick={onBusiness}><span className="quick-action-icon ink"><BarChart3 size={18} /></span><b>经营分析</b></button></div></section>
+      <section className="dashboard-focus-card home-focus-card" aria-label="下一步行动"><div><span className="eyebrow">今天值得关注</span><b>{primaryInsight?.title ?? readiness.title}</b><small>{primaryInsight?.text ?? readiness.description}</small></div><button onClick={() => performDashboardAction(primaryInsight?.action ?? "record")}>{primaryInsight?.action === "business" ? <BarChart3 size={18} /> : primaryIcon}{primaryInsight?.action === "business" ? "查看经营" : readiness.actionLabel}</button></section>
+
+      <BrandInsightCarousel onPricing={onPricing} onBusiness={onBusiness} />
     </div>
   );
+}
+
+type BrandInsightSlide = {
+  id: "brand" | "cost" | "pricing" | "profit" | "warning";
+  tag: string;
+  title: string;
+  description: string;
+  footer: string;
+  cta?: string;
+  action?: "pricing" | "business";
+};
+
+const brandInsightSlides: BrandInsightSlide[] = [
+  { id: "brand", tag: "BRAND", title: "算得清，生意才算得明白", description: "从成本核算，到定价、利润与经营分析，让每一笔生意都有数可算", footer: "数据 + 分析 = 经营决策" },
+  { id: "cost", tag: "COST", title: "别只算进货价，要算真实成本", description: "进货、包材、人工、平台与损耗，缺一项都可能高估利润", footer: "算得清，才能知道到底赚不赚钱" },
+  { id: "pricing", tag: "PRICING", title: "卖多少钱，才是真的赚钱？", description: "不凭感觉定价，用数据定价格", footer: "成本 × 利润目标 = 建议售价", cta: "去算一个价格", action: "pricing" },
+  { id: "profit", tag: "PROFIT", title: "营业额高，不代表真的赚钱", description: "看清利润，才能看清生意", footer: "收入 − 成本 − 费用 = 净利润", cta: "查看经营分析", action: "business" },
+  { id: "warning", tag: "BUSINESS", title: "提前发现问题，比事后算亏损更重要", description: "成本、毛利与损耗的变化，会先在经营数据里出现", footer: "查看经营分析", cta: "查看经营分析", action: "business" },
+];
+
+function BrandInsightCarousel({ onPricing, onBusiness }: { onPricing: () => void; onBusiness: () => void }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const activeSlide = brandInsightSlides[activeIndex]!;
+  const setSlide = (index: number) => setActiveIndex((index + brandInsightSlides.length) % brandInsightSlides.length);
+
+  useEffect(() => {
+    if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setTimeout(() => setSlide(activeIndex + 1), 15000);
+    return () => window.clearTimeout(timer);
+  }, [activeIndex]);
+
+  const handleAction = () => {
+    if (activeSlide.action === "pricing") onPricing();
+    if (activeSlide.action === "business") onBusiness();
+  };
+
+  const renderVisual = () => {
+    if (activeSlide.id === "brand") return <div className="brand-banner-brand-visual" aria-hidden="true"><span className="brand-node n1">+</span><span className="brand-node n2">−</span><span className="brand-node n3">×</span><i /><b>=</b></div>;
+    if (activeSlide.id === "cost") return <div className="brand-banner-equation cost" aria-label="进货18元，加包材、人工、平台和损耗，等于真实成本26.8元"><span>进货<br /><b>¥18</b></span><i>+</i><span>包材<br /><b>人工</b></span><i>+</i><span>平台<br /><b>损耗</b></span><strong>=<small>真实成本</small><b>¥26.8</b></strong></div>;
+    if (activeSlide.id === "pricing") return <div className="brand-banner-equation pricing" aria-label="成本26.8元，加目标利润30%，等于建议售价38.3元"><span>成本<br /><b>¥26.8</b></span><i>+</i><span>目标利润<br /><b>30%</b></span><strong>=<small>建议售价</small><b>¥38.3</b></strong></div>;
+    if (activeSlide.id === "profit") return <div className="brand-banner-profit" aria-label="营业额10万元减成本6.2万元减费用2.1万元等于真实利润1.7万元，利润率17%"><span>营业额 <b>¥100,000</b></span><span>− 成本 <b>¥62,000</b></span><span>− 费用 <b>¥21,000</b></span><strong>¥17,000 <small>利润率 17%</small></strong></div>;
+    return <div className="brand-banner-warning" aria-label="成本率上升68%，毛利率下降32%，损耗率上升8.6%，成本正在上涨"><span>成本率 <b>↑68%</b></span><span>毛利率 <b>↓32%</b></span><span>损耗率 <b>↑8.6%</b></span><small><AlertTriangle size={13} /> 成本正在上涨</small></div>;
+  };
+
+  return <section className={`brand-insight-carousel slide-${activeSlide.id}`} aria-label="算得清产品能力轮播" onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => { const startX = touchStartX.current; const endX = event.changedTouches[0]?.clientX; touchStartX.current = null; if (startX !== null && endX !== undefined && Math.abs(endX - startX) > 32) setSlide(endX < startX ? activeIndex + 1 : activeIndex - 1); }}>
+    <div className="brand-symbol-texture" aria-hidden="true">+ − × ÷ = + − × ÷ =</div>
+    <div className="brand-banner-copy" role="group" aria-roledescription="slide" aria-label={`${String(activeIndex + 1).padStart(2, "0")} / 05 ${activeSlide.tag}`}>
+      <span className="brand-banner-tag">{activeSlide.tag}</span>
+      <h2 key={`${activeSlide.id}-title`}>{activeSlide.title}</h2>
+      <p>{activeSlide.description}</p>
+      <div className="brand-banner-footer"><span>{activeSlide.footer}</span>{activeSlide.cta && <button onClick={handleAction}>{activeSlide.cta} <ArrowRight size={14} /></button>}</div>
+    </div>
+    <div className="brand-banner-visual" key={`${activeSlide.id}-visual`}>{renderVisual()}</div>
+    <div className="brand-carousel-progress" role="tablist" aria-label="选择品牌信息页"><span>{String(activeIndex + 1).padStart(2, "0")}</span><div>{brandInsightSlides.map((slide, index) => <button key={slide.id} role="tab" aria-selected={index === activeIndex} aria-label={`查看 ${String(index + 1).padStart(2, "0")} ${slide.tag}`} onClick={() => setSlide(index)}><i /></button>)}</div><span>05</span></div>
+  </section>;
 }
 
 function PeriodPicker({ period, onChange }: { period: string; onChange: (period: string) => void }) {
@@ -645,8 +699,8 @@ function PeriodPicker({ period, onChange }: { period: string; onChange: (period:
 }
 
 const cashChartConfig = {
-  income: { label: "收款", color: "#087ff5" },
-  expenses: { label: "付款", color: "#20b486" },
+  income: { label: "收款", color: "var(--chart-income)" },
+  expenses: { label: "付款", color: "var(--chart-cost)" },
 } satisfies ChartConfig;
 
 export function getCostMixData(product: LedgerProduct, operatingCost: number, fullCost: number) {
@@ -774,32 +828,34 @@ function ProductContributionChart({ products, sales, period }: { products: Ledge
 
 export function ProductsView({ products, activeProductId, fundingCost, sales, period, onSelect, onPricing, productCostAction, productCostLabel, onQuickCost, onBom, onAdd, onDelete, onInventory, onCostAnalysis }: { products: LedgerProduct[]; activeProductId: number; fundingCost: number; sales: SalesRecord[]; period: string; onSelect: (id: number) => void; onPricing: () => void; productCostAction: string; productCostLabel: string; onQuickCost: () => void; onBom: () => void; onAdd: () => void; onDelete?: (product: LedgerProduct) => void; onInventory?: (product: LedgerProduct) => void; onCostAnalysis?: (product: LedgerProduct) => void }) {
   const [showMoreActions, setShowMoreActions] = useState(false);
-  if (!products.length) return <div className="page-content product-content empty-product-page"><section className="empty-state-card"><span className="eyebrow">商品</span><h1>还没有商品</h1><button className="primary-action" onClick={onAdd}><Plus size={18} /> 新建商品</button></section></div>;
+  if (!products.length) return <div className="page-content product-content empty-product-page"><section className="core-page-heading"><div><h1>商品</h1><p className="core-subtitle">管理商品成本，掌握每一份利润</p></div><button className="core-add-action" onClick={onAdd}><Plus size={16} />新增商品</button></section><section className="empty-state-card"><span className="core-brand-equation">+</span><h2>还没有商品</h2><p>新建商品后，补充成本和售价即可看到每件利润。</p><button className="primary-action" onClick={onAdd}><Plus size={18} /> 新建商品</button></section></div>;
   const selected = products.find((product) => product.id === activeProductId) ?? products[0];
   const margin = selected.price > 0 ? ((selected.price - selected.operating) / selected.price) * 100 : 0;
   const needsCost = selected.direct <= 0 && selected.bom.length === 0;
   const needsPricing = selected.price <= 0;
   return (
     <div className="page-content product-content">
-      <section className="period-row"><div><span className="eyebrow">商品</span><h1>商品成本</h1></div><button className="round-plus" onClick={onAdd} aria-label="新增商品"><Plus size={21} /></button></section>
+      <section className="core-page-heading product-page-heading"><div><h1>商品</h1><p className="core-subtitle">管理商品成本，掌握每一份利润</p></div><button className="core-add-action" onClick={onAdd} aria-label="新增商品"><Plus size={16} />新增商品</button></section>
+      <div className="core-section-heading product-list-heading"><h2>商品列表 <small>({products.length})</small></h2><span>售价、成本与利润</span></div>
       <section className="product-list">
         {products.map((product) => {
           const productStatus = product.category === "待完善配方" ? getProductPendingLabel(productCostLabel) : product.category;
+          const productMargin = product.price > 0 ? (product.price - product.operating) / product.price * 100 : null;
+          const unitProfit = product.price > 0 ? product.price - product.operating : null;
           return <button key={product.id} className={activeProductId === product.id ? "product-row selected" : "product-row"} onClick={() => onSelect(product.id)}>
             <div className="product-symbol"><ShoppingBag size={21} /></div>
-            <div className="product-main"><strong>{product.name}</strong><span>{productStatus}{product.costCategory ? ` · ${product.costCategory}` : ""}</span></div>
-            <div className="product-data"><b>{product.price ? formatCurrency(product.price) : "未定价"}</b><span>{product.price ? `经营利润率 ${((product.price - product.operating) / product.price * 100).toFixed(0)}%` : product.change}</span></div>
+            <div className="product-main"><div><strong>{product.name}</strong><em>{product.price > 0 && product.operating > 0 ? "已核算" : "待完善"}</em></div><span>{productStatus}{product.costCategory ? ` · ${product.costCategory}` : ""}</span><div className="product-row-metrics"><span><small>售价</small><b>{product.price ? formatCurrency(product.price) : "未定价"}</b></span><span><small>成本</small><b>{product.operating > 0 ? formatCurrency(product.operating) : "待补"}</b></span><span className={unitProfit !== null && unitProfit < 0 ? "loss" : "profit"}><small>利润</small><b>{unitProfit === null ? "—" : formatCurrency(unitProfit)}</b></span><span className={productMargin !== null && productMargin < 0 ? "loss" : "brand"}><small>毛利率</small><b>{productMargin === null ? "—" : `${productMargin.toFixed(1)}%`}</b></span></div></div>
             <ChevronRight size={17} />
           </button>;
         })}
       </section>
-      <ProductContributionChart products={products} sales={sales} period={period} />
-      <section className="product-detail-card">
-        <div className="detail-card-title"><div><div className="detail-brand-line"><BrandSignature tone="inverse" compact /><span>商品单件账</span></div><h2>{selected.name}</h2></div><span className={needsCost ? "status-pill warning" : "status-pill"}>{needsCost ? `待补${productCostLabel}` : needsPricing ? "待定价" : "已核算"}</span></div>
-        <div className="product-chart-summary"><span>成本 <b>{formatCurrency(selected.operating)}</b></span><span>利润率 <b>{selected.price ? `${margin.toFixed(1)}%` : "—"}</b></span><span>库存 <b>{selected.stockQuantity === undefined ? "未启用" : selected.stockQuantity}</b></span></div>
+      <section className="product-detail-card" aria-label={`${selected.name}单件利润`}>
+        <div className="detail-card-title"><div><span className="eyebrow">商品明细</span><h2>{selected.name}</h2></div><span className={needsCost ? "status-pill warning" : "status-pill"}>{needsCost ? `待补${productCostLabel}` : needsPricing ? "待定价" : "已核算"}</span></div>
+        <div className="core-kpi-grid product-kpi-grid"><span className="brand"><small>售价</small><b>{selected.price ? formatCurrency(selected.price) : "未定价"}</b></span><span><small>单件成本</small><b>{selected.operating > 0 ? formatCurrency(selected.operating) : "待补"}</b></span><span className={selected.price - selected.operating < 0 ? "risk" : "positive"}><small>单件利润</small><b>{selected.price ? formatCurrency(selected.price - selected.operating) : "—"}</b></span><span className={margin < 0 ? "risk" : "brand"}><small>毛利率</small><b>{selected.price ? `${margin.toFixed(1)}%` : "—"}</b></span></div>
         <CostCompositionChart product={selected} operatingCost={selected.operating} fullCost={selected.operating + fundingCost} />
-        <div className="product-action-pair"><button className="primary-action quick-cost-entry" onClick={onQuickCost}><Coins size={18} /><span>{needsCost ? "录入成本" : "更新成本"}<small>最多两项</small></span></button><button className={!needsCost && needsPricing ? "primary-action" : "secondary-card-action"} onClick={onPricing}><Sparkles size={18} /> {needsPricing ? "设置售价" : "查看定价"}</button>{onCostAnalysis && <button className="secondary-card-action cost-analysis-entry" onClick={() => onCostAnalysis(selected)}><BarChart3 size={16} /> 成本分析<ChevronRight size={16} /></button>}<button className="secondary-card-action" aria-expanded={showMoreActions} onClick={() => setShowMoreActions((current) => !current)}>更多操作<ChevronRight size={16} /></button>{showMoreActions && <div className="product-more-actions"><button onClick={onBom}><ClipboardList size={16} /> {productCostAction}</button>{onInventory && <button onClick={() => onInventory(selected)}><ShoppingBag size={16} />库存设置</button>}{onDelete && <button className="danger" onClick={() => onDelete(selected)}><Trash2 size={16} />删除商品</button>}</div>}</div>
+        <div className="product-action-pair"><button className="secondary-card-action cost-analysis-entry" onClick={() => onCostAnalysis?.(selected)} disabled={!onCostAnalysis}><BarChart3 size={17} />成本分析</button><button className="secondary-card-action" aria-label="打开直接成本录入" onClick={onQuickCost}><Coins size={17} />{needsCost ? "录入成本" : "直接成本"}</button><button className="secondary-card-action" onClick={onPricing}><Sparkles size={17} />{needsPricing ? "设置售价" : "调整定价"}</button><button className="secondary-card-action" aria-expanded={showMoreActions} onClick={() => setShowMoreActions((current) => !current)}>更多<ChevronRight size={16} /></button>{showMoreActions && <div className="product-more-actions"><button onClick={onBom}><ClipboardList size={16} /> {productCostAction}</button>{onInventory && <button onClick={() => onInventory(selected)}><ShoppingBag size={16} />库存设置</button>}{onDelete && <button className="danger" onClick={() => onDelete(selected)}><Trash2 size={16} />删除商品</button>}</div>}</div>
       </section>
+      <ProductContributionChart products={products} sales={sales} period={period} />
     </div>
   );
 }
@@ -814,7 +870,7 @@ export function getCostAnalysisLines(costLines: PricingCostLine[], fallbackCost:
   });
   const items = Array.from(merged.values());
   const total = items.reduce((sum, item) => sum + item.amount, 0) || Math.max(fallbackCost, 0);
-  const palette = ["#087ff5", "#20b486", "#f2a54a", "#7567df", "#d66c78", "#7084a2"];
+  const palette = ["var(--chart-income)", "var(--chart-cost)", "var(--chart-warning)", "#7567df", "var(--chart-risk)", "#7084a2"];
   if (!items.length && total > 0) return [{ label: "完整成本", amount: total, source: "商品成本设置", layer: "operating", share: 1, tone: palette[0] }];
   return items.sort((a, b) => b.amount - a.amount).map((item, index) => ({ ...item, share: total ? item.amount / total : 0, tone: palette[index % palette.length] }));
 }
@@ -879,7 +935,7 @@ export function CostAnalysisView({ product, products, costLines, fullCost, direc
     <section className={`cost-profit-card ${unitProfit !== null && unitProfit < 0 ? "loss" : !hasCost || product.price <= 0 ? "pending" : ""}`} aria-label="单位盈亏结论"><div><span>现在赚多少？</span><BrandSignature tone="inverse" compact /></div>{hasCost && product.price > 0 ? <><div className="cost-profit-formula"><span><small>售价</small><b>{formatCurrency(product.price)}</b></span><i>−</i><span><small>单位完整成本</small><b>{formatCurrency(unitCost)}</b></span><i>=</i><span className="result"><small>单位毛利</small><b>{formatCurrency(unitProfit ?? 0)}</b></span></div><div className="cost-profit-foot"><span>毛利率 <b>{margin?.toFixed(1)}%</b></span><small>预计口径：当前成本与售价</small></div></> : <div className="cost-profit-empty"><b>{!hasCost ? "先补齐一项成本" : "先设置商品售价"}</b><small>{!hasCost ? "添加材料、进货或制作成本后，系统会计算完整成本。" : "售价设置完成后，可计算单位毛利与保本空间。"}</small><button onClick={!hasCost ? onAddCost : onPricing}>{!hasCost ? "添加成本" : "设置售价"}<ArrowRight size={15} /></button></div>}</section>
     <section className="cost-analysis-card cost-structure-card"><div className="section-heading compact"><div><span className="eyebrow">钱都花在哪里</span><h2>成本结构</h2></div><small>单位完整成本</small></div>{hasCost ? <div className="cost-structure-main"><div className="cost-donut" style={{ background: gradient }}><div><small>单位成本</small><b>{formatCurrency(unitCost)}</b></div></div><div className="cost-structure-list">{lines.map((line) => <div key={`${line.layer}-${line.label}`}><i style={{ background: line.tone }} /><span><b>{line.label}</b><small>{line.source}</small></span><strong>{formatCurrency(line.amount)}<small>{(line.share * 100).toFixed(1)}%</small></strong></div>)}</div></div> : <div className="cost-analysis-empty"><Coins size={22} /><b>还没有成本数据</b><small>添加第一项成本，开始算清利润。</small><button onClick={onAddCost}>添加成本 <ArrowRight size={14} /></button></div>}</section>
     <section className="cost-analysis-card cost-anomaly-card"><div className="section-heading compact"><div><span className="eyebrow">成本异常</span><h2>{anomalies.length ? "需要关注" : "当前成本正常"}</h2></div>{anomalies.length ? <AlertTriangle size={18} /> : <BrandSignature tone="blue" compact />}</div>{anomalies.length ? <div className="cost-anomaly-list">{anomalies.map((item) => <article className={item.tone} key={item.title}><span>{item.tone === "loss" ? "−" : "!"}</span><div><b>{item.title}</b><small>{item.text}</small></div><button onClick={item.action}>{item.label}<ChevronRight size={14} /></button></article>)}</div> : <div className="cost-normal-state"><span>⌣</span><div><b>成本结构没有发现集中或亏损风险</b><small>后续材料价格、分摊或售价变化会自动重新计算。</small></div></div>}</section>
-    <section className="cost-analysis-card cost-trend-card"><div className="section-heading compact"><div><span className="eyebrow">成本变化</span><h2>已结转单位直接成本</h2></div><span>{selectedTrend ? formatCurrency(selectedTrend.unitCost) : "暂无快照"}</span></div><div className="cost-range-picker" role="tablist" aria-label="选择成本变化范围">{(["7d", "30d", "90d"] as const).map((range) => <button key={range} role="tab" aria-selected={range === trendRange} onClick={() => setTrendRange(range)}>{range === "7d" ? "7天" : range === "30d" ? "30天" : "90天"}</button>)}</div>{trend.length ? <><svg className="cost-trend-graph" viewBox="0 0 300 110" role="img" aria-label="已结转单位直接成本变化"><line x1="18" y1="94" x2="282" y2="94" /><line x1="18" y1="60" x2="282" y2="60" /><polyline points={points} fill="none" stroke="#087ff5" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />{trend.map((item, index) => { const x = trend.length === 1 ? 150 : 18 + index / (trend.length - 1) * 264; const y = 94 - (item.unitCost - chartMin) / chartSpan * 66; return <circle key={item.date} cx={x} cy={y} r={index === selectedTrendIndex ? 5 : 3} onClick={() => setSelectedTrendIndex(index)} />; })}</svg><div className="cost-trend-selected"><b>{selectedTrend?.label}</b><span>销售时冻结的单位直接成本 <strong>{formatCurrency(selectedTrend?.unitCost ?? 0)}</strong></span></div><div className="cost-trend-tabs">{trend.map((item, index) => <button className={index === selectedTrendIndex ? "active" : ""} key={item.date} onClick={() => setSelectedTrendIndex(index)}>{item.label}</button>)}</div></> : <div className="cost-trend-empty"><b>还没有可用的销售成本快照</b><small>记录商品销售后，这里会按销售当时冻结的单位直接成本显示变化；不会把当前成本倒灌到历史。</small></div>}</section>
+    <section className="cost-analysis-card cost-trend-card"><div className="section-heading compact"><div><span className="eyebrow">成本变化</span><h2>已结转单位直接成本</h2></div><span>{selectedTrend ? formatCurrency(selectedTrend.unitCost) : "暂无快照"}</span></div><div className="cost-range-picker" role="tablist" aria-label="选择成本变化范围">{(["7d", "30d", "90d"] as const).map((range) => <button key={range} role="tab" aria-selected={range === trendRange} onClick={() => setTrendRange(range)}>{range === "7d" ? "7天" : range === "30d" ? "30天" : "90天"}</button>)}</div>{trend.length ? <><svg className="cost-trend-graph" viewBox="0 0 300 110" role="img" aria-label="已结转单位直接成本变化"><line x1="18" y1="94" x2="282" y2="94" /><line x1="18" y1="60" x2="282" y2="60" /><polyline points={points} fill="none" stroke="var(--chart-income)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />{trend.map((item, index) => { const x = trend.length === 1 ? 150 : 18 + index / (trend.length - 1) * 264; const y = 94 - (item.unitCost - chartMin) / chartSpan * 66; return <circle key={item.date} cx={x} cy={y} r={index === selectedTrendIndex ? 5 : 3} onClick={() => setSelectedTrendIndex(index)} />; })}</svg><div className="cost-trend-selected"><b>{selectedTrend?.label}</b><span>销售时冻结的单位直接成本 <strong>{formatCurrency(selectedTrend?.unitCost ?? 0)}</strong></span></div><div className="cost-trend-tabs">{trend.map((item, index) => <button className={index === selectedTrendIndex ? "active" : ""} key={item.date} onClick={() => setSelectedTrendIndex(index)}>{item.label}</button>)}</div></> : <div className="cost-trend-empty"><b>还没有可用的销售成本快照</b><small>记录商品销售后，这里会按销售当时冻结的单位直接成本显示变化；不会把当前成本倒灌到历史。</small></div>}</section>
     <section className="cost-analysis-card cost-simulator-card"><div className="section-heading compact"><div><span className="eyebrow">如果……会怎样</span><h2>盈亏模拟</h2></div><small>预计测算</small></div><p>调整不会修改账本、售价或已结转销售，只用于比较经营结果。</p><div className="cost-simulation-controls"><SimulationControl label="售价" value={simulation.price} unit="元" step={1} onChange={(value) => setSimulation((current) => ({ ...current, price: value }))} onAdjust={(delta) => changeSimulation("price", delta)} /><SimulationControl label="单位成本" value={simulation.cost} unit="元" step={.1} onChange={(value) => setSimulation((current) => ({ ...current, cost: value }))} onAdjust={(delta) => changeSimulation("cost", delta)} /><SimulationControl label="月销量" value={simulation.quantity} unit="件" step={1} onChange={(value) => setSimulation((current) => ({ ...current, quantity: value }))} onAdjust={(delta) => changeSimulation("quantity", delta)} /></div><div className={`cost-simulation-result ${simulatedMonthlyProfit < 0 ? "loss" : ""}`}><span><small>预计月利润</small><b>{formatCurrency(simulatedMonthlyProfit)}</b></span><span><small>单位毛利</small><b>{formatCurrency(simulatedUnitProfit)}</b></span><span><small>毛利率</small><b>{simulatedMargin === null ? "—" : `${simulatedMargin.toFixed(1)}%`}</b></span></div></section>
     <section className={`cost-analysis-card break-even-card ${unitProfit !== null && unitProfit < 0 ? "loss" : ""}`}><div className="section-heading compact"><div><span className="eyebrow">你的保本线</span><h2>保本分析</h2></div></div>{hasCost && product.price > 0 ? <><div className="break-even-values"><span><small>保本售价</small><b>{formatCurrency(unitCost)}</b></span><span><small>当前售价</small><b>{formatCurrency(product.price)}</b></span><span><small>安全空间</small><b>{formatCurrency(product.price - unitCost)}</b></span></div><div className="break-even-scale"><i /><b style={{ left: `${Math.min(Math.max(unitCost / Math.max(product.price, unitCost) * 100, 10), 100)}%` }} /><span>保本线</span><strong>当前售价</strong></div><p>{product.price >= unitCost ? `当前售价高于保本价 ${formatCurrency(product.price - unitCost)}。` : `当前售价低于保本价 ${formatCurrency(unitCost - product.price)}，每卖一件都会亏损。`}</p></> : <div className="cost-trend-empty"><b>补齐成本与售价后显示保本线</b><small>保本价等于当前商品的单位完整成本，不包含未保存的模拟调整。</small></div>}</section>
     <section className="cost-analysis-card cost-suggestion-card"><div className="section-heading compact"><div><span className="eyebrow">算得清建议</span><h2>下一步怎么做</h2></div><Sparkles size={18} /></div><div>{suggestions.length ? suggestions.map((item, index) => <article key={item.id}><em>{String(index + 1).padStart(2, "0")}</em><span><b>{item.title}</b><small>{item.text}</small></span><button onClick={item.action}>{item.label}<ArrowRight size={14} /></button></article>) : <div className="cost-analysis-empty"><b>完成成本和售价后，系统会给出下一步建议。</b></div>}</div></section>
@@ -926,6 +982,8 @@ export function BusinessView({ summary, productCount, period, onPeriodChange, on
   const materialTotal = Object.entries(summary.categoryTotals).filter(([category]) => /采购|进货|材料|货品/.test(category)).reduce((total, [, value]) => total + value, 0);
   const hiddenTotal = Math.max(summary.expenses - materialTotal, 0);
   const periodSales = sales.filter((sale) => sale.date.startsWith(period) || (sale.refunds ?? []).some((refund) => refund.date.startsWith(period))).slice(0, 6);
+  const operatingExpenses = summary.allocatedIndirectCosts + summary.financingCosts;
+  const operatingMargin = summary.profitReady && summary.salesRevenue > 0 ? summary.operatingResult / summary.salesRevenue * 100 : null;
 
   useEffect(() => {
     setIsRefreshing(true);
@@ -935,19 +993,20 @@ export function BusinessView({ summary, productCount, period, onPeriodChange, on
 
   return (
     <div className="page-content business-content">
-      <section className="period-row"><div><span className="eyebrow">{formatBusinessPeriod(period)}</span><h1>经营</h1></div><PeriodPicker period={period} onChange={onPeriodChange} /></section>
-      <div className="business-view-switch" role="tablist" aria-label="经营查看口径"><button role="tab" aria-selected={view === "cash"} className={view === "cash" ? "selected" : ""} onClick={() => setView("cash")}><b>现金发生</b><small>收款、付款与余额</small></button><button role="tab" aria-selected={view === "analysis"} className={view === "analysis" ? "selected" : ""} onClick={() => setView("analysis")}><b>成本分析</b><small>销售结转后的利润</small></button></div>
+      <section className="core-page-heading business-page-heading"><div><h1>经营</h1><p className="core-subtitle">看清利润、现金流和经营问题</p></div><PeriodPicker period={period} onChange={onPeriodChange} /></section>
+      <section className={`business-profit-card ${summary.profitReady && summary.operatingResult < 0 ? "loss" : ""}`} aria-label="本期经营利润"><div className="business-profit-heading"><span>本期经营利润</span><span className="business-profit-rate">{operatingMargin === null ? "待结转" : `${operatingMargin.toFixed(1)}%`}<small>利润率</small></span></div><strong>{summary.profitReady ? formatCurrency(summary.operatingResult) : "—"}</strong><small className="business-profit-period">{formatBusinessPeriod(period)} · {summary.profitReady ? "来自已结转销售快照" : "记录商品销售后生成"}</small><div className="business-profit-breakdown"><span><small>销售收入</small><b>{formatCurrency(summary.salesRevenue)}</b></span><span><small>商品成本</small><b>{formatCurrency(summary.costOfSales)}</b></span><span><small>经营费用</small><b>{formatCurrency(operatingExpenses)}</b></span><i>=</i><span className="result"><small>经营利润</small><b>{summary.profitReady ? formatCurrency(summary.operatingResult) : "—"}</b></span></div></section>
+      <div className="core-segmented business-view-switch" role="tablist" aria-label="经营查看口径"><button role="tab" aria-selected={view === "cash"} onClick={() => setView("cash")}>现金流</button><button role="tab" aria-selected={view === "analysis"} onClick={() => setView("analysis")}>利润分析</button></div>
       {view === "cash" && <>
-      <section className={`cash-flow-card ${isRefreshing ? "is-refreshing" : ""}`}>
+      <section className={`cash-flow-card business-cash-summary ${isRefreshing ? "is-refreshing" : ""}`}>
         <div className="cash-flow-copy"><span>本期现金结余 <button className="micro-info" aria-label="查看现金口径说明" aria-expanded={showCashDetails} onClick={() => setShowCashDetails((current) => !current)}><Info size={13} /></button></span><h2>{formatCurrency(summary.cashBalance)}</h2><p>已收 {formatCurrency(summary.income)} · 已付 {formatCurrency(summary.cashOutflow)}</p>{showCashDetails && <div className="cash-flow-detail" role="status">这里仅统计实际收款和付款；本金影响现金，利息同时属于成本。</div>}<button className="text-action cash-records-link" onClick={onCashRecords}>查看流水明细<ChevronRight size={14} /></button></div><div className="cash-orbit" aria-hidden="true"><CircleDollarSign size={32} /><span>{isRefreshing ? "更新中" : "本期"}</span></div>
       </section>
       {!hasTrendData && !summary.salesCount ? <section className="analysis-readiness chart-card"><span className="eyebrow">准备度</span><h2>完成三步再看分析</h2><div className="analysis-steps"><span className={summary.incomeCount + summary.expenseCount ? "done" : ""}>1. 流水</span><span className={productCount ? "done" : ""}>2. 商品</span><span className={summary.salesCount ? "done" : ""}>3. 销售</span></div><button type="button" className="primary-action" onClick={summary.incomeCount + summary.expenseCount ? (productCount ? onSale : onRecord) : onRecord}>{summary.incomeCount + summary.expenseCount ? (productCount ? "记录第一笔销售" : "新建商品") : "记一笔"}<ArrowRight size={15} /></button></section> : <CashFlowChart series={summary.dailySeries} onRecord={onRecord} />}
-      <section className="section-heading compact"><div><span className="eyebrow">现金明细</span><h2>已发生收付</h2></div></section>
+      <section className="core-section-heading"><div><h2>现金明细</h2><small>本期已发生收付</small></div><button onClick={onCashRecords}>查看全部<ChevronRight size={14} /></button></section>
       <section className="ledger-lines" aria-label="本期已发生现金明细"><LineItem icon={<TrendingUp size={18} />} label="本期收款" value={formatCurrency(summary.income)} width={`${Math.min(summary.income / Math.max(summary.income, summary.cashOutflow, 1) * 100, 100)}%`} color="green" /><LineItem icon={<Coins size={18} />} label="本期付款" value={formatCurrency(summary.cashOutflow)} width={`${Math.min(summary.cashOutflow / Math.max(summary.income, summary.cashOutflow, 1) * 100, 100)}%`} color="blue" />{summary.principalRepayment > 0 && <LineItem icon={<WalletCards size={18} />} label="其中本金还款" value={formatCurrency(summary.principalRepayment)} width={`${Math.min(summary.principalRepayment / Math.max(summary.cashOutflow, 1) * 100, 100)}%`} color="amber" />}</section>
-      <div className="business-actions"><button className="secondary-action" onClick={onRecord}><ReceiptText size={18} /> 记一笔收支</button><button className="secondary-action" onClick={onSale}><ShoppingBag size={18} /> 记商品销售</button></div>
+      <div className="business-actions"><button className="primary-action" onClick={onRecord}><Plus size={18} /> 记一笔收入</button><button className="secondary-action" onClick={onRecord}><ReceiptText size={18} /> 记一笔支出</button></div>
       </>}
       {view === "analysis" && <>
-      <section className="cost-analysis-intro"><Info size={18} /><div><b>{summary.profitReady ? "利润仅来自已结转销售" : "本期还没有销售结转利润"}</b><p>{summary.profitReady ? "下列成本均按销售当时冻结的快照计算，不会把现金付款直接当作利润。" : "房租、人工等月度分摊可用于定价预估，但不是本期已付现金；记录销售后才会结转利润。"}</p></div></section>
+      <section className="cost-analysis-intro"><Info size={18} /><div><b>{summary.profitReady ? "销售收入 − 商品成本 − 经营费用 = 经营利润" : "本期还没有销售结转利润"}</b><p>{summary.profitReady ? "所有成本均按销售当时冻结的快照计算；实际现金收付请在“现金流”查看。" : "房租、人工等月度分摊可用于定价预估，但不是本期已付现金；记录销售后才会结转利润。"}</p></div></section>
       {summary.profitReady ? <><section className="sales-result-card"><div><span className="eyebrow">销售结转</span><h2>{summary.salesCount} 笔销售 · {summary.salesQuantity} 份</h2></div><div className="sales-result-grid"><span>销售收入 <b>{formatCurrency(summary.salesRevenue)}</b></span><span>销货成本 <b>{formatCurrency(summary.costOfSales)}</b></span><span>商品毛利 <b>{formatCurrency(summary.grossProfit)}</b></span><span>经营结果 <b>{formatCurrency(summary.operatingResult)}</b></span></div></section><ProfitBridgeChart summary={summary} /></> : <section className="analysis-readiness chart-card"><span className="eyebrow">利润准备度</span><h2>先记录一笔商品销售</h2><p>销售会将收入和当时的商品成本一起结转，之后这里才会显示利润。</p><button type="button" className="primary-action" onClick={productCount ? onSale : onRecord}>{productCount ? "记录第一笔销售" : "先新建商品"}<ArrowRight size={15} /></button></section>}
       {periodSales.length > 0 && <section className="sales-history-card"><div className="section-heading compact"><div><span className="eyebrow">销售记录</span><h2>客户退款或录错删除</h2></div></div><div className="sales-history-list">{periodSales.map((sale) => { const product = products.find((item) => item.id === sale.productId); const remaining = getRefundableSaleQuantity(sale); const refunded = (sale.refunds ?? []).reduce((sum, refund) => sum + refund.amount, 0); return <article className="sales-history-row" key={sale.id}><div><b>{product?.name ?? "已归档商品"}</b><small>{sale.date} · {sale.quantity} 件 · {formatCurrency(sale.quantity * sale.unitPrice)}{refunded > 0 ? ` · 已退 ${formatCurrency(refunded)}` : ""}</small></div><div className="sales-history-actions">{remaining > 0 ? <button onClick={() => onRefund(sale.id)}>客户退款 <ChevronRight size={14} /></button> : <span className="sale-voided">已撤销</span>}<button className="sale-delete-action" aria-label={`删除${product?.name ?? "销售"}录入`} onClick={() => onDeleteSale(sale.id)}><Trash2 size={14} />录错删除</button></div></article>; })}</div></section>}
       <section className="section-heading compact"><div><span className="eyebrow">成本</span><h2>{formatBusinessPeriod(period)}销售快照成本</h2></div></section>
@@ -962,22 +1021,22 @@ export function BusinessView({ summary, productCount, period, onPeriodChange, on
   );
 }
 
-export function ProfileView({ storeName, industry, template = resolveIndustryTemplate(industry), categories, categoryStatus, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt, onMonthlyReport }: { storeName: string; industry: IndustryKey; template?: IndustryTemplate; categories: string[]; categoryStatus?: Record<string, boolean>; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void; onMonthlyReport?: () => void }) {
+export function ProfileView({ storeName, industry, template = resolveIndustryTemplate(industry), categories, categoryStatus, productCount = 0, user, authLoading, backupAt, cloudAvailable, onLogin, onLogout, isLoggingOut, onDataManagement, onAdminMessages, onIndustryChange, onAddCategory, onEditCategory, onToggleCategory, onHiddenCost, onDebt, onMonthlyReport, onProducts }: { storeName: string; industry: IndustryKey; template?: IndustryTemplate; categories: string[]; categoryStatus?: Record<string, boolean>; productCount?: number; user: { name: string | null; role: "admin" | "user" } | null; authLoading: boolean; backupAt?: Date; cloudAvailable: boolean; onLogin: () => void; onLogout: () => Promise<unknown>; isLoggingOut: boolean; onDataManagement: () => void; onAdminMessages?: () => void; onIndustryChange: (industry: IndustryKey) => void; onAddCategory: () => void; onEditCategory: (category: string) => void; onToggleCategory: (category: string) => void; onHiddenCost: () => void; onDebt: () => void; onMonthlyReport?: () => void; onProducts?: () => void }) {
   const industryName = template.label;
+  const [expandedPanel, setExpandedPanel] = useState<"industry" | "categories" | null>(null);
+  const activeCategoryCount = categories.filter((category) => categoryStatus?.[category] !== false).length;
   return (
     <div className="page-content profile-content">
-      <section className="profile-hero"><div className="profile-mark"><BrandMark size={54} /></div><div><span>{industryName}</span><div className="profile-title-lockup"><h1>{storeName}</h1><BrandSignature tone="blue" compact /></div></div></section>
-      <section className="account-status-card" aria-label="账户与数据">
-        <div className="account-status-icon">{user ? <ShieldCheck size={21} /> : <Cloud size={21} />}</div><div className="account-status-copy"><b>{authLoading ? "检查账户状态" : user ? (user.name || "已登录账号") : "本机账本"}</b><small>{authLoading ? "请稍候" : user ? (cloudAvailable && backupAt ? `最近备份：${new Date(backupAt).toLocaleDateString("zh-CN")}` : "尚未创建云端备份") : "登录后可备份并在新设备恢复"}</small></div>
-        {user ? <button className="text-action" onClick={onDataManagement}>数据管理<ChevronRight size={15} /></button> : <button className="account-login" onClick={onLogin}><LogIn size={15} />登录并备份</button>}
-      </section>
+      <section className="profile-store-card" aria-label="店铺资料"><div className="profile-mark"><BrandMark size={54} /></div><div><div className="profile-store-title"><h1>{storeName}</h1><span>{industryName}</span></div><small>店铺账本 · {user ? "已登录" : "本机使用"}</small></div><button className="profile-store-arrow" onClick={onDataManagement} aria-label="查看店铺资料"><ChevronRight size={20} /></button></section>
+      <section className="account-status-card" aria-label="账户与数据"><div className="account-status-icon">{user ? <ShieldCheck size={21} /> : <Cloud size={21} />}</div><div className="account-status-copy"><b>{authLoading ? "检查账户状态" : user ? (user.name || "已登录账号") : "本机账本"}</b><small>{authLoading ? "请稍候" : user ? (cloudAvailable && backupAt ? `最近备份：${new Date(backupAt).toLocaleDateString("zh-CN")}` : "尚未创建云端备份") : "登录后可备份并在新设备恢复"}</small></div>{user ? <button className="text-action" onClick={onDataManagement}>账户与安全<ChevronRight size={15} /></button> : <button className="account-login" onClick={onLogin}><LogIn size={15} />登录并备份</button>}</section>
       {user && <button className="account-logout" onClick={() => void onLogout()} disabled={isLoggingOut}><LogOut size={15} />{isLoggingOut ? "正在退出" : "退出账号"}</button>}
-      <section className="setting-group"><div className="setting-group-heading"><span className="group-label">经营资料</span><span className="setting-summary">新录入按行业适配</span></div><div className="industry-switcher" role="list" aria-label="选择行业模板">{INDUSTRY_TEMPLATES.map((template) => <button key={template.key} className={template.key === industry ? "industry-switch-card active" : "industry-switch-card"} onClick={() => onIndustryChange(template.key)}><span className="industry-switch-symbol">{template.shortLabel.slice(0, 1)}</span><span><b>{template.label}</b><small>{template.description}</small></span>{template.key === industry && <CheckBadge />}</button>)}</div></section>
-      <section className="setting-group"><div className="setting-group-heading"><span className="group-label">成本项目</span><button className="text-action" onClick={onAddCategory}><Plus size={14} />新增</button></div><div className="custom-category-list">{categories.map((category) => { const active = categoryStatus?.[category] !== false; return <div className={active ? "custom-category-row" : "custom-category-row disabled"} key={category}><button className="category-name-button" onClick={() => onEditCategory(category)}><span>{category}</span><small>{active ? "启用" : "停用"}</small></button><button className="category-toggle" aria-label={`${active ? "停用" : "启用"}${category}`} onClick={() => onToggleCategory(category)}>{active ? "停用" : "启用"}</button><ChevronRight size={16} /></div>; })}</div></section><section className="setting-group"><span className="group-label">经营口径</span><SettingItem icon={<ClipboardList size={19} />} label="月度成本分摊" note="房租、人工、折旧等" onClick={onHiddenCost} /><SettingItem icon={<WalletCards size={19} />} label="资金成本" note="仅利息和融资费" onClick={onDebt} /><SettingItem icon={<ReceiptText size={19} />} label="分摊规则" note="工时、销售额或产量" onClick={onHiddenCost} /></section>
-      <section className="setting-group"><span className="group-label">数据与安全</span><SettingItem icon={<BookOpenCheck size={19} />} label="成本报表" note="完整成本、分摊与利润" onClick={() => onMonthlyReport?.()} /><SettingItem icon={<Settings2 size={19} />} label="数据管理" note={user ? "备份、恢复与导出" : "导出与导入恢复"} onClick={onDataManagement} />{user?.role === "admin" && <SettingItem icon={<Send size={19} />} label="商户消息" note="创建、发布与撤回" onClick={() => onAdminMessages?.()} />}</section>
+      <section className="profile-section"><div className="core-section-heading"><h2>经营管理</h2><span>影响后续录入</span></div><div className="profile-management-grid"><button className={expandedPanel === "industry" ? "active" : ""} onClick={() => setExpandedPanel((current) => current === "industry" ? null : "industry")}><span className="profile-grid-icon industry"><ShoppingBag size={19} /></span><b>经营行业</b><small>{industryName}</small></button><button className={expandedPanel === "categories" ? "active" : ""} onClick={() => setExpandedPanel((current) => current === "categories" ? null : "categories")}><span className="profile-grid-icon category"><ClipboardList size={19} /></span><b>成本项目</b><small>{activeCategoryCount} 个启用</small></button><button onClick={onHiddenCost}><span className="profile-grid-icon allocation"><ReceiptText size={19} /></span><b>分摊规则</b><small>工时、销售额或产量</small></button><button onClick={onDebt}><span className="profile-grid-icon funding"><WalletCards size={19} /></span><b>资金成本</b><small>利息和融资费</small></button></div>{expandedPanel === "industry" && <div className="profile-expand-panel"><div className="profile-expand-heading"><b>选择经营行业</b><small>只影响以后新录入，不改变历史账本。</small></div><div className="industry-switcher" role="list" aria-label="选择行业模板">{INDUSTRY_TEMPLATES.map((item) => <button key={item.key} className={item.key === industry ? "industry-switch-card active" : "industry-switch-card"} onClick={() => onIndustryChange(item.key)}><span className="industry-switch-symbol">{item.shortLabel.slice(0, 1)}</span><span><b>{item.label}</b><small>{item.description}</small></span>{item.key === industry && <CheckBadge />}</button>)}</div></div>}{expandedPanel === "categories" && <div className="profile-expand-panel"><div className="profile-expand-heading"><b>成本项目</b><button className="text-action" onClick={onAddCategory}><Plus size={14} />新增</button></div><div className="custom-category-list">{categories.map((category) => { const active = categoryStatus?.[category] !== false; return <div className={active ? "custom-category-row" : "custom-category-row disabled"} key={category}><button className="category-name-button" onClick={() => onEditCategory(category)}><span>{category}</span><small>{active ? "启用" : "停用"}</small></button><button className="category-toggle" aria-label={`${active ? "停用" : "启用"}${category}`} onClick={() => onToggleCategory(category)}>{active ? "停用" : "启用"}</button><ChevronRight size={16} /></div>; })}</div></div>}</section>
+      <section className="profile-section"><div className="core-section-heading"><h2>数据管理</h2><span>导出、备份与分析</span></div><div className="profile-data-grid"><button onClick={() => onMonthlyReport?.()}><span className="profile-grid-icon report"><BookOpenCheck size={20} /></span><b>成本报表</b><small>完整成本分析</small></button>{onProducts && <button onClick={onProducts}><span className="profile-grid-icon products"><LayoutGrid size={20} /></span><b>商品管理</b><small>{productCount} 个商品</small></button>}<button onClick={onDataManagement}><span className="profile-grid-icon backup"><Cloud size={20} /></span><b>数据备份</b><small>{cloudAvailable ? "云端可恢复" : "数据安全"}</small></button><button onClick={onDataManagement}><span className="profile-grid-icon export"><Download size={20} /></span><b>导出数据</b><small>JSON 与报表</small></button></div></section>
+      <section className="profile-section profile-system-section"><div className="core-section-heading"><h2>系统设置</h2><span>账户与账本</span></div><SettingItem icon={<Settings2 size={19} />} label="账本设置" note="备份、恢复与本机数据" onClick={onDataManagement} /><SettingItem icon={user ? <ShieldCheck size={19} /> : <LogIn size={19} />} label="账号与安全" note={user ? "登录状态与数据保护" : "登录后可备份和恢复"} onClick={user ? onDataManagement : onLogin} />{user?.role === "admin" && <SettingItem icon={<Send size={19} />} label="商户消息" note="创建、发布与撤回" onClick={() => onAdminMessages?.()} />}<p className="profile-version">算得清成本核算助手 · 当前版本以本机账本为准</p></section>
     </div>
   );
 }
+
 
 export function DataManagementSheet({ isAuthenticated, cloudAvailable, backupAt, isBackingUp, onClose, onLogin, onBackup, onRestoreCloud, onExport, onImport, onClearLocal }: { isAuthenticated: boolean; cloudAvailable: boolean; backupAt?: Date; isBackingUp: boolean; onClose: () => void; onLogin: () => void; onBackup: () => Promise<void>; onRestoreCloud: () => void; onExport: () => void; onImport: (content: string) => void; onClearLocal: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
