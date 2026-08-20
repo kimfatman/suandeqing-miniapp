@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 import { BomEditorSheet } from "@/components/BomEditorSheet";
 import { QuickCostSheet } from "@/components/QuickCostSheet";
 import { MonthlyAllocationSheet } from "@/components/MonthlyCostSheets";
@@ -157,6 +157,7 @@ describe("Dynamic chart accounting boundaries", () => {
 
 describe("HomeView decision dashboard", () => {
   it("presents sales-snapshot profit separately from actual cash in the redesigned homepage", () => {
+    vi.useFakeTimers();
     const ledger = seedLedger();
     ledger.records = [
       { id: "home-income", type: "income", amount: 100, category: "销售收入", note: "已收", date: "2026-08-08", source: "sale", sourceId: "home-sale" },
@@ -166,7 +167,9 @@ describe("HomeView decision dashboard", () => {
     const summary = summarizeLedger(ledger, "2026-08");
     const onRecord = vi.fn();
     const onSale = vi.fn();
-    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={vi.fn()} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={onRecord} onSale={onSale} onBusiness={vi.fn()} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
+    const onPricing = vi.fn();
+    const onBusiness = vi.fn();
+    render(<HomeView ledger={ledger} product={ledger.products[0]!} products={ledger.products} materials={ledger.materials} sales={ledger.sales} summary={summary} period="2026-08" onPeriodChange={vi.fn()} operatingCost={ledger.products[0]!.operating} fullCost={ledger.products[0]!.operating} onPricing={onPricing} onAddMaterial={vi.fn()} onEditMaterial={vi.fn()} onRecord={onRecord} onSale={onSale} onBusiness={onBusiness} onProducts={vi.fn()} readiness={{ stage: "analysis", label: "经营账已就绪", title: "账已开始结转", description: "销售、成本与现金流已形成同一套经营口径。", actionLabel: "查看经营分析" }} onSaveRevenueGoal={vi.fn()} onPrimaryAction={vi.fn()} />);
     expect(screen.getByLabelText("本月经营结果")).toBeTruthy();
     expect(screen.getByText("今天经营得怎么样？")).toBeTruthy();
     expect(screen.getAllByText("销售收入").length).toBeGreaterThan(0);
@@ -183,10 +186,21 @@ describe("HomeView decision dashboard", () => {
     expect(screen.getByLabelText("库存健康")).toBeTruthy();
     expect(screen.getByText("还没有启用库存的商品")).toBeTruthy();
     expect(screen.getByLabelText("快捷记账")).toBeTruthy();
+    expect(screen.getByLabelText("算得清产品能力轮播")).toBeTruthy();
+    expect(screen.getByText("算得清，生意才算得明白")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "查看 03 PRICING" }));
+    expect(screen.getByText("卖多少钱，才是真的赚钱？")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /去算一个价格/ }));
+    expect(onPricing).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("tab", { name: "查看 04 PROFIT" }));
+    fireEvent.click(screen.getByRole("button", { name: /查看经营分析/ }));
+    expect(onBusiness).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: /记销售/ }));
     expect(onSale).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: /记收支/ }));
     expect(onRecord).toHaveBeenCalledOnce();
+    act(() => { vi.advanceTimersByTime(4800); });
+    expect(screen.getByText("提前发现问题，比事后算亏损更重要")).toBeTruthy();
   });
 
   it("keeps the formula structure but marks the independent profit ring as pending before a sales snapshot exists", () => {

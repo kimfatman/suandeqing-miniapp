@@ -633,8 +633,66 @@ export function HomeView({
       <section className="dashboard-quick-actions home-quick-actions" aria-label="快捷记账"><div className="home-section-heading"><h2>快捷记账</h2></div><div><button className="sale" onClick={onSale}><span className="quick-action-icon blue"><Plus size={21} /></span><span><b>记销售</b><small>记录一笔商品销售</small></span><ChevronRight size={18} /></button><button className="expense" onClick={onRecord}><span className="quick-action-icon mint"><Plus size={21} /></span><span><b>记收支</b><small>记录一笔收入或支出</small></span><ChevronRight size={18} /></button></div></section>
 
       <section className="dashboard-focus-card home-focus-card" aria-label="下一步行动"><div><span className="eyebrow">今天值得关注</span><b>{primaryInsight?.title ?? readiness.title}</b><small>{primaryInsight?.text ?? readiness.description}</small></div><button onClick={() => performDashboardAction(primaryInsight?.action ?? "record")}>{primaryInsight?.action === "business" ? <BarChart3 size={18} /> : primaryIcon}{primaryInsight?.action === "business" ? "查看经营" : readiness.actionLabel}</button></section>
+
+      <BrandInsightCarousel onPricing={onPricing} onBusiness={onBusiness} />
     </div>
   );
+}
+
+type BrandInsightSlide = {
+  id: "brand" | "cost" | "pricing" | "profit" | "warning";
+  tag: string;
+  title: string;
+  description: string;
+  footer: string;
+  cta?: string;
+  action?: "pricing" | "business";
+};
+
+const brandInsightSlides: BrandInsightSlide[] = [
+  { id: "brand", tag: "BRAND", title: "算得清，生意才算得明白", description: "从成本核算，到定价、利润与经营分析，让每一笔生意都有数可算", footer: "数据 + 分析 = 经营决策" },
+  { id: "cost", tag: "COST", title: "别只算进货价，要算真实成本", description: "进货、包材、人工、平台与损耗，缺一项都可能高估利润", footer: "算得清，才能知道到底赚不赚钱" },
+  { id: "pricing", tag: "PRICING", title: "卖多少钱，才是真的赚钱？", description: "不凭感觉定价，用数据定价格", footer: "成本 × 利润目标 = 建议售价", cta: "去算一个价格", action: "pricing" },
+  { id: "profit", tag: "PROFIT", title: "营业额高，不代表真的赚钱", description: "看清利润，才能看清生意", footer: "收入 − 成本 − 费用 = 净利润", cta: "查看经营分析", action: "business" },
+  { id: "warning", tag: "BUSINESS", title: "提前发现问题，比事后算亏损更重要", description: "成本、毛利与损耗的变化，会先在经营数据里出现", footer: "查看经营分析", cta: "查看经营分析", action: "business" },
+];
+
+function BrandInsightCarousel({ onPricing, onBusiness }: { onPricing: () => void; onBusiness: () => void }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const activeSlide = brandInsightSlides[activeIndex]!;
+  const setSlide = (index: number) => setActiveIndex((index + brandInsightSlides.length) % brandInsightSlides.length);
+
+  useEffect(() => {
+    if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setTimeout(() => setSlide(activeIndex + 1), 4800);
+    return () => window.clearTimeout(timer);
+  }, [activeIndex]);
+
+  const handleAction = () => {
+    if (activeSlide.action === "pricing") onPricing();
+    if (activeSlide.action === "business") onBusiness();
+  };
+
+  const renderVisual = () => {
+    if (activeSlide.id === "brand") return <div className="brand-banner-brand-visual" aria-hidden="true"><span className="brand-node n1">+</span><span className="brand-node n2">−</span><span className="brand-node n3">×</span><i /><b>=</b></div>;
+    if (activeSlide.id === "cost") return <div className="brand-banner-equation cost" aria-label="进货18元，加包材、人工、平台和损耗，等于真实成本26.8元"><span>进货<br /><b>¥18</b></span><i>+</i><span>包材<br /><b>人工</b></span><i>+</i><span>平台<br /><b>损耗</b></span><strong>=<small>真实成本</small><b>¥26.8</b></strong></div>;
+    if (activeSlide.id === "pricing") return <div className="brand-banner-equation pricing" aria-label="成本26.8元，加目标利润30%，等于建议售价38.3元"><span>成本<br /><b>¥26.8</b></span><i>+</i><span>目标利润<br /><b>30%</b></span><strong>=<small>建议售价</small><b>¥38.3</b></strong></div>;
+    if (activeSlide.id === "profit") return <div className="brand-banner-profit" aria-label="营业额10万元减成本6.2万元减费用2.1万元等于真实利润1.7万元，利润率17%"><span>营业额 <b>¥100,000</b></span><span>− 成本 <b>¥62,000</b></span><span>− 费用 <b>¥21,000</b></span><strong>¥17,000 <small>利润率 17%</small></strong></div>;
+    return <div className="brand-banner-warning" aria-label="成本率上升68%，毛利率下降32%，损耗率上升8.6%，成本正在上涨"><span>成本率 <b>↑68%</b></span><span>毛利率 <b>↓32%</b></span><span>损耗率 <b>↑8.6%</b></span><small><AlertTriangle size={13} /> 成本正在上涨</small></div>;
+  };
+
+  return <section className={`brand-insight-carousel slide-${activeSlide.id}`} aria-label="算得清产品能力轮播" onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }} onTouchEnd={(event) => { const startX = touchStartX.current; const endX = event.changedTouches[0]?.clientX; touchStartX.current = null; if (startX !== null && endX !== undefined && Math.abs(endX - startX) > 32) setSlide(endX < startX ? activeIndex + 1 : activeIndex - 1); }}>
+    <div className="brand-symbol-texture" aria-hidden="true">+ − × ÷ = + − × ÷ =</div>
+    <div className="brand-banner-copy" role="group" aria-roledescription="slide" aria-label={`${String(activeIndex + 1).padStart(2, "0")} / 05 ${activeSlide.tag}`}>
+      <span className="brand-banner-tag">{activeSlide.tag}</span>
+      <h2 key={`${activeSlide.id}-title`}>{activeSlide.title}</h2>
+      <p>{activeSlide.description}</p>
+      <div className="brand-banner-footer"><span>{activeSlide.footer}</span>{activeSlide.cta && <button onClick={handleAction}>{activeSlide.cta} <ArrowRight size={14} /></button>}</div>
+    </div>
+    <div className="brand-banner-visual" key={`${activeSlide.id}-visual`}>{renderVisual()}</div>
+    <div className="brand-carousel-progress" role="tablist" aria-label="选择品牌信息页"><span>{String(activeIndex + 1).padStart(2, "0")}</span><div>{brandInsightSlides.map((slide, index) => <button key={slide.id} role="tab" aria-selected={index === activeIndex} aria-label={`查看 ${String(index + 1).padStart(2, "0")} ${slide.tag}`} onClick={() => setSlide(index)}><i /></button>)}</div><span>05</span></div>
+  </section>;
 }
 
 function PeriodPicker({ period, onChange }: { period: string; onChange: (period: string) => void }) {
