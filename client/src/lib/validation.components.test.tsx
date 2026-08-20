@@ -175,12 +175,13 @@ describe("HomeView decision dashboard", () => {
     expect(screen.getAllByText("销售收入").length).toBeGreaterThan(0);
     expect(screen.getAllByText("商品成本").length).toBeGreaterThan(0);
     expect(screen.getAllByText("经营费用").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("经营利润").length).toBeGreaterThan(0);
+    expect(screen.getByText(/本期经营利润/)).toBeTruthy();
     expect(screen.getByLabelText("销售收入减商品成本减经营费用")).toBeTruthy();
     expect(screen.getByRole("img", { name: /经营利润率 \d+\.\d+%/ })).toBeTruthy();
     expect(screen.getByText("收入")).toBeTruthy();
     expect(screen.getAllByText("利润").length).toBeGreaterThan(0);
-    expect(screen.getByLabelText("本期经营概览")).toBeTruthy();
+    expect(screen.getByLabelText("本期经营状态")).toBeTruthy();
+    expect(screen.getByText("现金结余")).toBeTruthy();
     expect(screen.getByLabelText("商品表现")).toBeTruthy();
     expect(screen.queryByLabelText("近7日利润趋势")).toBeNull();
     expect(screen.getByLabelText("库存健康")).toBeTruthy();
@@ -199,7 +200,7 @@ describe("HomeView decision dashboard", () => {
     expect(onSale).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: /记收支/ }));
     expect(onRecord).toHaveBeenCalledOnce();
-    act(() => { vi.advanceTimersByTime(4800); });
+    act(() => { vi.advanceTimersByTime(15000); });
     expect(screen.getByText("提前发现问题，比事后算亏损更重要")).toBeTruthy();
   });
 

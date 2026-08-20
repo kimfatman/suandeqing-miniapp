@@ -465,7 +465,7 @@
 
 /* Home dashboard: a calm decision surface where result, cash and next action lead the page. */
 .home-content {
-  padding-bottom: calc(var(--space-12) + var(--header-height));
+  padding-bottom: var(--space-4);
   background: #f7f9fc;
 }
 
@@ -2048,12 +2048,18 @@
 .home-quick-actions button > svg { color: #087ff5; }
 .home-quick-actions button.expense > svg { color: #168968; }
 .home-focus-card { margin-top: var(--space-4); }
+.home-activity-card { margin-top: var(--space-4); padding: var(--space-3) var(--space-4); border: 1px solid #e2eaf2; border-radius: var(--radius-ledger-reverse); background: #fff; box-shadow: 0 5px 18px rgb(11 24 54 / .03); }
+.home-activity-card .home-section-heading { min-height: 38px; }.home-activity-card .home-section-heading h2 { font-size: 18px; }.home-activity-card .home-section-heading > div > small { display: block; margin-top: 1px; color: #8492a1; font-size: 10px; }.home-activity-card .home-section-heading > button { min-height: var(--tap-target); }
+.home-activity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: var(--space-2); }.home-activity-grid > span { display: grid; min-width: 0; gap: 2px; padding: 0 var(--space-3); border-right: 1px solid #edf1f5; }.home-activity-grid > span:first-child { padding-left: 0; }.home-activity-grid > span:last-child { padding-right: 0; border-right: 0; }.home-activity-grid i { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 8px; font-style: normal; }.home-activity-grid i.blue { color: #087ff5; background: #edf7ff; }.home-activity-grid i.green { color: #168968; background: #eaf9f2; }.home-activity-grid i.orange { color: #bd6b28; background: #fff5e9; }.home-activity-grid small { overflow: hidden; margin-top: 2px; color: #718094; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.home-activity-grid b { overflow: hidden; color: #203146; font-family: "DM Sans", "Noto Sans SC", sans-serif; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }.home-activity-grid em { display: -webkit-box; overflow: hidden; color: #8492a1; font-size: 9px; font-style: normal; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }.home-activity-grid > span.warning b { color: #bd6b28; }
 
 @media (max-width: 390px) {
   .dashboard-result-card { padding: var(--space-3); }
   .dashboard-result-formula.four { gap: 1px; }
   .dashboard-result-formula.four b { font-size: 9px; }
   .home-overview-card, .home-products-card, .home-quick-actions { padding: var(--space-3); }
+  .home-activity-card { padding: var(--space-3); }
+  .home-activity-grid > span { padding-inline: var(--space-2); }
+  .home-activity-grid b { font-size: 12px; }
   .home-overview-grid > span { padding-inline: 5px; }
   .home-overview-grid b { font-size: 11px; }
   .home-quick-actions > div:last-child { gap: var(--space-2); }

@@ -614,13 +614,12 @@ export function HomeView({
         <p>{hasSalesResult ? `已按 ${summary.salesCount} 笔销售快照结转；现金结余不等于利润。` : "记录商品销售后，系统才会按当时成本快照计算利润。"}</p>
       </section>
 
-      <section className="home-overview-card" aria-label="本期经营概览">
-        <div className="home-section-heading"><h2>本期概览</h2><button onClick={onBusiness}>查看更多 <ChevronRight size={15} /></button></div>
-        <div className="home-overview-grid">
-          <span><i className="blue"><TrendingUp size={18} /></i><small>销售收入</small><b>{formatCurrency(summary.salesRevenue)}</b><em>已结转销售</em></span>
-          <span><i className="green"><ShoppingBag size={18} /></i><small>商品成本</small><b>{formatCurrency(summary.costOfSales)}</b><em>销售快照成本</em></span>
-          <span><i className="orange"><WalletCards size={18} /></i><small>经营费用</small><b>{formatCurrency(operatingExpenses)}</b><em>分摊与资金成本</em></span>
-          <span className={hasSalesResult && operatingResult < 0 ? "loss" : ""}><i className="blue"><CircleDollarSign size={18} /></i><small>经营利润</small><b>{hasSalesResult ? formatCurrency(operatingResult) : "待结转"}</b><em>{hasSalesResult ? "已结转销售" : "记录销售后生成"}</em></span>
+      <section className="home-activity-card" aria-label="本期经营状态">
+        <div className="home-section-heading"><div><h2>经营状态</h2><small>补充现金、结转与待处理信息</small></div><button onClick={onBusiness}>查看经营 <ChevronRight size={15} /></button></div>
+        <div className="home-activity-grid">
+          <span><i className="blue"><BookOpenCheck size={18} /></i><small>结转进度</small><b>{summary.salesCount ? `${summary.salesCount} 笔` : "待记录"}</b><em>{hasSalesResult ? "销售成本已冻结" : "记录销售后生成利润"}</em></span>
+          <span><i className="green"><Banknote size={18} /></i><small>现金结余</small><b>{formatCurrency(summary.cashBalance)}</b><em>实际收付款，不等于利润</em></span>
+          <span className={dashboardIssues.length ? "warning" : ""}><i className={dashboardIssues.length ? "orange" : "blue"}>{dashboardIssues.length ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}</i><small>{dashboardIssues.length ? "待处理" : "数据状态"}</small><b>{dashboardIssues.length ? `${dashboardIssues.length} 项` : hasSalesResult ? "已结转" : "待补录"}</b><em>{dashboardIssues[0]?.title ?? "继续记录经营事实"}</em></span>
         </div>
       </section>
 
@@ -665,7 +664,7 @@ function BrandInsightCarousel({ onPricing, onBusiness }: { onPricing: () => void
 
   useEffect(() => {
     if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setTimeout(() => setSlide(activeIndex + 1), 4800);
+    const timer = window.setTimeout(() => setSlide(activeIndex + 1), 15000);
     return () => window.clearTimeout(timer);
   }, [activeIndex]);
 
